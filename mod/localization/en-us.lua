@@ -1246,6 +1246,7 @@ return {
 			k_hm_you_host = "Host left - you are now host",
 			k_hm_migrating = "Host left - switching to a new host...",
 			k_hm_cut_off = "Connection lost - rejoining the lobby...",
+			k_hm_frozen = "Host not responding - switching to a new host...",
 			k_hm_failed = "The host left and nobody could take over the lobby. Back to the menu.",
 			k_hm_lost = "Lost connection to the Steam host. Back to the menu.",
 			k_deathmatch = "Deathmatch",

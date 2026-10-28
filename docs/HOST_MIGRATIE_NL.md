@@ -19,9 +19,8 @@ Iedereen ziet kort: **"Host weg – X is nu host"** (of "jij bent nu host").
    host in een nieuwe kopie bevestigt dat hij het verwerkt heeft. Valt de host weg, dan worden de nog niet
    bevestigde berichten opnieuw naar de nieuwe host gestuurd.
 3. **Merken dat de host weg is**, op drie manieren: de host drukt *Leave lobby* (hij laat het eerst weten),
-   Steam haalt de host uit de lobby (Balatro gesloten, crash, internet weg), of 20 seconden niets gehoord.
-   Bij alleen een time-out terwijl Steam de host nog wél in de lobby ziet, wordt eerst tot 40 s gewacht:
-   misschien ben jíj degene zonder verbinding, en dan neem je de lobby niet over.
+   Steam haalt de host uit de lobby (Balatro gesloten, crash, internet weg), of de host is **bevroren**
+   (Balatro hangt, maar Steam ziet hem nog in de lobby). Zie "Bevroren host" hieronder.
 4. **Wie wordt host?** Iedereen kijkt naar dezelfde lijst: de eerste speler na de host in stoelvolgorde die
    nog in de Steam-lobby zit. Alleen die speler promoveert zichzelf; de anderen wachten op zijn
    aankondiging. Komt die er niet binnen 6 seconden, dan is de volgende op de lijst aan de beurt.
@@ -64,14 +63,42 @@ niemand kon de lobby overnemen"*. Was jij zelf je verbinding kwijt: *"Verbinding
 - Speelt de oude host nog een PvP-ronde op het moment dat hij wegvalt, dan telt zijn score in die ronde niet.
 - De kopie bevat de herverbindingstokens van alle spelers (nodig om over te nemen). Iedereen in de lobby kan
   die dus in theorie zien; tussen vrienden is dat geen probleem.
-- Een host die blijft hangen (Balatro bevroren) maar nog in de Steam-lobby staat, wordt pas vervangen als
-  Steam hem eruit haalt; tot dan wachten de gasten (maximaal 60 s), daarna terug naar het menu.
-- De wachttijden (6 s per kandidaat, 15 s op iedereen, 40 s Steam-marge) zijn nog niet instelbaar.
+- Met **2 spelers** kan de gast een bevroren host niet onderscheiden van zijn eigen kapotte verbinding: hij
+  neemt na 13 s over. Komt de verbinding terug, dan sluit de oude host zich gewoon bij hem aan (zelfde
+  regel als bij ontdooien), dus het spel gaat door.
+- Met **3 spelers** waarbij de host **en** een gast tegelijk vastlopen, blijft er één gast over: dat is geen
+  meerderheid van 2, dus geen overname; die gast gaat na 30 s terug naar het menu (tenzij Steam de host
+  eerder uit de lobby haalt, dan wordt er wel gewoon overgenomen).
+- De wachttijden (10 s stilte, 13 s met 2 spelers, 6 s per kandidaat, 15 s op iedereen, 30 s terugval) zijn
+  nog niet instelbaar. Echte Steam-tests met bevroren Balatro zijn nog niet gedaan (alleen nagebootst).
+
+## Bevroren host (sinds 0.6.8, stemmen onder de gasten)
+De host stuurt minstens elke 3 seconden een teken van leven. Zo werkt het als dat stopt:
+- **Stemmen.** Elke gast vertelt de andere gasten elke 2 seconden (en meteen bij een verandering) of hij de
+  host nog hoort. Hoort een gast de host **10 seconden** niet, dan stemt hij "host stil".
+- **Meerderheid.** Zodra een **meerderheid van de verbonden gasten** "host stil" stemt (bv. 2 van 2, 2 van 3,
+  4 van 7), neemt de opvolger de lobby over, zonder op Steam te wachten. In de praktijk gebeurt dat na
+  **ongeveer 10-11 seconden**; zit de opvolger zelf ook vast, dan komt de volgende na nog 6 s (rond 16-17 s).
+- **Met 2 spelers** is er maar één gast en dus niemand om mee te stemmen: die neemt over na **13 seconden**
+  stilte.
+- **Geen vals alarm.** Heeft maar één gast een slechte verbinding, dan horen de anderen de host nog wel: geen
+  meerderheid, dus geen overname. Die ene gast gaat na **30 seconden** (vroeger 60) terug naar het menu met
+  een melding; zijn plek blijft vast en hij kan met de code terug in hetzelfde spel.
+- **De bevroren host ontdooit.** De nieuwe host blijft de oude host (zolang Steam die nog in de lobby ziet)
+  elke 3 seconden laten weten dat er een nieuwe host is, met een hoger volgnummer (epoch). Zodra de oude
+  host weer draait, ziet hij dat, stopt hij als host, geeft hij het Steam-lobby-eigenaarschap door en komt
+  hij terug als gast op zijn eigen plek (met zijn levens). Ook na een bevriezing van 90 s werkt dat.
+- **Joinen terwijl de oude host nog bevroren is.** Steam laat alleen de lobby-eigenaar (de bevroren host)
+  lobbygegevens aanpassen. Daarom zet de nieuwe host een markering in zijn eigen Steam-ledengegevens;
+  wie met de code joint, gaat naar het lid met de hoogste markering in plaats van naar de eigenaar.
+- **Nooit langer dan 30 s.** Bevroren host: overname na ~11 s (13 s met 2 spelers, ~17 s als de opvolger
+  ook vastzit). Komt er geen meerderheid, dan is het uiterlijk na 30 s terug naar het menu.
 
 ## Techniek
 - `mod/networking/host_migration.lua` – verkiezing, snapshots, berichtnummers, aankondigingen (router-kant).
 - `mod/networking/steam_p2p.lua` – router: frames `S` (stand), `Q<nr>|…` (genummerd bericht), `A` (nieuwe host),
-  `L` (host vertrekt); Steam `SetLobbyOwner`.
+  `L` (host vertrekt), `V` (stem "host stil" tussen gasten); Steam `SetLobbyOwner`, `SetLobbyMemberData` /
+  `GetLobbyMemberData` (markering van de echte host).
 - `mod/networking/p2p_server.lua` – `Server:snapshot`, `Core.restore`, `end_migration`, wachttijd voor blinds.
 - `mod/lib/host_migration_ui.lua` + `networking/action_handlers.lua` – meldingen `hostMigrating`,
   `hostMigrated`, `hostMigrationFailed`.
@@ -87,5 +114,13 @@ niemand kon de lobby overnemen"*. Was jij zelf je verbinding kwijt: *"Verbinding
   in de Steam-lobby staat (3, 5, 8 spelers);
 - de **oude host** verliest zijn verbinding en komt vanzelf terug als gast met zijn levens;
 - **twee spelers promoveren tegelijk** (split brain): er blijft één host over;
-- geen kopie → **terug naar het menu**; een nieuwe speler kan daarna gewoon joinen met de code.
+- geen kopie → **terug naar het menu**; een nieuwe speler kan daarna gewoon joinen met de code;
+- **bevroren host** (blijft in de Steam-lobby): 2, 3, 5, 8 spelers, in de winkel en midden in een PvP;
+  vervangen binnen 11 s (13 s met 2 spelers); joinen met de code bereikt de nieuwe host; na het ontdooien
+  wordt de oude host gast en speelt hij de volgende PvP mee;
+- **host én opvolger bevroren** (5 spelers): plek 3 neemt over na 16 s; na 90 s ontdooien komen beiden terug;
+- **vals alarm**: één gast met slechte verbinding (3, 5, 8 spelers, ook als dat de opvolger is): niemand
+  neemt over, die gast is na 30 s terug in het menu en kan terug joinen;
+- **2 spelers, verbinding van de gast weg**: de gast neemt over na 12-13 s, de oude host sluit zich aan zodra
+  de verbinding terug is.
 `tests/test_host_migration_ui.lua` test de meldingen. Alle bestaande tests blijven slagen.

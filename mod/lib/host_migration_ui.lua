@@ -25,6 +25,7 @@ end
 
 function M.migrating_text(p)
 	if p and p.reason == "cut_off" then return L("k_hm_cut_off", "Connection lost - rejoining the lobby...") end
+	if p and p.reason == "frozen" then return L("k_hm_frozen", "Host not responding - switching to a new host...") end
 	return L("k_hm_migrating", "Host left - switching to a new host...")
 end
 

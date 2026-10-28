@@ -89,8 +89,12 @@ round({ 300, 100, 200 })
 ok(B.last("endPvP").lost == true and A.last("endPvP").lost == false and C.last("endPvP").lost == false, "PvP over P2P: lowest (bob) loses a life")
 -- bob's connection drops for > timeout: seat held, others continue
 NET.dead = { bob = true }
--- (0.6.8: Steam still lists the host, so bob waits for Steam before giving up instead of taking over)
-for _ = 1, 65 do T = T + 1; pump(1) end
+-- (0.6.8: Steam still lists the host and carol still hears it, so bob's "host silent" vote has no
+-- majority: no false migration, bob falls back after 30 s of silence)
+for _ = 1, 25 do T = T + 1; pump(1) end
+ok(C.r.mode == "guest" and not C.last("hostMigrating"), "carol keeps her host (no false migration)")
+ok(A.r.mode == "host" and B.r.mode ~= "host", "bob's lone vote does not start a migration")
+for _ = 1, 7 do T = T + 1; pump(1) end
 ok(B.r.mode == "local" and B.last("disconnected"), "guest notices lost host and falls back")
 ok(A.last("enemyDisconnected") or A.last("playerDisconnected") or true, "host dropped bob (seat held)")
 NET.dead = nil

@@ -8,7 +8,12 @@
 --  * Guests number the game messages they send ("Q<seq>|json") and keep them in an outbox until
 --    a snapshot acknowledges them, so nothing sent to a host that dies is lost.
 --  * Host gone = "L" frame (host left on purpose), or the host dropped out of the Steam lobby
---    member list, or the P2P heartbeat timed out. Every guest then walks the same succession
+--    member list, or the host is frozen: a host that stays in the Steam lobby but sends nothing.
+--    Guests share "host silent" votes ("V" frames, every VOTE_EVERY s) with each other; once the
+--    host has been silent SILENT s for a strict majority of the connected guests, they migrate
+--    without waiting for Steam. With one guest (2 players) the silence alone counts after
+--    SOLO_TIMEOUT s. A guest that is silent alone (its own connection is bad) never reaches a
+--    majority and falls back after FALLBACK_AT s instead. Every guest then walks the same succession
 --    list: the first candidate still in the Steam lobby promotes itself; the others wait up to
 --    WAIT seconds for its announcement "A" before trying the next candidate.
 --  * The successor rebuilds the server from the snapshot (Core.restore), reconnects its own
@@ -23,7 +28,12 @@ local M = {}
 M.WAIT = 6          -- seconds to wait for a candidate's announcement before trying the next one
 M.ANNOUNCE_FOR = 20 -- the new host repeats its announcement to members that haven't rejoined yet
 M.MAX_OUTBOX = 400
-M.STEAM_GRACE = 40 -- heartbeat lost but Steam still lists the host: wait this long for Steam to decide
+M.SILENT = 10       -- host silent this long (s) -> this guest votes "host frozen"
+M.SOLO_TIMEOUT = 13 -- only one guest (2 players): migrate after this much host silence
+M.VOTE_EVERY = 2    -- guests share their vote this often (and at once when it changes)
+M.VOTE_FRESH = 6    -- a vote older than this does not count
+M.FALLBACK_AT = 30  -- silent host, no majority (we are the one cut off): back to the menu here
+M.WATCH_EVERY = 3   -- the new host keeps telling a frozen old host (still in Steam) to step down
 M.REJOIN_FOR = 180 -- a host that was cut off keeps trying to rejoin the new host this long
 -- messages that are not replayed to a new host (identity / lobby control)
 M.NO_REPLAY = { connect = true, version = true, username = true, joinLobby = true, rejoinLobby = true,
@@ -37,7 +47,7 @@ local function index_of(t, x) for i, v in ipairs(t or {}) do if v == x then retu
 function M.attach(ctx)
 	local R, B, json, now, log = ctx.R, ctx.B, ctx.json, ctx.now, ctx.log
 	local H = { last_snap = nil, last_snap_t = -1, dirty = false }
-	R.epoch, R.seq, R.outbox = 0, 0, {}
+	R.epoch, R.seq, R.outbox, R.votes = 0, 0, {}, {}
 
 	local function members()
 		if not R.lobby then return {} end
@@ -55,6 +65,7 @@ function M.attach(ctx)
 	function H.reset()
 		R.snap, R.mig, R.epoch, R.seq, R.outbox = nil, nil, 0, 0, {}
 		R.host_seen_member, R.announce, R.timeout_since = false, nil, nil
+		R.votes, R.watch_old, H.vote_t, H.vote_last = {}, nil, nil, nil
 		H.last_snap, H.dirty, H.had_guests, H.was_member = nil, false, false, false
 	end
 
@@ -119,8 +130,14 @@ function M.attach(ctx)
 		local ack = s.acks and tonumber(s.acks[B.my_id()]) or 0
 		for _, e in ipairs(R.outbox) do if e.seq > ack then core:receive(lc, e.msg) end end
 		R.outbox, R.seq, R.snap = {}, 0, nil
-		R.announce = { until_t = now() + M.ANNOUNCE_FOR, last = -1, code = state.code, skip = mig.old }
+		R.announce = { until_t = now() + M.ANNOUNCE_FOR, last = -1, code = state.code }
+		-- a frozen old host is still in the Steam lobby: keep telling it to step down once it wakes up
+		R.watch_old = mig.old and { id = mig.old, code = state.code, last = -1 } or nil
+		R.votes = {}
 		pcall(B.set_data, R.lobby, "mp3p_host", B.my_id())
+		-- Steam lobby data can only be written by the owner (maybe the frozen old host): also tag
+		-- ourselves in our own member data so players joining by code find the real host
+		if B.set_member_data then pcall(B.set_member_data, R.lobby, "mp3p_host", tostring(R.epoch)) end
 		H.announce(true)
 		H.dirty = true
 	end
@@ -135,7 +152,7 @@ function M.attach(ctx)
 		local me = B.my_id()
 		for _, id in ipairs(members()) do
 			local p = R.peers[id]
-			if id ~= me and id ~= a.skip and not (p and p.conn) then
+			if id ~= me and not (p and p.conn) then
 				ctx.peer(id)
 				send(id, "A", { epoch = R.epoch, host = me, code = a.code })
 			end
@@ -183,13 +200,42 @@ function M.attach(ctx)
 		if R.mode ~= "guest" then return false end
 		local mem, me = members(), B.my_id()
 		if #mem > 0 and contains(mem, R.host) then
-			-- Steam still lists the host, so maybe WE are the one who is cut off: don't take over,
-			-- wait for Steam to drop whoever is gone (the member check then migrates)
+			-- Steam still lists the host and the other guests did not confirm the silence (no
+			-- majority), so WE are probably the one who is cut off: don't take over. Give Steam
+			-- until FALLBACK_AT seconds of silence to drop whoever is gone, then fall back.
 			if not contains(mem, me) then return false end
-			R.timeout_since = R.timeout_since or now()
-			return now() - R.timeout_since < M.STEAM_GRACE
+			local hp = R.peers[R.host]
+			local silent = hp and (now() - hp.seen) or M.FALLBACK_AT
+			return silent < M.FALLBACK_AT
 		end
 		return H.host_lost("disconnected")
+	end
+
+	--- Quorum check for a frozen host (once per second while we are a guest).
+	local function frozen_check(t, mem)
+		local s, hp, me = R.snap, R.peers[R.host], B.my_id()
+		if not (s and s.succession and hp) then return end
+		local silent_for = t - hp.seen
+		local silent = silent_for >= M.SILENT
+		local others = {}
+		for _, id in ipairs(s.succession) do if id ~= me and id ~= R.host then others[#others + 1] = id end end
+		if not H.vote_t or t - H.vote_t >= M.VOTE_EVERY or silent ~= H.vote_last then
+			H.vote_t, H.vote_last = t, silent
+			for _, id in ipairs(others) do send(id, "V", { host = R.host, silent = silent, epoch = R.epoch }) end
+		end
+		if not silent or (#mem > 0 and not contains(mem, me)) then return end
+		local total, votes = #others + 1, 1
+		if total == 1 then
+			if silent_for < M.SOLO_TIMEOUT then return end
+		else
+			for _, id in ipairs(others) do
+				local v = (R.votes or {})[id]
+				if v and v.silent and v.host == R.host and t - v.t <= M.VOTE_FRESH then votes = votes + 1 end
+			end
+			if votes * 2 <= total then return end
+		end
+		log("host migration: host " .. tostring(R.host) .. " silent " .. silent_for .. "s, " .. votes .. "/" .. total .. " guests agree")
+		if not H.host_lost("frozen") then H.fail("no snapshot from the frozen host", "Lost connection to the Steam host. Back to the menu.") end
 	end
 
 	--- Follow a new host (from its announcement).
@@ -201,7 +247,10 @@ function M.attach(ctx)
 			log("host migration: stepping down for " .. id)
 			ctx.new_core(nil)
 			for pid, p in pairs(R.peers) do if pid ~= id then ctx.drop_peer(pid) end end
+			if B.set_member_data then pcall(B.set_member_data, R.lobby, "mp3p_host", "") end
+			R.watch_old = nil
 		end
+		R.votes, H.vote_t = {}, nil
 		R.mode, R.host, R.epoch, R.mig, R.announce = "guest", id, tonumber(a.epoch) or (R.epoch + 1), nil, nil
 		R.host_seen_member = false
 		if old and old ~= id then ctx.drop_peer(old) end
@@ -231,6 +280,13 @@ function M.attach(ctx)
 		elseif tag == "L" then
 			if R.mode == "guest" and from == R.host then
 				if not H.host_lost("left") then fail("host left before sending a snapshot") end
+			end
+			return true
+		elseif tag == "V" then
+			local ok, v = pcall(json.decode, data:sub(2))
+			if ok and type(v) == "table" and R.mode == "guest" then
+				R.votes = R.votes or {}
+				R.votes[from] = { silent = v.silent == true, host = v.host, t = now() }
 			end
 			return true
 		elseif tag == "A" then
@@ -324,6 +380,13 @@ function M.attach(ctx)
 				ctx.start_join(rj.code, { action = "rejoinLobby", code = rj.code, reconnectToken = rj.token })
 			end
 		end
+		local w = R.watch_old
+		if w and R.mode == "host" and R.lobby and t - w.last >= M.WATCH_EVERY then
+			w.last = t
+			local p = R.peers[w.id]
+			if not contains(members(), w.id) or (p and p.conn) then R.watch_old = nil -- gone, or rejoined as guest
+			else send(w.id, "A", { epoch = R.epoch, host = B.my_id(), code = w.code }) end
+		end
 		if R.mode == "host" and R.lobby then
 			-- we lost everyone and Steam gave the lobby to somebody else: we were cut off and the
 			-- others migrated. Step down and rejoin the new host as a guest (seat held by token).
@@ -363,6 +426,7 @@ function M.attach(ctx)
 				-- Steam says the host has left the lobby (quit / crash / lost connection)
 				if not H.host_lost("disconnected") then H.fail("no snapshot from the host") end
 			end
+			if R.mode == "guest" then frozen_check(t, mem) end
 		end
 	end
 	return H

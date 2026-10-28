@@ -51,6 +51,8 @@ function M.new_ffi_backend()
 		bool SteamAPI_ISteamMatchmaking_SetLobbyData(void *self, uint64_t lobby, const char *k, const char *v);
 		const char *SteamAPI_ISteamMatchmaking_GetLobbyData(void *self, uint64_t lobby, const char *k);
 		uint64_t SteamAPI_ISteamMatchmaking_GetLobbyOwner(void *self, uint64_t lobby);
+		void SteamAPI_ISteamMatchmaking_SetLobbyMemberData(void *self, uint64_t lobby, const char *k, const char *v);
+		const char *SteamAPI_ISteamMatchmaking_GetLobbyMemberData(void *self, uint64_t lobby, uint64_t user, const char *k);
 		bool SteamAPI_ISteamMatchmaking_SetLobbyOwner(void *self, uint64_t lobby, uint64_t owner);
 		int SteamAPI_ISteamMatchmaking_GetNumLobbyMembers(void *self, uint64_t lobby);
 		uint64_t SteamAPI_ISteamMatchmaking_GetLobbyMemberByIndex(void *self, uint64_t lobby, int i);
@@ -165,6 +167,12 @@ function M.new_ffi_backend()
 	function B.set_joinable(lobby, j) lib.SteamAPI_ISteamMatchmaking_SetLobbyJoinable(mm, s2id(lobby), j) end
 	function B.owner(lobby) return id2s(lib.SteamAPI_ISteamMatchmaking_GetLobbyOwner(mm, s2id(lobby))) end
 	-- host migration: only the current owner can hand the lobby over
+	-- every member may tag itself (host migration: the real host while the owner is frozen)
+	function B.set_member_data(lobby, k, v) lib.SteamAPI_ISteamMatchmaking_SetLobbyMemberData(mm, s2id(lobby), k, tostring(v)) end
+	function B.get_member_data(lobby, id, k)
+		local r = lib.SteamAPI_ISteamMatchmaking_GetLobbyMemberData(mm, s2id(lobby), s2id(id), k)
+		return r ~= nil and ffi.string(r) or ""
+	end
 	function B.set_owner(lobby, id) return lib.SteamAPI_ISteamMatchmaking_SetLobbyOwner(mm, s2id(lobby), s2id(id)) end
 	function B.members(lobby)
 		local out, L = {}, s2id(lobby)
@@ -403,6 +411,16 @@ function M.new_router(o)
 				return
 			end
 			local owner = B.owner(lobby)
+			-- after a host migration the Steam owner may be a frozen old host: the member with the
+			-- highest "mp3p_host" epoch in its member data is the real host
+			if B.get_member_data then
+				local best = 0
+				for _, id in ipairs(B.members(lobby)) do
+					local okd, v = pcall(B.get_member_data, lobby, id, "mp3p_host")
+					local e = okd and tonumber(v) or nil
+					if e and e > best and id ~= B.my_id() then best, owner = e, id end
+				end
+			end
 			local msg = first_msg
 			if not msg then
 				local code = B.get_data and B.get_data(lobby, M.LOBBY_KEY) or ""
@@ -589,7 +607,7 @@ function M.new_router(o)
 			if R.mode == "host" and not p then p = peer(m.peer) end
 			if p then p.seen = t end
 			local tag = m.data:sub(1, 1)
-			if HM and (tag == "S" or tag == "A" or tag == "L") then
+			if HM and (tag == "S" or tag == "A" or tag == "L" or tag == "V") then
 				HM.on_frame(m.peer, m.data)
 			elseif p then
 				local body, seq = nil, nil

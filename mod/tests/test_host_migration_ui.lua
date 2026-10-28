@@ -12,6 +12,7 @@ ok(M.migrated_text({ hostId = "b", you = "a", hostName = "Bob~2" }) == "Host lef
 ok(M.migrated_text({ hostId = "a", you = "a" }) == "Host left - you are now host", "you are host")
 ok(M.migrating_text({ reason = "left" }) == "Host left - switching to a new host...", "migrating text")
 ok(M.migrating_text({ reason = "cut_off" }):find("rejoining"), "cut-off text")
+ok(M.migrating_text({ reason = "frozen" }):find("not responding"), "frozen-host text")
 ok(M.failed_text({}):find("nobody could take over") and M.failed_text({ lost = true }):find("Lost connection"), "fallback texts")
 M.on_migrated({ hostId = "b", you = "a" })
 ok(shown[1] == "Host left - Bob is now host" and shown[2] == "overlay:Host left - Bob is now host", "outside a run: warn + overlay")

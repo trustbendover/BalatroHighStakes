@@ -56,6 +56,12 @@
   A host who leaves counts as having left (eliminated in Deathmatch); a host who only lost connection keeps the seat
   and rejoins automatically as a guest. If nobody can take over, you go back to the menu with a clear message.
 - The new host also becomes the Steam lobby owner, so the lobby code and invites keep working.
+- **Frozen host detected fast.** If the host's Balatro hangs but it stays in the Steam lobby, guests no longer wait
+  for Steam (up to 60 s). Guests share "host silent" votes; once the host has been silent for 10 s for a majority of
+  the connected guests, the next player takes over (about 10-11 s; 13 s with 2 players; ~17 s if the successor is
+  stuck too). A single guest with a bad connection cannot outvote the others: it returns to the menu after 30 s
+  (was 60 s) and can rejoin by code. A frozen host that wakes up sees the newer host, steps down and rejoins as a
+  guest on its own seat. Players joining by code while the old owner is frozen still reach the new host.
 - Everyone must be on 0.6.8 (server version 0.6.8). TS server mode is unchanged.
 
 ## 0.6.7~3P - 2026-10-28 - "Balatro High Stakes"

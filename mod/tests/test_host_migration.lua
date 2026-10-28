@@ -40,6 +40,11 @@ local function backend(me)
 	function B.set_data(id, k, v) if NET.lobbies[id] and NET.lobbies[id].owner == me then NET.lobbies[id].data[k] = v end end
 	function B.get_data(id, k) return NET.lobbies[id] and NET.lobbies[id].data[k] or "" end
 	function B.owner(id) return NET.lobbies[id] and NET.lobbies[id].owner or "0" end
+	function B.set_member_data(id, k, v) local l = NET.lobbies[id]
+		if l then l.md = l.md or {}; l.md[me] = l.md[me] or {}; l.md[me][k] = v end end
+	function B.get_member_data(id, who, k) local l = NET.lobbies[id]
+		for _, m in ipairs(l and l.members or {}) do if m == who then return (l.md and l.md[who] and l.md[who][k]) or "" end end
+		return "" end
 	function B.set_owner(id, new) local l = NET.lobbies[id]
 		if l and l.owner == me then for _, m in ipairs(l.members) do if m == new then l.owner = new; return true end end end
 		return false end
@@ -58,7 +63,7 @@ local all
 local function player(name)
 	local P = { name = name, msgs = {}, alive = true }
 	P.b = backend(name)
-	P.r = P2P.new_router({ backend = P.b, Core = Core, json = json, now = now, version = "0.6.8~3P", Migration = HMmod,
+	P.r = P2P.new_router({ log = os.getenv("LOG") and function(s) print("[" .. T .. " " .. name .. "] " .. s) end or nil, backend = P.b, Core = Core, json = json, now = now, version = "0.6.8~3P", Migration = HMmod,
 		push = function(s) P.msgs[#P.msgs + 1] = json.decode(s) end })
 	P.send = function(t) P.r.send(t) end
 	P.last = function(a) for i = #P.msgs, 1, -1 do if P.msgs[i].action == a then return P.msgs[i] end end end
@@ -351,5 +356,127 @@ do
 	x.send({ action = "joinLobby", code = ps[2].r.code }); pump(6); run(2)
 	ok(x.last("joinedLobby") and x.r.host == ps[2].name, "a new player joins the migrated lobby by code (Steam owner = new host)")
 end
+-- ===== 8. frozen host: Balatro hangs but stays in the Steam lobby (no quit, no Steam drop)
+local function freeze(p) p.alive = false end -- stops running; Steam keeps it listed, messages queue up
+local function until_migrated(rest, limit)
+	local t0 = T
+	while T - t0 < limit do
+		run(1)
+		local all_in = true
+		for _, p in ipairs(rest) do if not p.last("hostMigrated") then all_in = false end end
+		if all_in then break end
+	end
+	return T - t0
+end
+local FROZEN = {}
+for _, n in ipairs({ 2, 3, 5, 8 }) do
+	for _, phase in ipairs({ "shop", "pvp" }) do
+		local mode = (phase == "pvp" and n >= 3) and "deathmatch" or "attrition"
+		local ps = setup(n, mode, { deathmatch_grace = "120" })
+		start(ps)
+		if phase == "shop" and n > 2 then
+			local sc = {}; for i = 1, n do sc[i] = 100 * i end
+			blind(ps, sc)
+		end
+		clear(ps)
+		if phase == "pvp" then
+			for _, p in ipairs(ps) do p.send({ action = "readyBlind" }) end
+			pump(8)
+			for i = 2, n do ps[i].send({ action = "playHand", score = tostring(300 + i), handsLeft = 0 }) end
+		end
+		freeze(ps[1])
+		local rest = {}; for i = 2, n do rest[#rest + 1] = ps[i] end
+		local took = until_migrated(rest, 31)
+		check_migrated(rest, ps[2], "frozen host " .. phase .. " " .. n .. "p")
+		assert(ps[2].last("hostMigrating") and ps[2].last("hostMigrating").reason == "frozen", "migration reason is 'frozen'")
+		assert(took <= 20, "frozen host " .. n .. "p replaced within 20 s (took " .. took .. " s)")
+		FROZEN[n] = math.max(FROZEN[n] or 0, took)
+		assert(NET.lobbies[ps[2].r.lobby].members[1] == ps[1].name, "the frozen host is still listed by Steam")
+		-- a newcomer joining by code finds the new host although the frozen one still owns the Steam lobby
+		if n == 3 and phase == "shop" then
+			local x = player("late_f"); all[#all + 1] = x
+			x.send({ action = "connect" }); x.send({ action = "username", username = "late_f", modHash = "t" })
+			x.send({ action = "joinLobby", code = ps[2].r.code }); pump(6); run(1)
+			ok(x.r.host == ps[2].name, "frozen owner: a join by code reaches the new host (member data)")
+			x.send({ action = "leaveLobby" }); pump(4); x.alive = false; remove(all, x)
+		end
+		run(Core.MIGRATION_HOLD + 1); pump(6)
+		if phase == "pvp" then
+			for _, p in ipairs(rest) do assert(p.last("endPvP") or p.last("winGame") or p.last("loseGame"), "frozen mid-PvP " .. n .. "p: " .. p.name .. " got the PvP result") end
+		elseif n > 2 then
+			local sc = {}; for i = 1, #rest do sc[i] = 1000 - 50 * i end
+			local res = blind(rest, sc)
+			for _, p in ipairs(rest) do assert(res[p], "frozen " .. n .. "p: " .. p.name .. " finished the next PvP") end
+		end
+		-- the old host wakes up: it sees the higher epoch, steps down and rejoins as a guest
+		ps[1].alive = true
+		run(4)
+		local hosts = 0
+		for _, p in ipairs(ps) do if p.r.mode == "host" then hosts = hosts + 1 end end
+		assert(hosts == 1 and ps[2].r.mode == "host", "unfreeze " .. n .. "p: still exactly one host")
+		assert(ps[1].r.mode == "guest" and ps[1].r.host == ps[2].name, "unfreeze " .. n .. "p: old host follows the new host (mode " .. ps[1].r.mode .. ")")
+		assert(ps[1].last("rejoinedLobby"), "unfreeze " .. n .. "p: old host got its seat back")
+		assert(NET.lobbies[ps[2].r.lobby].owner == ps[2].name, "unfreeze " .. n .. "p: old host handed Steam ownership to the new host")
+		if n >= 3 and phase == "shop" then
+			local sc = {}; for i = 1, n do sc[i] = 1000 - i end
+			local res = blind(ps, sc)
+			if os.getenv("DBG") then for _, p in ipairs(ps) do local acts = {} for _, m in ipairs(p.msgs) do acts[#acts+1] = m.action end print(p.name, p.r.mode, table.concat(acts, ",")) end end
+			for _, p in ipairs(ps) do assert(res[p], "unfreeze " .. n .. "p: " .. p.name .. " (incl. old host) plays the next PvP") end
+		end
+	end
+	print("ok: frozen host (still in Steam) replaced in <= " .. FROZEN[n] .. " s, in the shop and mid-PvP; it steps down after unfreezing (" .. n .. " players)")
+end
+
+-- host AND seat 2 freeze together (5 players): the majority still agrees, seat 3 takes over
+do
+	local ps = setup(5, "attrition")
+	start(ps); clear(ps)
+	freeze(ps[1]); freeze(ps[2])
+	local rest = { ps[3], ps[4], ps[5] }
+	local took = until_migrated(rest, 31)
+	check_migrated(rest, ps[3], "host + seat 2 frozen 5p")
+	ok(took <= 20, "host and seat 2 frozen at once (5 players): seat 3 takes over after " .. took .. " s")
+	-- both stay frozen for a long time (90 s), then wake up: both step down and rejoin
+	run(90)
+	ps[1].alive, ps[2].alive = true, true
+	run(5)
+	ok(ps[1].r.mode == "guest" and ps[2].r.mode == "guest" and ps[1].r.host == ps[3].name and ps[2].r.host == ps[3].name
+		and ps[1].last("rejoinedLobby") and ps[2].last("rejoinedLobby"),
+		"after a 90 s freeze the old host and seat 2 step down and rejoin seat 3")
+end
+
+-- ===== 9. false alarm: ONE guest's connection breaks, the host is fine
+for _, n in ipairs({ 3, 5, 8 }) do
+	local ps = setup(n, "attrition")
+	start(ps)
+	clear(ps)
+	local bad = ps[n == 3 and 2 or 3] -- also the successor case (seat 2) for 3 players
+	NET.dead[bad.name] = true -- P2P gone, Steam still lists everybody
+	run(25)
+	for _, p in ipairs(ps) do
+		assert(not (p ~= bad and p.last("hostMigrating")), "false alarm " .. n .. "p: " .. p.name .. " did not migrate")
+	end
+	assert(ps[1].r.mode == "host" and bad.r.mode == "guest", "false alarm " .. n .. "p: no takeover by the bad guest")
+	run(6)
+	ok(bad.r.mode == "local" and bad.last("hostMigrationFailed") and bad.last("hostMigrationFailed").lost,
+		"false alarm " .. n .. "p: the bad guest falls back after 30 s (not 60), nobody else migrates")
+	NET.dead[bad.name] = nil
+	bad.msgs = {}
+	bad.send({ action = "joinLobby", code = ps[1].r.code }); pump(6); run(1)
+	ok(bad.last("rejoinedLobby") and bad.r.host == ps[1].name, "false alarm " .. n .. "p: it rejoins the same host by code")
+end
+-- 2 players: the lone guest can't tell "host frozen" from "my connection broke". It takes over
+-- after 13 s; when the connection is back the old host sees the higher epoch and joins it.
+do
+	local ps = setup(2, "attrition")
+	start(ps); clear(ps)
+	NET.dead[ps[2].name] = true
+	local took = until_migrated({ ps[2] }, 31)
+	ok(ps[2].r.mode == "host" and took <= 15, "2p: lone guest takes over after " .. took .. " s of silence")
+	NET.dead[ps[2].name] = nil
+	run(6)
+	ok(ps[1].r.mode == "guest" and ps[1].r.host == ps[2].name and ps[1].last("rejoinedLobby"), "2p: the old host steps down and joins the guest once the link is back")
+end
+
 print(string.format("info: largest snapshot after a migration %.1f KB", (SNAPMAX or 0) / 1024))
 print("PASS: host migration tests")

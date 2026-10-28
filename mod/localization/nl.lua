@@ -229,6 +229,7 @@ return {
 			k_hm_you_host = "Host weg - jij bent nu host",
 			k_hm_migrating = "Host weg - er wordt een nieuwe host gekozen...",
 			k_hm_cut_off = "Verbinding kwijt - opnieuw de lobby in...",
+			k_hm_frozen = "Host reageert niet - er komt een nieuwe host...",
 			k_hm_failed = "De host is weg en niemand kon de lobby overnemen. Terug naar het menu.",
 			k_hm_lost = "Verbinding met de Steam-host verloren. Terug naar het menu.",
 			k_deathmatch = "Deathmatch",
