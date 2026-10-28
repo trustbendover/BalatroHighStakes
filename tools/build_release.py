@@ -14,11 +14,12 @@ official GitHub releases and checked against pinned SHA256 hashes.
 import argparse, hashlib, io, json, os, re, shutil, subprocess, sys, urllib.request, zipfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# 0.6.8: the pins live in mod/compat.json (also read by the installer and the mod's startup guard)
+COMPAT_PATH = os.path.join(ROOT, "mod", "compat.json")
+COMPAT = json.load(open(COMPAT_PATH, encoding="utf-8"))
 VENDOR = {
-    "lovely": ("https://github.com/ethangreen-dev/lovely-injector/releases/download/v0.10.0/lovely-x86_64-pc-windows-msvc.zip",
-               "7f481f984ab8ee633c90ce18220c88a2da8f93ca86b6c3e3ff70a725c05807ab"),
-    "smods": ("https://github.com/Steamodded/smods/archive/refs/tags/1.0.0-beta-1620a.zip",
-              "c98754fdf009f0addd198fe062989ef0f5bf212220c54cc89ed27ad5b0ea56ec"),
+    "lovely": (COMPAT["lovely"]["pin"]["url"], COMPAT["lovely"]["pin"]["sha256"]),
+    "smods": (COMPAT["steamodded"]["pin"]["url"], COMPAT["steamodded"]["pin"]["sha256"]),
 }
 MOD_EXCLUDE = re.compile(r"(^|/)(\.git|\.github|\.env|node_modules|dist|logs?)(/|$)|\.log$")
 FORBIDDEN = [b"playit.gg/claim", b".ply.gg", b"joinmc.link"]
@@ -104,7 +105,12 @@ def main():
     inst_zip = os.path.join(a.out, inst_name + ".zip")
     src_zip = os.path.join(a.out, f"BalatroMultiplayer3P-{tag}-source.zip")
 
+    if COMPAT.get("mod_version") != ver.split("~")[0].split("-")[0]:
+        sys.exit(f"mod/compat.json mod_version {COMPAT.get('mod_version')} != mod version {ver}")
     lovely, smods = fetch("lovely", a.vendor_cache), fetch("smods", a.vendor_cache)
+    want_dll = COMPAT["lovely"]["pin"].get("winmm_sha256")
+    if want_dll and sha256(lovely.read("winmm.dll")) != want_dll:
+        sys.exit("winmm.dll does not match compat.json lovely.pin.winmm_sha256")
     with zipfile.ZipFile(inst_zip, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
         for f in sorted(os.listdir(os.path.join(ROOT, "installer"))):
             if f == "LOVELY_LICENSE.txt":
@@ -129,9 +135,12 @@ def main():
 
     for p in (inst_zip, src_zip):
         check_clean(p)
+    # compat.json is also a release asset: the in-game update check reads it from the latest release
+    compat_out = os.path.join(a.out, "compat.json")
+    shutil.copyfile(COMPAT_PATH, compat_out)
     sums = os.path.join(a.out, f"SHA256SUMS-{tag}.txt")
     with open(sums, "w", newline="\n") as fh:
-        for p in (inst_zip, src_zip):
+        for p in (inst_zip, src_zip, compat_out):
             fh.write(f"{sha256(open(p, 'rb').read())}  {os.path.basename(p)}\n")
     print(open(sums).read(), end="")
     if os.environ.get("GITHUB_OUTPUT"):

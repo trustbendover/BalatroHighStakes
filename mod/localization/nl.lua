@@ -233,7 +233,7 @@ return {
 			k_hm_failed = "De host is weg en niemand kon de lobby overnemen. Terug naar het menu.",
 			k_hm_lost = "Verbinding met de Steam-host verloren. Terug naar het menu.",
 			k_hs_made_by = "Een mod van",
-			k_hs_features = "Nieuwe modi, jokers & art, 2-8 spelers, host-migratie",
+			k_hs_features = "Nieuwe modi, jokers & art, tot 8 spelers",
 			k_hs_kofi = "Vind je hem leuk? Steun de mod op Ko-fi",
 			b_hs_kofi = "Ko-fi",
 			b_hs_github = "GitHub",

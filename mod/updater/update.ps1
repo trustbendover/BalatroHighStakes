@@ -131,6 +131,11 @@ $installer = Get-ChildItem -LiteralPath $ex -Recurse -Filter 'install.ps1' | Sel
 if (-not $installer) { Say "install.ps1 not found in the download." Red; Done 1 }
 Say "Installing $tag ..."
 $ia = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $installer.FullName, '-NoPrompt', '-NoPause', '-SkipConnectionTest', '-SkipProcessCheck')
+# 0.6.8: a newer Steamodded/Lovely is never replaced silently. Interactive updater: the player is
+# asked (tested version recommended); -NoPrompt: kept, with a message. Only for installers that know it.
+if (($InstallerArgs -notmatch '-DepsPolicy') -and ((Get-Content -LiteralPath $installer.FullName -Raw) -match 'DepsPolicy')) {
+    $ia += @('-DepsPolicy', $(if ($NoPrompt) { 'keep' } else { 'ask' }))
+}
 if ($InstallerArgs) { $ia += ($InstallerArgs -split ' ' | Where-Object { $_ }) }
 & $PS @ia
 $code = $LASTEXITCODE

@@ -7,6 +7,8 @@ local U = MP.UPDATER
 U.REPO = (MP and MP.BRAND and MP.BRAND.repo) or "trustbendover/BalatroMultiplayer3P"
 U.API_URL = "https://api.github.com/repos/" .. U.REPO .. "/releases/latest"
 U.RAW_URL = "https://raw.githubusercontent.com/" .. U.REPO .. "/main/version.json"
+-- 0.6.8: tested versions (compat.json) from the latest release; raw main as fallback
+U.COMPAT_RAW_URL = "https://raw.githubusercontent.com/" .. U.REPO .. "/main/mod/compat.json"
 U.RELEASES_URL = "https://github.com/" .. U.REPO .. "/releases/latest"
 U.TIMEOUT = 15
 U.state = U.state or "idle" -- idle | checking | none | available | offline | no_https | started
@@ -40,6 +42,12 @@ function U.parse_release(body)
 	if body:find('"draft"%s*:%s*true') or body:find('"prerelease"%s*:%s*true') then return nil end
 	if not body:find('Installer%.zip"') then return nil end
 	return tag
+end
+
+--- GitHub releases/latest JSON -> download URL of its compat.json asset, or nil
+function U.parse_compat_asset(body)
+	if type(body) ~= "string" then return nil end
+	return body:match('"browser_download_url"%s*:%s*"(https://[^"]-/compat%.json)"')
 end
 
 --- version.json in the repo: { "version": "0.6.6~3P", "tag": "v0.6.6" }
@@ -97,6 +105,21 @@ local function request(h, url, cb)
 	end)
 end
 
+--- 0.6.8: fetch the newest compat.json (release asset, else the copy on main) once per session and
+--- hand it to the compat guard, which validates, merges and caches it. Small, async, fail-silent.
+function U.fetch_compat(h, release_body)
+	if U.compat_state or not (MP.COMPAT_GUARD and MP.COMPAT_GUARD.apply_remote) then return end
+	if MP.ENV and (MP.ENV.compat_check == "false" or MP.ENV.compat_check == "0") then return end
+	U.compat_state = "fetching"
+	local url = U.parse_compat_asset(release_body) or U.COMPAT_RAW_URL
+	request(h, url, function(body)
+		if not body then U.compat_state = "failed"; return end
+		local ok, applied = pcall(MP.COMPAT_GUARD.apply_remote, body)
+		U.compat_state = (body and ok and applied) and "done" or "failed"
+		log("compat.json from the latest release: " .. U.compat_state)
+	end)
+end
+
 --- Start the check once per session. Safe to call many times.
 function U.check()
 	if U.state ~= "idle" then return end
@@ -107,6 +130,7 @@ function U.check()
 	end
 	U.state = "checking"
 	request(h, U.API_URL, function(body)
+		pcall(U.fetch_compat, h, body)
 		local tag = U.parse_release(body)
 		if tag then return finish(tag) end
 		request(h, U.RAW_URL, function(body2)

@@ -83,6 +83,17 @@
   buttons are hidden, a note explains why, and the log says `SAFE MODE` with the reason - instead of a crash.
   Main-menu hooks are wrapped in pcall. A newer `compat.json` (e.g. cached from a newer release) can only add tested
   versions or blocks for other versions; it never blocks what this build shipped as tested.
+- **Pinned Steamodded / Lovely in the installer and updater.** Fresh install or older version: the tested Steamodded
+  1.0.0~BETA-1620a and Lovely 0.10.0 are installed (bundled, SHA256-checked at build time; licenses included). A newer
+  or unknown version already installed is never replaced silently: "1 = Install the tested version (recommended) /
+  2 = Keep yours" (Enter = tested, yours is backed up). Without prompts (`-NoPrompt`) yours is kept with a clear
+  message. New `-DepsPolicy ask|tested|keep` and `-DryRun` (prints `PIN ...` decisions, changes nothing). The updater
+  asks too (keeps yours with `-NoPrompt`). Lovely's version is read from the dll (pinned hash or its version string).
+- **compat.json from the latest release.** The in-game update check downloads it once per session (async, silent on
+  failure, `.env compat_check=false` to turn off) and caches it, so a newer release can mark a new Balatro or
+  Steamodded version as tested without a code change. `tools/build_release.py` now reads the pins from
+  `mod/compat.json`, checks the mod version and the dll hash, and adds `compat.json` to the release assets.
+- Credits tagline: "New modes, jokers & art, up to 8 players".
 - Everyone must be on 0.6.8 (server version 0.6.8). TS server mode is unchanged.
 
 ## 0.6.7~3P - 2026-10-28 - "Balatro High Stakes"

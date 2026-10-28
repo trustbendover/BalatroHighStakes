@@ -487,7 +487,7 @@ function CG.env()
 		in_lobby = MP.LOBBY and (MP.LOBBY.code ~= nil) or false,
 		in_run = G and G.STAGES and G.STAGE == G.STAGES.RUN,
 		menu_age = CG.menu_since and (love.timer.getTime() - CG.menu_since) or 0,
-		updater_busy = U and (U.state == "idle" or U.state == "checking" or CG.fetch_state == "fetching") or false,
+		updater_busy = U and (U.state == "idle" or U.state == "checking" or U.compat_state == "fetching") or false,
 		safe = MP.SAFE_MODE ~= nil,
 	}
 end

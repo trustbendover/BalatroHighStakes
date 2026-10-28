@@ -43,23 +43,38 @@ reden.
 
 ## Nieuwere lijst van een nieuwere release
 
-De mod kan een nieuwere `compat.json` gebruiken die bewaard is in de mod-config (`compat_cache`).
+De update-check in het spel haalt één keer per sessie `compat.json` op. Dat gebeurt op de
+achtergrond en zonder melding als het mislukt. Hij pakt het bestand van de nieuwste release, of
+anders van `main`. Zo kan een nieuwere release een nieuwe Balatro-versie als getest markeren,
+zonder dat de code verandert. De lijst wordt bewaard in de mod-config (`compat_cache`), dus hij
+werkt ook offline bij de volgende start. Uitzetten kan met `.env`: `compat_check=false`.
+
 Zo'n lijst mag alleen dingen **toevoegen**: geteste versies, en blokkades voor andere versies.
 Wat deze build zelf als getest meelevert, kan hij nooit blokkeren. Hij geldt alleen als zijn
-`applies_from` niet nieuwer is dan jouw mod-versie. Na een update naar een nieuwere release zit de
-nieuwe lijst gewoon in de mod.
+`applies_from` niet nieuwer is dan jouw mod-versie. De waarschuwing wacht maximaal 7 seconden op
+deze download.
 
-## Nog niet klaar (geblokkeerd door de veiligheidscontrole van de assistent)
+## Installer en updater: vaste (geteste) versies
 
-- **Installer-pin met keuze ("Geteste versie installeren (aanbevolen) / De jouwe houden").**
-  De logica is uitgeschreven, maar staat nog niet in `install.ps1`. Er is ook een `-DryRun` voor
-  ontworpen. De installer installeert nu nog altijd de meegeleverde geteste versies
-  (Steamodded 1.0.0~BETA-1620a en Lovely 0.10.0, met SHA256-check bij het bouwen). Een nieuwere
-  Steamodded wordt dus wel vervangen, maar altijd eerst gebackupt.
-- **De in-game update-check haalt `compat.json` nog niet zelf op.** De verwerking en de cache aan
-  de mod-kant zijn klaar en getest. Alleen de download-stap ontbreekt nog.
-- **`build_release.py` leest de pins nog niet uit `compat.json`.** Daar staan dezelfde waarden nog
-  hard in de code.
+- De installer leest `payload\BalatroMultiplayer3P\compat.json`.
+- **Niets geïnstalleerd of een oudere versie:** hij installeert de geteste Steamodded
+  1.0.0~BETA-1620a en Lovely 0.10.0. Die zitten in de zip, gecontroleerd met SHA256 bij het
+  bouwen.
+- **Een nieuwere (of onbekende) versie gevonden:** hij vraagt *"1 = Install the tested version
+  (recommended) / 2 = Keep yours"*.
+  - Enter kiest de geteste versie. Jouw versie wordt dan eerst gebackupt.
+  - Er wordt nooit stilletjes gedowngraded.
+- **Zonder vragen** (`-NoPrompt`): de nieuwere versie blijft staan, met een duidelijke melding.
+- **De updater** vraagt het ook als je hem zelf start. Gestart met `-NoPrompt` houdt hij jouw
+  versie.
+- **Lovely heeft geen versienummer in de dll.** De installer herkent de geteste versie aan de
+  SHA256, en een andere versie aan de versietekst in het bestand.
+- `-DepsPolicy ask|tested|keep` kiest vooraf.
+- `-DryRun` laat alleen zien wat er zou gebeuren (`PIN ...`-regels) en verandert niets.
+- Het installatie-manifest (`MP3P-install.json`) onthoudt wat er gekozen is. Een versie die je
+  houdt, wordt bij het verwijderen niet weggehaald.
+- `tools/build_release.py` leest de pins uit `compat.json` en stopt als de versie van de mod of
+  de dll-hash niet klopt. De release krijgt `compat.json` als los bestand mee.
 
 ## Tests
 
@@ -73,7 +88,19 @@ nieuwe lijst gewoon in de mod.
 - het samenvoegen van een nieuwere lijst;
 - de veilige modus;
 - de Nederlandse teksten;
-- de hooks.
+- de hooks;
+- de download van `compat.json`.
+
+`powershell -NoProfile -ExecutionPolicy Bypass -File tools\test_installer_pins.ps1` test de
+installer:
+
+- de versievergelijking;
+- alle keuzes (ook de vraag);
+- `-DryRun` (verandert niets);
+- een echte installatie in een wegwerpmap in `%TEMP%`, waarbij je versie wordt gehouden of
+  vervangen met een backup.
+
+Het echte spel en AppData worden nooit aangeraakt.
 
 ## Grenzen
 

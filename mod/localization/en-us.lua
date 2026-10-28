@@ -1250,7 +1250,7 @@ return {
 			k_hm_failed = "The host left and nobody could take over the lobby. Back to the menu.",
 			k_hm_lost = "Lost connection to the Steam host. Back to the menu.",
 			k_hs_made_by = "A mod by",
-			k_hs_features = "New modes, jokers & art, 2-8 players, host migration",
+			k_hs_features = "New modes, jokers & art, up to 8 players",
 			k_hs_kofi = "Like it? Support the mod on Ko-fi",
 			b_hs_kofi = "Ko-fi",
 			b_hs_github = "GitHub",

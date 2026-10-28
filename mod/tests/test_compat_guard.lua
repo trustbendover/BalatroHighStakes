@@ -148,4 +148,37 @@ ok(okc == false and MP.HOOK_ERRORS[1].name == "cosmetic" and not MP.SAFE_MODE, "
 CG.hook_failed("play button", "nil index", true)
 ok(MP.SAFE_MODE and MP.SAFE_MODE.reason:find("play button") and CG.pending, "a failing critical hook -> safe mode + notice")
 CG.check_texts = nil
+-- in-game update check downloads compat.json from the latest release (async, fail-silent)
+do
+	local pending = {}
+	G.E_MANAGER = { add_event = function() end }
+	function Event(t) return t end
+	package.loaded["SMODS.https"] = { asyncRequest = function(url, opts, cb) pending[#pending + 1] = { url = url, cb = cb } end }
+	MP.ENV = {}; MP.UPDATER = nil; MP.SAFE_MODE = nil
+	fresh_smods(); G.VERSION = "1.0.2a-FULL"; SMODS.Mods.Lovely.version = "0.10.0"
+	local U = dofile("lib/updater.lua")
+	CG.startup(); ok(CG.pending and CG.action == "warn", "fetch: starts with an untested Balatro")
+	U.check()
+	local rel = '{"tag_name":"v0.6.9","assets":[{"name":"BalatroMultiplayer3P-v0.6.9-Installer.zip"},'
+		.. '{"name":"compat.json","browser_download_url":"https://github.com/x/y/releases/download/v0.6.9/compat.json"}]}'
+	ok(U.parse_compat_asset(rel) == "https://github.com/x/y/releases/download/v0.6.9/compat.json" and U.parse_compat_asset("{}") == nil, "finds the compat.json release asset")
+	pending[1].cb(200, rel)
+	ok(pending[2] and pending[2].url:find("/v0.6.9/compat.json$") and U.compat_state == "fetching", "downloads compat.json from the latest release")
+	ok(CG.env().updater_busy, "warning waits while compat.json is downloading")
+	pending[2].cb(200, remote)
+	ok(U.compat_state == "done" and not CG.pending and SMODS.Mods.Multiplayer.config.compat_cache == remote, "newer release marks Balatro 1.0.2a tested: warning dropped, cached")
+	-- offline / no asset -> main copy, failure silent
+	pending = {}; U.state = "idle"; U.compat_state = nil
+	U.check(); pending[1].cb(nil, nil)
+	ok(pending[2] and pending[2].url == U.COMPAT_RAW_URL, "no release answer -> compat.json from main")
+	pending[2].cb(404, nil)
+	ok(U.compat_state == "failed", "download failure is silent")
+	pending = {}; U.state = "idle"; U.compat_state = nil
+	U.check(); pending[1].cb(200, rel); pending[2].cb(200, "<html>garbage")
+	ok(U.compat_state == "failed", "garbage compat.json ignored")
+	pending = {}; U.state = "idle"; U.compat_state = nil; MP.ENV.compat_check = "false"
+	U.check(); pending[1].cb(200, rel)
+	ok(#pending == 1 and U.compat_state == nil, ".env compat_check=false turns the download off")
+	MP.ENV = {}
+end
 print("all compat guard tests passed")

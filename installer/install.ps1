@@ -9,13 +9,17 @@ param(
     [switch]$SkipProcessCheck,
     [switch]$SkipConnectionTest,
     [switch]$NoPause,
-    [string]$SteamRoots = ""    # test hook: ';'-separated Steam install dirs
+    [string]$SteamRoots = "",   # test hook: ';'-separated Steam install dirs
+    [ValidateSet('', 'ask', 'tested', 'keep')]
+    [string]$DepsPolicy = "",   # newer Steamodded/Lovely already installed: ask (default) | tested | keep (default with -NoPrompt)
+    [switch]$DryRun             # only print what would happen (pins) and change nothing
 )
 $ErrorActionPreference = 'Stop'
 function J([string]$base, [string]$rel) { $p = $base; foreach ($s in $rel.Split('\')) { if ($s) { $p = Join-Path $p $s } }; return $p }
 $Here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Payload = Join-Path $Here 'payload'
 $OurModName = 'BalatroMultiplayer3P'
+. (Join-Path $Here 'pins.ps1')
 
 function Say($msg, $color = 'White') { Write-Host $msg -ForegroundColor $color }
 function Finish($code) {
@@ -138,7 +142,7 @@ $BalatroData = Split-Path -Parent $ModsRoot
 $Stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 $BackupDir = Join-Path $BalatroData "MP3P-backup-$Stamp"
 $ManifestPath = Join-Path $BalatroData 'MP3P-install.json'
-New-Item -ItemType Directory -Path $ModsRoot -Force | Out-Null
+if (-not $DryRun) { New-Item -ItemType Directory -Path $ModsRoot -Force | Out-Null }
 
 $manifest = [ordered]@{ installed = (Get-Date).ToString('s'); gameDir = $GameDir; modsRoot = $ModsRoot; backupDir = $BackupDir; backups = @(); installedPaths = @() }
 # Re-install: keep earlier backups, and don't back up files we installed ourselves
@@ -167,11 +171,61 @@ $prevEnvPath = Join-Path (Join-Path $ModsRoot $OurModName) '.env'
 $prevEnv = $null
 if (Test-Path -LiteralPath $prevEnvPath) { $prevEnv = [System.IO.File]::ReadAllText($prevEnvPath) }
 
-# 3. Remove old Multiplayer / Steamodded copies (backed up)
+# 3. Pinned dependencies (compat.json): decide for Steamodded and Lovely first
+$Compat = Read-Compat (J $Payload "$OurModName\compat.json")
+$TestedSmods = if ($Compat) { [string]$Compat.steamodded.pin.version } else { '1.0.0~BETA-1620a' }
+$TestedLovely = if ($Compat) { [string]$Compat.lovely.pin.version } else { '0.10.0' }
+$LovelyPin = if ($Compat) { $Compat.lovely.pin } else { $null }
+if (-not $DepsPolicy) { $DepsPolicy = if ($NoPrompt) { 'keep' } else { 'ask' } }
+
 Say "Checking existing mods..."
+$smodsFolders = @()
+$smodsBest = $null
+foreach ($f in Get-ChildItem -LiteralPath $ModsRoot -Directory -ErrorAction SilentlyContinue) {
+    $info = Get-ModId $f.FullName
+    if ($info -and $info.id -eq 'Steamodded') {
+        $v = Get-SmodsVersion $f.FullName
+        if (-not $v) { $v = ConvertTo-CleanVersion $info.version }
+        $smodsFolders += $f.FullName
+        if (-not $smodsBest -or ($v -and (Compare-ModVersion $v $smodsBest) -gt 0)) { $smodsBest = $v }
+    }
+}
+$smodsDec = Resolve-DepAction $smodsBest ($smodsFolders.Count -gt 0) $TestedSmods $DepsPolicy
+if ($smodsDec.action -eq 'ask') {
+    if ($DryRun) { $smodsDec.action = 'ask (dry run: would prompt)' }
+    else { $smodsDec = Resolve-DepAction $smodsBest $true $TestedSmods 'ask' (Read-DepChoice 'Steamodded' $smodsBest $TestedSmods) }
+}
+$existingDll = Join-Path $GameDir 'winmm.dll'
+$lovelyHere = Test-Path -LiteralPath $existingDll
+$lovelyVer = Get-LovelyVersion $existingDll $LovelyPin
+$lovelyDec = Resolve-DepAction $lovelyVer $lovelyHere $TestedLovely $DepsPolicy
+if ($lovelyDec.action -eq 'same' -and $LovelyPin -and $LovelyPin.winmm_sha256 -and ((Get-FileSha256 $existingDll) -ne $LovelyPin.winmm_sha256)) {
+    $lovelyDec = @{ action = 'install'; why = 'same version, different file: refreshing it' }
+}
+if ($lovelyDec.action -eq 'ask') {
+    if ($DryRun) { $lovelyDec.action = 'ask (dry run: would prompt)' }
+    else { $lovelyDec = Resolve-DepAction $lovelyVer $true $TestedLovely 'ask' (Read-DepChoice 'Lovely' $lovelyVer $TestedLovely) }
+}
+$shownSmods = if ($smodsBest) { $smodsBest } elseif ($smodsFolders.Count) { 'unknown' } else { 'none' }
+$shownLovely = if ($lovelyVer) { $lovelyVer } elseif ($lovelyHere) { 'unknown' } else { 'none' }
+Say "PIN steamodded installed=$shownSmods tested=$TestedSmods action=$($smodsDec.action) ($($smodsDec.why))" DarkGray
+Say "PIN lovely installed=$shownLovely tested=$TestedLovely action=$($lovelyDec.action) ($($lovelyDec.why))" DarkGray
+if ($smodsDec.action -eq 'keep') { Say "  Keeping your Steamodded $smodsBest (tested: $TestedSmods). The game will warn you if it is untested." Yellow }
+if ($lovelyDec.action -eq 'keep') { Say "  Keeping your Lovely $shownLovely (tested: $TestedLovely). The game will warn you if it is untested." Yellow }
+if ($DryRun) {
+    Say "DRY RUN: nothing was changed." Cyan
+    Finish 0
+}
+$manifest.deps = [ordered]@{
+    steamodded = [ordered]@{ found = $shownSmods; tested = $TestedSmods; action = $smodsDec.action }
+    lovely = [ordered]@{ found = $shownLovely; tested = $TestedLovely; action = $lovelyDec.action }
+}
+
+# Remove old Multiplayer / Steamodded copies (backed up)
 foreach ($f in Get-ChildItem -LiteralPath $ModsRoot -Directory -ErrorAction SilentlyContinue) {
     $info = Get-ModId $f.FullName
     if (-not $info) { continue }
+    if ($info.id -eq 'Steamodded' -and $smodsDec.action -eq 'keep') { continue }
     if ($f.Name -eq $OurModName -or $f.Name -eq 'smods') {
         if ($prevInstalled -contains $f.FullName) { Remove-Item -LiteralPath $f.FullName -Recurse -Force; continue }
     }
@@ -179,33 +233,42 @@ foreach ($f in Get-ChildItem -LiteralPath $ModsRoot -Directory -ErrorAction Sile
         Say "  Found a Multiplayer mod in '$($f.Name)' (version $($info.version)) - replacing it." Yellow
         Backup-Item $f.FullName 'mods'
     } elseif ($info.id -eq 'Steamodded') {
-        Say "  Found Steamodded in '$($f.Name)' (version $($info.version)) - replacing it with the bundled one." Yellow
+        Say "  Found Steamodded in '$($f.Name)' (version $($info.version)) - replacing it with the tested $TestedSmods." Yellow
         Backup-Item $f.FullName 'mods'
     }
 }
-$existingDll = Join-Path $GameDir 'winmm.dll'
-if (Test-Path -LiteralPath $existingDll) { Backup-Item $existingDll 'game' }
+$copyLovely = ($lovelyDec.action -eq 'install')
+if ($copyLovely -and $lovelyHere) { Backup-Item $existingDll 'game' }
 # Old Lovely (<0.10) used version.dll; Lovely 0.10 refuses to start while it exists
 $oldLovely = Join-Path $GameDir 'version.dll'
-if (Test-Path -LiteralPath $oldLovely) { Say "  Removing old Lovely (version.dll)" Yellow; Backup-Item $oldLovely 'game' }
+if ($copyLovely -and (Test-Path -LiteralPath $oldLovely)) { Say "  Removing old Lovely (version.dll)" Yellow; Backup-Item $oldLovely 'game' }
 
 # 4. Install
 Say "Installing..."
-try {
-    Copy-Item -LiteralPath (Join-Path $Payload 'winmm.dll') -Destination $GameDir -Force
-} catch {
-    Say "ERROR: could not copy winmm.dll into $GameDir ($($_.Exception.Message))." Red
-    Say "Try right-clicking Install.bat -> Run as administrator." Yellow
-    Finish 1
+if ($copyLovely) {
+    try {
+        Copy-Item -LiteralPath (Join-Path $Payload 'winmm.dll') -Destination $GameDir -Force
+    } catch {
+        Say "ERROR: could not copy winmm.dll into $GameDir ($($_.Exception.Message))." Red
+        Say "Try right-clicking Install.bat -> Run as administrator." Yellow
+        Finish 1
+    }
+    $manifest.installedPaths += $existingDll
+    Say "  Lovely $TestedLovely -> $existingDll" Green
+} else {
+    if ($prevInstalled -contains $existingDll) { $manifest.installedPaths += $existingDll }
+    Say "  Lovely      -> kept ($shownLovely)" Green
 }
-$manifest.installedPaths += $existingDll
-Copy-Item -LiteralPath (Join-Path $Payload 'smods') -Destination $ModsRoot -Recurse -Force
-$manifest.installedPaths += (Join-Path $ModsRoot 'smods')
+if ($smodsDec.action -ne 'keep') {
+    Copy-Item -LiteralPath (Join-Path $Payload 'smods') -Destination $ModsRoot -Recurse -Force
+    $manifest.installedPaths += (Join-Path $ModsRoot 'smods')
+    Say "  Steamodded $TestedSmods -> $(Join-Path $ModsRoot 'smods')" Green
+} else {
+    Say "  Steamodded  -> kept ($smodsBest)" Green
+}
 Copy-Item -LiteralPath (Join-Path $Payload $OurModName) -Destination $ModsRoot -Recurse -Force
 $ModDir = Join-Path $ModsRoot $OurModName
 $manifest.installedPaths += $ModDir
-Say "  Lovely      -> $existingDll" Green
-Say "  Steamodded  -> $(Join-Path $ModsRoot 'smods')" Green
 Say "  High Stakes -> $ModDir" Green
 
 # 5. Connection mode
