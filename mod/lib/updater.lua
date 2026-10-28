@@ -4,11 +4,26 @@
 MP.UPDATER = MP.UPDATER or {}
 local U = MP.UPDATER
 
-U.REPO = (MP and MP.BRAND and MP.BRAND.repo) or "trustbendover/BalatroMultiplayer3P"
-U.API_URL = "https://api.github.com/repos/" .. U.REPO .. "/releases/latest"
-U.RAW_URL = "https://raw.githubusercontent.com/" .. U.REPO .. "/main/version.json"
+-- 0.6.8: the repo is renamed to BalatroHighStakes with 0.6.8. Try the new name first, then the old one
+-- (GitHub also redirects the old name, but this keeps working before the rename and if a redirect fails).
+local BRAND = (MP and MP.BRAND) or {}
+U.REPOS = {}
+for _, r in ipairs({ BRAND.repo or "trustbendover/BalatroHighStakes", BRAND.repo_old or "trustbendover/BalatroMultiplayer3P" }) do
+	local dup = false
+	for _, x in ipairs(U.REPOS) do if x == r then dup = true end end
+	if not dup then U.REPOS[#U.REPOS + 1] = r end
+end
+U.REPO = U.REPOS[1]
+local function urls(fmt)
+	local t = {}
+	for i, r in ipairs(U.REPOS) do t[i] = fmt:format(r) end
+	return t
+end
+U.API_URLS = urls("https://api.github.com/repos/%s/releases/latest")
+U.RAW_URLS = urls("https://raw.githubusercontent.com/%s/main/version.json")
 -- 0.6.8: tested versions (compat.json) from the latest release; raw main as fallback
-U.COMPAT_RAW_URL = "https://raw.githubusercontent.com/" .. U.REPO .. "/main/mod/compat.json"
+U.COMPAT_RAW_URLS = urls("https://raw.githubusercontent.com/%s/main/mod/compat.json")
+U.API_URL, U.RAW_URL, U.COMPAT_RAW_URL = U.API_URLS[1], U.RAW_URLS[1], U.COMPAT_RAW_URLS[1]
 U.RELEASES_URL = "https://github.com/" .. U.REPO .. "/releases/latest"
 U.TIMEOUT = 15
 U.state = U.state or "idle" -- idle | checking | none | available | offline | no_https | started
@@ -89,7 +104,7 @@ end
 local function request(h, url, cb)
 	local deadline = love.timer.getTime() + U.TIMEOUT
 	local done = false
-	local ok, err = pcall(h.asyncRequest, url, { headers = { ["User-Agent"] = "BalatroMultiplayer3P", ["Accept"] = "application/vnd.github+json" } },
+	local ok, err = pcall(h.asyncRequest, url, { headers = { ["User-Agent"] = "BalatroHighStakes", ["Accept"] = "application/vnd.github+json" } },
 		function(code, body)
 			if done then return end
 			done = true
@@ -111,12 +126,25 @@ function U.fetch_compat(h, release_body)
 	if U.compat_state or not (MP.COMPAT_GUARD and MP.COMPAT_GUARD.apply_remote) then return end
 	if MP.ENV and (MP.ENV.compat_check == "false" or MP.ENV.compat_check == "0") then return end
 	U.compat_state = "fetching"
-	local url = U.parse_compat_asset(release_body) or U.COMPAT_RAW_URL
-	request(h, url, function(body)
+	local asset = U.parse_compat_asset(release_body)
+	local list = asset and { asset } or U.COMPAT_RAW_URLS
+	U.request_first(h, list, function(b) return b end, function(body)
 		if not body then U.compat_state = "failed"; return end
 		local ok, applied = pcall(MP.COMPAT_GUARD.apply_remote, body)
 		U.compat_state = (body and ok and applied) and "done" or "failed"
 		log("compat.json from the latest release: " .. U.compat_state)
+	end)
+end
+
+--- Try the urls in order; the first answer that `accept(body)` turns into a value wins.
+--- cb(value, body) or cb(nil) when every url failed.
+function U.request_first(h, list, accept, cb, i)
+	i = i or 1
+	if not list[i] then return cb(nil) end
+	request(h, list[i], function(body)
+		local v = body and accept(body)
+		if v then return cb(v, body) end
+		U.request_first(h, list, accept, cb, i + 1)
 	end)
 end
 
@@ -129,12 +157,10 @@ function U.check()
 		U.state = "no_https"; log("no https backend; offering the PowerShell updater instead"); U.refresh_button(); return
 	end
 	U.state = "checking"
-	request(h, U.API_URL, function(body)
+	U.request_first(h, U.API_URLS, U.parse_release, function(tag, body)
 		pcall(U.fetch_compat, h, body)
-		local tag = U.parse_release(body)
 		if tag then return finish(tag) end
-		request(h, U.RAW_URL, function(body2)
-			local tag2 = U.parse_version_json(body2)
+		U.request_first(h, U.RAW_URLS, U.parse_version_json, function(tag2)
 			if tag2 then return finish(tag2) end
 			U.state = "offline"; log("update check: no answer (offline?)")
 		end)

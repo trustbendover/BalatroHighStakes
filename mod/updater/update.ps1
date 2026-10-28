@@ -3,7 +3,8 @@
 # SHA256SUMS asset, waits until Balatro is closed and runs the installer in update mode
 # (keeps your .env settings). Started by the "Update available" button in the game, or by Update.bat.
 param(
-    [string]$Repo = 'trustbendover/BalatroMultiplayer3P',
+    [string]$Repo = '',             # default: brand.json "repo" (trustbendover/BalatroHighStakes)
+    [string]$FallbackRepo = '',     # default: brand.json "repo_old" (trustbendover/BalatroMultiplayer3P), tried when $Repo fails
     [string]$CurrentVersion = '',   # default: read from Multiplayer.json next to this script
     [switch]$CheckOnly,             # only print installed/latest and exit (0 = up to date, 10 = update available, 1 = error)
     [switch]$FromGame,              # started from Balatro: wait for the game to close
@@ -40,6 +41,17 @@ function Is-Newer([string]$a, [string]$b) {
 }
 
 $Here = Split-Path -Parent $MyInvocation.MyCommand.Path
+# 0.6.8: repo slug + zip prefix in one place (mod/brand.json); built-in defaults if it is missing.
+$Brand = @{ repo = 'trustbendover/BalatroHighStakes'; repo_old = 'trustbendover/BalatroMultiplayer3P'; asset_prefix = 'BalatroMultiplayer3P' }
+foreach ($bj in (Join-Path (Split-Path -Parent $Here) 'brand.json'), (Join-Path $Here 'payload\BalatroMultiplayer3P\brand.json'), (Join-Path $Here 'brand.json')) {
+    if (Test-Path -LiteralPath $bj) {
+        try { $b = Get-Content -LiteralPath $bj -Raw | ConvertFrom-Json; foreach ($k in 'repo', 'repo_old', 'asset_prefix') { if ($b.$k) { $Brand[$k] = [string]$b.$k } } } catch {}
+        break
+    }
+}
+if (-not $Repo) { $Repo = $Brand.repo }
+if (-not $FallbackRepo) { $FallbackRepo = $Brand.repo_old }
+$Repos = @($Repo); if ($FallbackRepo -and $FallbackRepo -ne $Repo) { $Repos += $FallbackRepo }
 $PS = (Get-Process -Id $PID).Path   # same PowerShell that runs us (powershell.exe on Windows)
 if (-not $env:TEMP) { $env:TEMP = [IO.Path]::GetTempPath().TrimEnd('/', '\') }
 # The installer replaces the mod folder this script lives in, so run from a temp copy.
@@ -51,7 +63,7 @@ if (-not $CheckOnly -and $Here -notlike "$env:TEMP*") {
         $mj = Join-Path (Split-Path -Parent $Here) 'Multiplayer.json'
         if (Test-Path -LiteralPath $mj) { $CurrentVersion = (Get-Content -LiteralPath $mj -Raw | ConvertFrom-Json).version }
     }
-    $a = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $tmpDir 'update.ps1'), '-Repo', $Repo, '-WaitMinutes', $WaitMinutes, '-ApiBase', $ApiBase, '-RawBase', $RawBase)
+    $a = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $tmpDir 'update.ps1'), '-Repo', $Repo, '-FallbackRepo', $FallbackRepo, '-WaitMinutes', $WaitMinutes, '-ApiBase', $ApiBase, '-RawBase', $RawBase)
     if ($InstallerArgs) { $a += @('-InstallerArgs', $InstallerArgs) }
     if ($CurrentVersion) { $a += @('-CurrentVersion', $CurrentVersion) }
     foreach ($s in 'FromGame', 'Force', 'NoPrompt', 'NoPause') { if ((Get-Variable $s).Value) { $a += "-$s" } }
@@ -66,26 +78,32 @@ if (-not $CurrentVersion) {
 
 Say "Balatro High Stakes updater" Cyan
 Say "  Installed: $(if ($CurrentVersion) { $CurrentVersion } else { 'not found' })"
-$headers = @{ 'User-Agent' = 'BalatroMultiplayer3P-updater'; 'Accept' = 'application/vnd.github+json' }
+$headers = @{ 'User-Agent' = 'BalatroHighStakes-updater'; 'Accept' = 'application/vnd.github+json' }
 
 # ---------- find the latest release ----------
 $tag = $null; $installerUrl = $null; $sumsUrl = $null; $zipName = $null
-try {
-    $rel = Invoke-RestMethod -Uri "$ApiBase/repos/$Repo/releases/latest" -Headers $headers -TimeoutSec 20
-    $tag = $rel.tag_name
-    $inst = $rel.assets | Where-Object { $_.name -like '*Installer.zip' } | Select-Object -First 1
-    $sums = $rel.assets | Where-Object { $_.name -like 'SHA256SUMS*' } | Select-Object -First 1
-    if ($inst) { $installerUrl = $inst.browser_download_url; $zipName = $inst.name }
-    if ($sums) { $sumsUrl = $sums.browser_download_url }
-} catch { Say "  GitHub API not reachable ($($_.Exception.Message)); trying version.json" Yellow }
-if (-not $installerUrl) {
+# new repo name first, then the old one (0.6.8 rename; GitHub also redirects the old name)
+foreach ($r in $Repos) {
     try {
-        $vj = Invoke-RestMethod -Uri "$RawBase/$Repo/main/version.json" -Headers $headers -TimeoutSec 20
-        $tag = if ($vj.tag) { $vj.tag } else { 'v' + ($vj.version -replace '~.*$', '') }
-        $zipName = "BalatroMultiplayer3P-$tag-Installer.zip"
-        $installerUrl = "https://github.com/$Repo/releases/download/$tag/$zipName"
-        $sumsUrl = "https://github.com/$Repo/releases/download/$tag/SHA256SUMS-$tag.txt"
-    } catch { Say "  Could not check for updates (offline?): $($_.Exception.Message)" Red; if ($CheckOnly) { exit 1 }; Done 1 }
+        $rel = Invoke-RestMethod -Uri "$ApiBase/repos/$r/releases/latest" -Headers $headers -TimeoutSec 20
+        $inst = $rel.assets | Where-Object { $_.name -like '*Installer.zip' } | Select-Object -First 1
+        $sums = $rel.assets | Where-Object { $_.name -like 'SHA256SUMS*' } | Select-Object -First 1
+        if ($inst) { $tag = $rel.tag_name; $installerUrl = $inst.browser_download_url; $zipName = $inst.name; $sumsUrl = $null; if ($sums) { $sumsUrl = $sums.browser_download_url }; break }
+    } catch { Say "  GitHub API not reachable for $r ($($_.Exception.Message))" Yellow }
+}
+if (-not $installerUrl) {
+    $lastErr = $null
+    foreach ($r in $Repos) {
+        try {
+            $vj = Invoke-RestMethod -Uri "$RawBase/$r/main/version.json" -Headers $headers -TimeoutSec 20
+            $tag = if ($vj.tag) { $vj.tag } else { 'v' + ($vj.version -replace '~.*$', '') }
+            $zipName = "$($Brand.asset_prefix)-$tag-Installer.zip"
+            $installerUrl = "https://github.com/$r/releases/download/$tag/$zipName"
+            $sumsUrl = "https://github.com/$r/releases/download/$tag/SHA256SUMS-$tag.txt"
+            break
+        } catch { $lastErr = $_.Exception.Message }
+    }
+    if (-not $installerUrl) { Say "  Could not check for updates (offline?): $lastErr" Red; if ($CheckOnly) { exit 1 }; Done 1 }
 }
 Say "  Latest:    $tag"
 $newer = Is-Newer $tag $CurrentVersion
@@ -99,9 +117,9 @@ $work = Join-Path $env:TEMP ('mp3p-update-' + [guid]::NewGuid().ToString('N').Su
 New-Item -ItemType Directory -Path $work | Out-Null
 $zip = Join-Path $work $zipName
 Say "Downloading $zipName ..."
-Invoke-WebRequest -Uri $installerUrl -Headers @{ 'User-Agent' = 'BalatroMultiplayer3P-updater' } -OutFile $zip -UseBasicParsing -TimeoutSec 300
+Invoke-WebRequest -Uri $installerUrl -Headers @{ 'User-Agent' = 'BalatroHighStakes-updater' } -OutFile $zip -UseBasicParsing -TimeoutSec 300
 if (-not $sumsUrl) { Say "No SHA256SUMS file in this release - refusing to install an unverified download." Red; Done 1 }
-$sumsText = (Invoke-WebRequest -Uri $sumsUrl -Headers @{ 'User-Agent' = 'BalatroMultiplayer3P-updater' } -UseBasicParsing -TimeoutSec 60).Content
+$sumsText = (Invoke-WebRequest -Uri $sumsUrl -Headers @{ 'User-Agent' = 'BalatroHighStakes-updater' } -UseBasicParsing -TimeoutSec 60).Content
 if ($sumsText -is [byte[]]) { $sumsText = [Text.Encoding]::UTF8.GetString($sumsText) }
 $expected = $null
 foreach ($line in ($sumsText -split "`r?`n")) {

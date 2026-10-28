@@ -31,23 +31,36 @@ U.check(); ok(#pending == 1, "only one check per session")
 pending[1].cb(200, '{"tag_name":"v0.6.7","assets":[{"name":"BalatroMultiplayer3P-v0.6.7-Installer.zip"}]}')
 ok(U.state == "available" and U.latest == "0.6.7" and U.button_label() == "Update available: v0.6.7", "update available")
 
--- API fails -> raw version.json fallback; up to date
+-- 0.6.8 repo rename: new name first, old name as fallback (GitHub redirects too)
+ok(U.REPOS[1] == "trustbendover/BalatroHighStakes" and U.REPOS[2] == "trustbendover/BalatroMultiplayer3P" and #U.REPOS == 2, "repo names: new first, old fallback")
+ok(U.API_URL == "https://api.github.com/repos/trustbendover/BalatroHighStakes/releases/latest"
+	and U.API_URLS[2] == "https://api.github.com/repos/trustbendover/BalatroMultiplayer3P/releases/latest", "API urls for both names")
+ok(U.RELEASES_URL == "https://github.com/trustbendover/BalatroHighStakes/releases/latest", "releases page uses the new name")
 U.state = "idle"; pending = {}
-U.check(); pending[1].cb(403, "rate limited")
-ok(pending[2] and pending[2].url == U.RAW_URL, "falls back to version.json")
-pending[2].cb(200, '{"version":"0.6.6~3P","tag":"v0.6.6"}')
+U.check(); pending[1].cb(404, '{"message":"Not Found"}')
+ok(pending[2] and pending[2].url == U.API_URLS[2], "new name 404 -> old name")
+pending[2].cb(200, '{"tag_name":"v0.6.8","assets":[{"name":"BalatroMultiplayer3P-v0.6.8-Installer.zip"}]}')
+ok(U.state == "available" and U.latest == "0.6.8", "update found under the old name")
+
+-- API fails for both names -> raw version.json (new, then old); up to date
+U.state = "idle"; pending = {}
+U.check(); pending[1].cb(403, "rate limited"); pending[2].cb(403, "rate limited")
+ok(pending[3] and pending[3].url == U.RAW_URL, "falls back to version.json")
+pending[3].cb(404, nil)
+ok(pending[4] and pending[4].url == U.RAW_URLS[2], "version.json: new name 404 -> old name")
+pending[4].cb(200, '{"version":"0.6.6~3P","tag":"v0.6.6"}')
 ok(U.state == "none" and U.button_label() == nil, "up to date -> no button")
 
--- offline: both fail -> silent
+-- offline: everything fails -> silent
 U.state = "idle"; pending = {}
-U.check(); pending[1].cb(nil, nil); pending[2].cb(0, nil)
-ok(U.state == "offline", "offline is silent")
+U.check(); pending[1].cb(nil, nil); pending[2].cb(nil, nil); pending[3].cb(0, nil); pending[4].cb(0, nil)
+ok(U.state == "offline" and #pending == 4, "offline is silent")
 
 -- timeout: watchdog fires, late answer ignored
 U.state = "idle"; pending = {}; events = {}
 U.check()
-for _, e in ipairs(events) do e.func() end
-ok(pending[2] and pending[2].url == U.RAW_URL, "timeout falls through to version.json")
+for _ = 1, 2 do local ev = events; events = {}; for _, e in ipairs(ev) do e.func() end end
+ok(pending[3] and pending[3].url == U.RAW_URL, "timeout falls through to version.json")
 now = 100; pending[1].cb(200, '{"tag_name":"v9.9.9","assets":[{"name":"x-Installer.zip"}]}')
 ok(U.state ~= "available", "late answer after timeout ignored")
 

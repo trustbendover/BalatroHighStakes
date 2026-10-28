@@ -13,12 +13,10 @@ Voorheen "Balatro Multiplayer 3P".*
   - GitHub-repo `trustbendover/BalatroMultiplayer3P` en de zip-namen `BalatroMultiplayer3P-v…-Installer.zip`:
     de updater van 0.6.6 zoekt precies die naam, dus anders vinden vrienden de update niet.
   - Versie blijft `0.6.7~3P` (de updater vergelijkt alleen de cijfers; het achtervoegsel is cosmetisch).
-- **Plan voor de repo later hernoemen:** GitHub stuurt oude URL's door (ook de API die de updater
-  gebruikt). Volgorde: (1) 0.6.7 uitbrengen zoals nu; (2) repo hernoemen naar bv. `BalatroHighStakes`;
-  (3) in 0.6.8 `MP.BRAND.repo`, `update.ps1` en `build_release.py` op de nieuwe naam zetten, maar de
-  zip nog onder **beide** namen uploaden (of de oude naam houden) zodat 0.6.6/0.6.7-installaties blijven
-  updaten; (4) de installatiemap pas hernoemen met een migratiestap in de installer (map verplaatsen,
-  `.env` meenemen). Maak nooit een nieuwe repo met de oude naam: dan stopt de doorverwijzing.
+- **Repo hernoemen (0.6.8):** de repo wordt `trustbendover/BalatroHighStakes`, samen met de 0.6.8-release.
+  De code is al klaar (nieuwe naam eerst, oude naam als terugval; zip-namen blijven `BalatroMultiplayer3P-…`).
+  Stappen voor de releasedag en het bewijs dat 0.6.6/0.6.7 blijven updaten: `docs/REPO_RENAME_NL.md`.
+  De installatiemap blijft `BalatroMultiplayer3P` (hernoemen alleen met een migratiestap in de installer).
 
 ## Spelersaantallen
 | Modus | Spelers | Standaard levens | Bijzonderheden |

@@ -5,7 +5,7 @@ or the Balatro Multiplayer team. Balatro is (c) LocalThunk / Playstack; you need
 
 Fork (2-8 players, 1v1 Duel, Teams, King of the Hill, multiplayer jokers, Lua server port,
   Steam peer-to-peer mode, updater): Trust Ben Dover
-  https://github.com/trustbendover/BalatroMultiplayer3P  -  support: https://ko-fi.com/trustbendover
+  https://github.com/trustbendover/BalatroHighStakes  -  support: https://ko-fi.com/trustbendover
 
 Based on:
 - Balatro Multiplayer mod - Virtualized and the Balatro Multiplayer contributors
@@ -19,5 +19,5 @@ Bundled, unmodified:
 
 License: the mod is GPL-3.0 (LICENSE.txt). If you publish/distribute this, GPL-3.0 requires
 you to also make the corresponding source available: the source zip of the same release
-(https://github.com/trustbendover/BalatroMultiplayer3P/releases).
+(https://github.com/trustbendover/BalatroHighStakes/releases).
 Details of the changes: payload\BalatroMultiplayer3P\FORK_NOTICE.md

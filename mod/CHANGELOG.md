@@ -49,6 +49,12 @@
 
 ## 0.6.8~3P (in development - not released yet) - host migration
 
+- **New GitHub name: `trustbendover/BalatroHighStakes`** (renamed on release day). The in-game update check,
+  `Update.bat`, the compat.json download and the GitHub button try the new name first and the old
+  `BalatroMultiplayer3P` name second (GitHub also redirects the old name). Repo names and the zip prefix live in
+  one place, `mod/brand.json` (mirrored in `MP.BRAND`). Zip names, the install folder and the mod id stay
+  `BalatroMultiplayer3P` / `Multiplayer`, so 0.6.6 and 0.6.7 keep updating. Release-day steps: `docs/REPO_RENAME_NL.md`.
+
 - **Host migration (Steam P2P).** When the host leaves, quits Balatro or loses connection - in the lobby, in the shop
   or in the middle of a PvP blind - the next player in seat order becomes host and the match continues for everyone,
   without restarting anyone's run. "Host left - X is now host" is shown. The host keeps sending a copy of the lobby

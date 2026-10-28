@@ -12,7 +12,7 @@ special multiplayer jokers. Works over **Steam** (no server, no port forwarding)
 
 ## Install
 
-1. Go to **[Releases](https://github.com/trustbendover/BalatroMultiplayer3P/releases/latest)** and download
+1. Go to **[Releases](https://github.com/trustbendover/BalatroHighStakes/releases/latest)** and download
    `BalatroMultiplayer3P-vX.Y.Z-Installer.zip`.
 2. Close Balatro, **unzip** the whole zip, and double-click **`Install.bat`**.
    (SmartScreen: "More info" → "Run anyway". It's a plain PowerShell script you can read first.)
@@ -21,7 +21,9 @@ special multiplayer jokers. Works over **Steam** (no server, no port forwarding)
 4. Start Balatro from Steam. The version (`0.6.x~3P`) shows in the main menu.
 
 Everyone in a match needs the same version. The install folder is still called `BalatroMultiplayer3P`
-and the mod id is still `Multiplayer`, so updating keeps your settings. `Uninstall.bat` restores your backup.
+and the mod id is still `Multiplayer`, so updating keeps your settings. The repository used to be
+`trustbendover/BalatroMultiplayer3P`; old links redirect here, and the release zips keep the
+`BalatroMultiplayer3P-` prefix so older installs (0.6.6/0.6.7) keep updating. `Uninstall.bat` restores your backup.
 
 ## Updates
 

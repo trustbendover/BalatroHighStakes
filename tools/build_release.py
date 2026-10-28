@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the release zips for Balatro Multiplayer 3P.
+"""Build the release zips for Balatro High Stakes (formerly Balatro Multiplayer 3P).
 
   python3 tools/build_release.py            # version from mod/Multiplayer.json
   python3 tools/build_release.py --out dist-release --vendor-cache .vendor
@@ -10,6 +10,9 @@ Produces in --out:
   SHA256SUMS-v<X>.txt
 Third-party pieces (Lovely 0.10.0, Steamodded 1.0.0~BETA-1620a) are downloaded from their
 official GitHub releases and checked against pinned SHA256 hashes.
+Repo slug, zip prefix and install folder come from mod/brand.json. The zip names keep the old
+"BalatroMultiplayer3P-" prefix on purpose: 0.6.6/0.6.7 updaters build that name in their fallback path
+(see docs/REPO_RENAME_NL.md).
 """
 import argparse, hashlib, io, json, os, re, shutil, subprocess, sys, urllib.request, zipfile
 
@@ -17,6 +20,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # 0.6.8: the pins live in mod/compat.json (also read by the installer and the mod's startup guard)
 COMPAT_PATH = os.path.join(ROOT, "mod", "compat.json")
 COMPAT = json.load(open(COMPAT_PATH, encoding="utf-8"))
+BRAND = json.load(open(os.path.join(ROOT, "mod", "brand.json"), encoding="utf-8"))
+PREFIX, FOLDER = BRAND["asset_prefix"], BRAND["folder"]
 VENDOR = {
     "lovely": (COMPAT["lovely"]["pin"]["url"], COMPAT["lovely"]["pin"]["sha256"]),
     "smods": (COMPAT["steamodded"]["pin"]["url"], COMPAT["steamodded"]["pin"]["sha256"]),
@@ -37,7 +42,7 @@ def fetch(name, cache):
     if path and os.path.exists(path):
         data = open(path, "rb").read()
     else:
-        req = urllib.request.Request(url, headers={"User-Agent": "BalatroMultiplayer3P-build"})
+        req = urllib.request.Request(url, headers={"User-Agent": "BalatroHighStakes-build"})
         data = urllib.request.urlopen(req, timeout=120).read()
         if path:
             os.makedirs(cache, exist_ok=True)
@@ -101,9 +106,9 @@ def main():
     ver = a.version or json.load(open(os.path.join(ROOT, "mod", "Multiplayer.json")))["version"]
     tag = "v" + ver.split("~")[0]
     os.makedirs(a.out, exist_ok=True)
-    inst_name = f"BalatroMultiplayer3P-{tag}-Installer"
+    inst_name = f"{PREFIX}-{tag}-Installer"
     inst_zip = os.path.join(a.out, inst_name + ".zip")
-    src_zip = os.path.join(a.out, f"BalatroMultiplayer3P-{tag}-source.zip")
+    src_zip = os.path.join(a.out, f"{PREFIX}-{tag}-source.zip")
 
     if COMPAT.get("mod_version") != ver.split("~")[0].split("-")[0]:
         sys.exit(f"mod/compat.json mod_version {COMPAT.get('mod_version')} != mod version {ver}")
@@ -125,9 +130,9 @@ def main():
             if n.endswith("/") or not n.startswith(prefix):
                 continue
             z.writestr(f"{inst_name}/payload/smods/" + n[len(prefix):], smods.read(n))
-        add_tree(z, os.path.join(ROOT, "mod"), f"{inst_name}/payload/BalatroMultiplayer3P", MOD_EXCLUDE)
+        add_tree(z, os.path.join(ROOT, "mod"), f"{inst_name}/payload/{FOLDER}", MOD_EXCLUDE)
 
-    src_name = f"BalatroMultiplayer3P-{tag}-source"
+    src_name = f"{PREFIX}-{tag}-source"
     with zipfile.ZipFile(src_zip, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
         for f in tracked_files():
             if os.path.isfile(os.path.join(ROOT, f)):

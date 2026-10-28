@@ -25,7 +25,7 @@ UPDATES (from 0.6.6 on)
   Click it, then close Balatro: the updater downloads the new Installer zip from GitHub, checks its
   SHA256, installs it (your settings are kept) and tells you to start Balatro again.
 - Or run Update.bat (in this folder, or in %APPDATA%\Balatro\Mods\BalatroMultiplayer3P\updater).
-- Releases: https://github.com/trustbendover/BalatroMultiplayer3P/releases
+- Releases: https://github.com/trustbendover/BalatroHighStakes/releases
 - Turn the update check off: add the line update_check=false to the .env file.
 
 SUPPORT: like the mod? https://ko-fi.com/trustbendover

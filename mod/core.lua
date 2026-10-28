@@ -1,14 +1,18 @@
 MP = SMODS.current_mod
 
--- Display names in one place. The mod id stays "Multiplayer" (save data, config, SMODS.Mods lookups),
--- and the install folder / GitHub repo / release zip names stay "BalatroMultiplayer3P" so 0.6.6
--- installs keep finding updates (GitHub redirects if the repo is renamed later).
+-- Display names in one place (mirrored in mod/brand.json for the updater script, installer and build).
+-- The mod id stays "Multiplayer" (save data, config, SMODS.Mods lookups) and the install folder and
+-- release zip names stay "BalatroMultiplayer3P", so 0.6.6/0.6.7 installs keep finding and installing
+-- updates. 0.6.8: the GitHub repo is renamed to BalatroHighStakes; the old name is the fallback
+-- (GitHub redirects it; see docs/REPO_RENAME_NL.md).
 MP.BRAND = {
 	name = "Balatro High Stakes",
 	short = "High Stakes",
 	former_name = "Balatro Multiplayer 3P",
 	author = "Trust Ben Dover",
-	repo = "trustbendover/BalatroMultiplayer3P",
+	repo = "trustbendover/BalatroHighStakes",
+	repo_old = "trustbendover/BalatroMultiplayer3P",
+	asset_prefix = "BalatroMultiplayer3P",
 	folder = "BalatroMultiplayer3P",
 	min_players = 2,
 	max_players = 8,

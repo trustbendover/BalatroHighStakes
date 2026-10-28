@@ -8,6 +8,10 @@ a GitHub Release with three assets:
 - `BalatroMultiplayer3P-vX.Y.Z-source.zip` — corresponding source (GPL-3.0)
 - `SHA256SUMS-vX.Y.Z.txt` — checked by the updater before installing
 
+The zip names keep the `BalatroMultiplayer3P-` prefix (`asset_prefix` in `mod/brand.json`) even after the
+0.6.8 repo rename to `trustbendover/BalatroHighStakes`: 0.6.6/0.6.7 updaters build that name in their
+fallback path. Repo rename steps: `docs/REPO_RENAME_NL.md`.
+
 ## Steps
 
 1. Bump the version everywhere (all must match):

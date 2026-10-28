@@ -169,9 +169,12 @@ do
 	ok(U.compat_state == "done" and not CG.pending and SMODS.Mods.Multiplayer.config.compat_cache == remote, "newer release marks Balatro 1.0.2a tested: warning dropped, cached")
 	-- offline / no asset -> main copy, failure silent
 	pending = {}; U.state = "idle"; U.compat_state = nil
-	U.check(); pending[1].cb(nil, nil)
-	ok(pending[2] and pending[2].url == U.COMPAT_RAW_URL, "no release answer -> compat.json from main")
-	pending[2].cb(404, nil)
+	U.check(); pending[1].cb(nil, nil); pending[2].cb(nil, nil)
+	ok(pending[3] and pending[3].url == U.COMPAT_RAW_URL, "no release answer -> compat.json from main")
+	pending[3].cb(404, nil)
+	local last = pending[#pending]
+	ok(last.url == U.COMPAT_RAW_URLS[2] and U.compat_state == "fetching", "compat.json: new repo name 404 -> old name")
+	last.cb(404, nil)
 	ok(U.compat_state == "failed", "download failure is silent")
 	pending = {}; U.state = "idle"; U.compat_state = nil
 	U.check(); pending[1].cb(200, rel); pending[2].cb(200, "<html>garbage")

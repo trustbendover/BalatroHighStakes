@@ -20,7 +20,7 @@ support them via their own channels.
 
 0.6.6: lib/updater.lua (background update check against GitHub releases, "Update available" button),
 updater/update.ps1 + updater/Update.bat (download, SHA256 check, install in update mode),
-ui/main_menu/main_menu.lua. Repository: https://github.com/trustbendover/BalatroMultiplayer3P
+ui/main_menu/main_menu.lua. Repository: https://github.com/trustbendover/BalatroHighStakes
 
 0.6.7: King of the Hill gamemode - gamemodes/koth.lua, lib/koth.lua,
 networking/koth_rules.lua, tests/test_koth*.lua, tests/koth_vectors.json; hooks in

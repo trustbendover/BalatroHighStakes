@@ -16,6 +16,9 @@ jobs:
       - name: Installer pin tests (Windows PowerShell, sandbox in TEMP)
         shell: powershell
         run: powershell -NoProfile -ExecutionPolicy Bypass -File tools\test_installer_pins.ps1
+      - name: Updater repo-rename fallback test (new name first, old name second)
+        shell: powershell
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File tools\test_updater_rename.ps1
 
   release:
     needs: installer-tests
@@ -58,6 +61,14 @@ jobs:
           luajit tests/test_patch_notes.lua
           luajit tests/test_credits.lua
           luajit tests/test_compat_guard.lua
+          luajit tests/test_brand.lua
+
+      - name: Check repo name (0.6.8 rename, see docs/REPO_RENAME_NL.md)
+        run: |
+          want=$(python3 -c "import json;print(json.load(open('mod/brand.json'))['repo'])")
+          if [ "${GITHUB_REPOSITORY}" != "$want" ]; then
+            echo "::warning::running in ${GITHUB_REPOSITORY}, mod/brand.json says $want - rename the repo first (docs/REPO_RENAME_NL.md)"
+          fi
 
       - name: Server tests
         working-directory: server
@@ -68,7 +79,11 @@ jobs:
 
       - name: Build release zips
         id: build
-        run: python3 tools/build_release.py --out dist-release
+        run: |
+          python3 tools/build_release.py --out dist-release
+          # old 0.6.6/0.6.7 updaters build this exact name in their fallback path: never change it
+          prefix=$(python3 -c "import json;print(json.load(open('mod/brand.json'))['asset_prefix'])")
+          ls dist-release/${prefix}-v*-Installer.zip dist-release/SHA256SUMS-v*.txt dist-release/compat.json
 
       - name: Publish GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
@@ -83,6 +98,14 @@ jobs:
             printf '\n**Install:** download the Installer zip, unzip it, run `Install.bat`. Already on 0.6.6+? Use the in-game "Update available" button or `Update.bat`.\n\nSupport: https://ko-fi.com/trustbendover\n' >> notes.md
           fi
           gh release create "$tag" dist-release/* --title "Balatro High Stakes ${tag#v}" --notes-file notes.md --latest
+
+      - name: Verify the old-client update path (old repo name -> redirect -> this release)
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          old=$(python3 -c "import json;print(json.load(open('mod/brand.json'))['repo_old'])")
+          sleep 10
+          got=$(curl -fsSL -H "Accept: application/vnd.github+json" "https://api.github.com/repos/${old}/releases/latest" | python3 -c "import json,sys;print(json.load(sys.stdin).get('tag_name',''))" || true)
+          if [ "$got" = "${GITHUB_REF_NAME}" ]; then echo "old name ${old} -> ${got}: OK"; else echo "::warning::old repo name ${old} gives '${got}', not ${GITHUB_REF_NAME} - 0.6.6/0.6.7 clients may not see this update"; fi
 
       - uses: actions/upload-artifact@v4
         with:
