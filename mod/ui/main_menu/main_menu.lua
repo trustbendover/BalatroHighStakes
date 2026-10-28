@@ -7,6 +7,7 @@ function Game:main_menu(change_context)
 	Add_version_display()
 	MP.UI.show_dev_build_warning()
 	if MP.UPDATER then MP.UPDATER.on_main_menu() end
+	if MP.PATCH_NOTES then MP.PATCH_NOTES.add_menu_button() end -- the pop-up itself waits in PN.tick
 
 	return ret
 end

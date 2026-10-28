@@ -143,6 +143,16 @@ function MP.UI.create_config_tab()
                         colour = G.C.CHIPS,
                     }),
                     UIBox_button({
+                        button = "mp3p_patchnotes_open",
+                        label = { (MP.PATCH_NOTES and (MP.PATCH_NOTES.TEXT[MP.PATCH_NOTES.lang()] or MP.PATCH_NOTES.TEXT.en).button) or "Patch notes" },
+                        minw = 3,
+                        maxw = 3,
+                        minh = 0.8,
+                        maxh = 0.8,
+                        col = true,
+                        colour = G.C.GREEN,
+                    }),
+                    UIBox_button({
                         id = "from_game_won",
                         button = "mp_get_lovely_log_file",
                         label = { localize("b_get_log_file") },
