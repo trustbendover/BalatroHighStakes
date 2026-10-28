@@ -10,6 +10,7 @@ MP.MATCH_STATS = MP.MATCH_STATS or {}
 local MS = MP.MATCH_STATS
 
 MS.AUTO_DELAY = 4
+MS.PER_PAGE = 4 -- player panels per page on the Players tab
 MS.REPORT_EVERY = 3
 MS.MAX_ROWS = 8
 -- award key, Balatro colour name, text key, fallback
@@ -18,9 +19,9 @@ MS.AWARDS = {
 	{ "best", "chips", "k_ms_best", "Best hand" },
 	{ "jokers", "purple", "k_ms_jokers", "Most jokers" },
 	{ "lives", "green", "k_ms_lives", "Fewest lives lost" },
-	{ "pvp", "attention", "k_ms_pvp", "Most PvPs won" },
+	{ "pvp", "planet", "k_ms_pvp", "Most PvPs won" },
 	{ "money", "money", "k_ms_money", "Most money earned" },
-	{ "ante", "important", "k_ms_ante", "Highest ante" },
+	{ "ante", "filter", "k_ms_ante", "Highest ante" },
 }
 -- table columns: field, header text key, fallback, award that highlights it
 MS.COLUMNS = {
@@ -131,9 +132,42 @@ function MS.view(st, me)
 		end
 		v.rows[i] = { cells = cells, hl = hl, you = (me ~= nil and r.id == me), out = r.out }
 	end
+	-- Players tab: one Balatro panel per player, stats as small label + coloured value boxes
+	v.players = {}
+	local STAT_COLOUR = { dealt = "red", best = "chips", jokers = "purple", livesLost = "mult", pvpWon = "planet", money = "money", ante = "filter" }
+	for i = 1, #rows do
+		local r = rows[i]
+		local stats = {}
+		local cells = v.rows[i] and v.rows[i].cells or {}
+		for j, c in ipairs(MS.COLUMNS) do
+			if c[4] then
+				local val, sub = cells[j], nil
+				if c[1] == "best" then val, sub = MS.short(r.best or "0"), r.bestHand end
+				local award_colour
+				for _, a in ipairs(MS.AWARDS) do if a[1] == c[4] then award_colour = a[2] end end
+				stats[#stats + 1] = { key = c[1], label = L(c[2], c[3]), value = val or "", sub = sub, colour = STAT_COLOUR[c[1]],
+					award_colour = award_colour, winner = (st.awards and st.awards[c[4]] == r.id and #rows > 1) or false }
+			end
+		end
+		v.players[i] = { place = r.place or i, name = clean(r.name), team = r.team, you = (me ~= nil and r.id == me),
+			out = r.out and true or false, stats = stats }
+	end
+	v.lineup_keys = (w or rows[1]) and (w or rows[1]).lineup or nil
+	v.lineup_owner = (w or rows[1]) and clean((w or rows[1]).name) or nil
 	for i, t in ipairs(st.teams or {}) do
 		v.teams[i] = L("k_ms_team_line", "Team #1#: damage #2#, PvPs won #3#, lives lost #4#",
 			{ t.team, MS.short(t.dealt or 0), t.pvpWon or 0, t.livesLost or 0 })
+	end
+	v.team_panels = {}
+	for i, t in ipairs(st.teams or {}) do
+		local members = {}
+		for k, id in ipairs(t.members or {}) do members[k] = by_id[id] and clean(by_id[id].name) or "?" end
+		v.team_panels[i] = { team = t.team, place = t.place, winner = (t.place == 1), members = table.concat(members, ", "),
+			stats = {
+				{ key = "dealt", label = L("k_ms_col_damage", "Damage"), value = MS.short(t.dealt or 0), colour = "red" },
+				{ key = "pvpWon", label = L("k_ms_col_pvp", "PvP won"), value = tostring(t.pvpWon or 0), colour = "planet" },
+				{ key = "livesLost", label = L("k_ms_col_lives", "Lives lost"), value = tostring(t.livesLost or 0), colour = "mult" },
+			} }
 	end
 	local lw = w or rows[1]
 	if lw and lw.lineup and #lw.lineup > 0 then
@@ -223,48 +257,175 @@ end
 -- screen
 local function colour(name)
 	local C = G.C or {}
-	local map = { red = C.RED, chips = C.CHIPS or C.BLUE, purple = C.PURPLE, green = C.GREEN, attention = C.ORANGE or C.FILTER,
-		money = C.MONEY or C.GOLD, important = C.IMPORTANT or C.GOLD, gold = C.GOLD }
+	local SS = C.SECONDARY_SET or {}
+	local map = { red = C.MULT or C.RED, mult = C.RED, chips = C.CHIPS or C.BLUE, purple = C.PURPLE, green = C.GREEN,
+		planet = SS.Planet or C.BLUE, money = C.MONEY or C.GOLD, filter = C.FILTER or C.ORANGE, gold = C.GOLD }
 	return map[name] or C.WHITE
 end
+MS.colour = colour
 
-local function T(text, scale, col)
-	return { n = G.UIT.T, config = { text = text, scale = scale, colour = col or G.C.UI.TEXT_LIGHT, shadow = true } }
+--- Pure: page `page` (1-based) of a list, `per` items each; returns the slice and the page count.
+function MS.page_of(list, page, per)
+	per = per or MS.PER_PAGE
+	local pages = math.max(1, math.ceil(#(list or {}) / per))
+	page = math.max(1, math.min(pages, tonumber(page) or 1))
+	local out = {}
+	for i = (page - 1) * per + 1, math.min(#(list or {}), page * per) do out[#out + 1] = list[i] end
+	return out, pages, page
+end
+
+-- building blocks in the style of the game-over "round scores" rows
+local function T(text, scale, col, maxw)
+	return { n = G.UIT.T, config = { text = text, scale = scale, colour = col or G.C.UI.TEXT_LIGHT, shadow = true, maxw = maxw } }
+end
+local function dyn(text, scale, col, extra)
+	local ok, d = pcall(DynaText, { string = { text }, colours = { col or G.C.WHITE }, shadow = true, float = true,
+		scale = scale, pop_in = extra and extra.pop_in, bump = extra and extra.bump, rotate = extra and extra.rotate,
+		spacing = extra and extra.spacing, maxw = extra and extra.maxw })
+	if ok and d then return { n = G.UIT.O, config = { object = d } } end
+	return T(text, scale, col)
+end
+local PANEL = function() return darken and darken(G.C.JOKER_GREY, 0.1) or G.C.L_BLACK end
+
+--- small grey label over a black value box (the box takes the award colour for the category winner)
+local function stat_box(s, w)
+	local box_col = s.winner and colour(s.award_colour or s.colour) or G.C.BLACK
+	local val_col = s.winner and G.C.WHITE or colour(s.colour)
+	local inner = { T(s.value, 0.36, val_col, (w or 1.35) - 0.1) }
+	if s.sub then inner[#inner + 1] = T(" " .. s.sub, 0.3, s.winner and G.C.WHITE or G.C.UI.TEXT_LIGHT, (w or 1.35) * 0.55) end
+	return { n = G.UIT.C, config = { align = "cm", padding = 0.03 }, nodes = {
+		{ n = G.UIT.R, config = { align = "cm" }, nodes = { T(s.label, 0.28, G.C.UI.TEXT_LIGHT, w or 1.35) } },
+		{ n = G.UIT.R, config = { align = "cm", minw = w or 1.35, maxw = w or 1.35, minh = 0.45, r = 0.1, colour = box_col, emboss = 0.05, padding = 0.04 },
+			nodes = inner },
+	} }
+end
+
+local function award_card(a)
+	return { n = G.UIT.R, config = { align = "cm", padding = 0.05, r = 0.1, colour = PANEL(), emboss = 0.05 }, nodes = {
+		{ n = G.UIT.C, config = { align = "cm", minw = 0.14, minh = 0.9, r = 0.1, colour = colour(a.colour) }, nodes = {} },
+		{ n = G.UIT.C, config = { align = "cm", padding = 0.02, minw = 2.5, maxw = 2.5 }, nodes = { T(a.label, 0.4, G.C.UI.TEXT_LIGHT, 2.4) } },
+		{ n = G.UIT.C, config = { align = "cm", minw = 2.7, minh = 0.9, r = 0.1, colour = G.C.BLACK, emboss = 0.05, padding = 0.05 }, nodes = {
+			{ n = G.UIT.R, config = { align = "cm" }, nodes = { dyn(a.value, 0.45, colour(a.colour), { maxw = 2.6 }) } },
+			{ n = G.UIT.R, config = { align = "cm" }, nodes = { T(a.name, 0.32, a.you and G.C.GOLD or G.C.WHITE, 2.5) } },
+		} },
+	} }
+end
+
+local function lineup_node(v)
+	local keys = v.lineup_keys
+	if not (keys and #keys > 0) then return nil end
+	local ok, area = pcall(function()
+		local s = 0.6
+		local ar = CardArea(0, 0, G.CARD_W * s * math.min(#keys, 5) * 1.1, G.CARD_H * s,
+			{ card_limit = #keys, type = "title", highlight_limit = 0 })
+		for _, k in ipairs(keys) do
+			local c = G.P_CENTERS and G.P_CENTERS[k]
+			if c then
+				ar:emplace(Card(0, 0, G.CARD_W * s, G.CARD_H * s, nil, c, { bypass_discovery_center = true, bypass_discovery_ui = true }))
+			end
+		end
+		return ar
+	end)
+	local label = { n = G.UIT.R, config = { align = "cm" }, nodes = { T(L("k_ms_lineup_title", "#1#'s final jokers", { v.lineup_owner }), 0.32, G.C.UI.TEXT_LIGHT) } }
+	if ok and area then
+		return { n = G.UIT.R, config = { align = "cm", padding = 0.05, r = 0.1, colour = G.C.BLACK, emboss = 0.05 }, nodes = {
+			label, { n = G.UIT.R, config = { align = "cm" }, nodes = { { n = G.UIT.O, config = { object = area } } } } } }
+	end
+	return v.lineup and { n = G.UIT.R, config = { align = "cm" }, nodes = { T(v.lineup, 0.3, G.C.UI.TEXT_LIGHT) } } or nil
+end
+
+function MS.awards_tab(v)
+	local left, right = {}, {}
+	for i, a in ipairs(v.awards) do
+		local col = (i % 2 == 1) and left or right
+		col[#col + 1] = award_card(a)
+	end
+	local nodes = {
+		{ n = G.UIT.R, config = { align = "cm", padding = 0.05 }, nodes = {
+			{ n = G.UIT.C, config = { align = "tm", padding = 0.06 }, nodes = left },
+			{ n = G.UIT.C, config = { align = "tm", padding = 0.06 }, nodes = right },
+		} },
+	}
+	if #v.awards == 0 then nodes[1] = { n = G.UIT.R, config = { align = "cm", padding = 0.2 }, nodes = { T(L("k_ms_no_awards", "Play with friends for awards!"), 0.4) } } end
+	local ln = lineup_node(v)
+	if ln then nodes[#nodes + 1] = ln end
+	return { n = G.UIT.ROOT, config = { align = "cm", colour = G.C.CLEAR, minh = 5.6, minw = 13 }, nodes = nodes }
+end
+
+-- one panel per player: place | name | a row of small "label over value box" stats
+MS.STAT_W = { dealt = 1.3, best = 2.4, jokers = 1.0, livesLost = 1.15, pvpWon = 1.05, money = 1.1, ante = 0.85 }
+MS.PANEL_W = 12.8
+local function player_panel(p)
+	local boxes = {}
+	for _, x in ipairs(p.stats) do boxes[#boxes + 1] = stat_box(x, MS.STAT_W[x.key] or 1.2) end
+	return { n = G.UIT.R, config = { align = "cm", padding = 0.06, r = 0.1, colour = PANEL(), emboss = 0.05, minw = MS.PANEL_W }, nodes = {
+		{ n = G.UIT.C, config = { align = "cm", minw = 0.75, minh = 0.9, r = 0.1, colour = G.C.BLACK, emboss = 0.05 }, nodes = {
+			T(tostring(p.place), 0.6, p.place == 1 and G.C.GOLD or G.C.WHITE) } },
+		{ n = G.UIT.C, config = { align = "cl", padding = 0.06, minw = 2.3, maxw = 2.3 }, nodes = {
+			{ n = G.UIT.R, config = { align = "cl" }, nodes = { T(p.name, 0.42, p.you and G.C.GOLD or G.C.WHITE, 2.2) } },
+			{ n = G.UIT.R, config = { align = "cl" }, nodes = { T(p.team and L("k_ms_team", "Team #1#", { p.team }) or (p.out and L("k_sp_out", "out")) or "", 0.3, G.C.UI.TEXT_INACTIVE) } },
+		} },
+		{ n = G.UIT.C, config = { align = "cm" }, nodes = boxes },
+	} }
+end
+
+function MS.players_tab(v)
+	local list, pages, page = MS.page_of(v.players, MS.page, MS.PER_PAGE)
+	MS.page = page
+	local nodes = {}
+	for _, p in ipairs(list) do nodes[#nodes + 1] = player_panel(p) end
+	if pages > 1 then
+		local opts = {}
+		for i = 1, pages do opts[i] = localize and L("k_ms_page", "Page #1#/#2#", { i, pages }) or (i .. "/" .. pages) end
+		nodes[#nodes + 1] = { n = G.UIT.R, config = { align = "cm", padding = 0.05 }, nodes = {
+			create_option_cycle({ options = opts, w = 4.5, cycle_shoulders = true, opt_callback = "mp_ms_page", current_option = page,
+				colour = G.C.RED, no_pips = true, focus_args = { snap_to = true, nav = "wide" } }) } }
+	end
+	return { n = G.UIT.ROOT, config = { align = "tm", colour = G.C.CLEAR, minh = 5.6, minw = 13, padding = 0.05 }, nodes = nodes }
+end
+
+local TEAM_COLOURS = { "chips", "red", "green", "purple" }
+function MS.teams_tab(v)
+	local nodes = {}
+	for i, t in ipairs(v.team_panels or {}) do
+		local boxes = {}
+		for _, s in ipairs(t.stats) do boxes[#boxes + 1] = stat_box(s, 1.6) end
+		nodes[#nodes + 1] = { n = G.UIT.R, config = { align = "cm", padding = 0.06, r = 0.1, colour = PANEL(), emboss = 0.05, minw = MS.PANEL_W }, nodes = {
+			{ n = G.UIT.C, config = { align = "cm", minw = 0.75, minh = 1.05, r = 0.1, colour = colour(TEAM_COLOURS[(i - 1) % 4 + 1]), emboss = 0.05 }, nodes = {
+				T(t.team, 0.6, G.C.WHITE) } },
+			{ n = G.UIT.C, config = { align = "cl", padding = 0.06, minw = 3.6, maxw = 3.6 }, nodes = {
+				{ n = G.UIT.R, config = { align = "cl" }, nodes = { T(L("k_ms_team", "Team #1#", { t.team }), 0.42, t.winner and G.C.GOLD or G.C.WHITE) } },
+				{ n = G.UIT.R, config = { align = "cl" }, nodes = { T(t.members, 0.3, G.C.UI.TEXT_INACTIVE) } },
+			} },
+			{ n = G.UIT.C, config = { align = "cm" }, nodes = boxes },
+		} }
+	end
+	return { n = G.UIT.ROOT, config = { align = "tm", colour = G.C.CLEAR, minh = 5.6, minw = 13, padding = 0.05 }, nodes = nodes }
+end
+
+--- Pure: which tabs the screen has
+function MS.tab_list(v)
+	local t = { { id = "awards", label = L("b_ms_tab_awards", "Awards") }, { id = "players", label = L("b_ms_tab_players", "Players") } }
+	if v.team_panels and #v.team_panels > 0 then t[#t + 1] = { id = "teams", label = L("b_ms_tab_teams", "Teams") } end
+	return t
 end
 
 function MS.ui(st)
 	local v = MS.view(st, MP.LOBBY and MP.LOBBY.my_id)
-	local nodes = {
-		{ n = G.UIT.R, config = { align = "cm", padding = 0.05 }, nodes = { T(v.title, 0.7, G.C.GOLD) } },
+	local build = { awards = MS.awards_tab, players = MS.players_tab, teams = MS.teams_tab }
+	local tabs = {}
+	for _, t in ipairs(MS.tab_list(v)) do
+		tabs[#tabs + 1] = { label = t.label, chosen = (MS.tab or "awards") == t.id,
+			tab_definition_function = function() MS.tab = t.id; return build[t.id](v) end }
+	end
+	local back = "Back"
+	pcall(function() local b = localize("b_back"); if type(b) == "string" and b ~= "ERROR" then back = b end end)
+	local contents = {
+		{ n = G.UIT.R, config = { align = "cm" }, nodes = { dyn(v.title, 1.1, G.C.GOLD, { pop_in = 0.4, rotate = true, spacing = 6, maxw = 9 }) } },
 	}
-	if v.winner ~= "" then nodes[#nodes + 1] = { n = G.UIT.R, config = { align = "cm" }, nodes = { T(v.winner, 0.5, G.C.WHITE) } } end
-	local aw = {}
-	for _, a in ipairs(v.awards) do
-		aw[#aw + 1] = { n = G.UIT.R, config = { align = "cl", padding = 0.03 }, nodes = {
-			{ n = G.UIT.C, config = { align = "cm", colour = colour(a.colour), r = 0.08, padding = 0.05, minw = 2.9, emboss = 0.04 },
-				nodes = { T(a.label, 0.34, G.C.WHITE) } },
-			{ n = G.UIT.C, config = { align = "cl", padding = 0.05 }, nodes = {
-				T(" " .. a.name, 0.36, a.you and G.C.GOLD or G.C.WHITE), T("  " .. a.value, 0.32, G.C.UI.TEXT_INACTIVE) } },
-		} }
-	end
-	nodes[#nodes + 1] = { n = G.UIT.R, config = { align = "cm", padding = 0.08, r = 0.1, colour = G.C.BLACK }, nodes = aw }
-	local widths = { 0.4, 2.2, 1.3, 2.6, 0.9, 1.1, 1, 1, 0.7 }
-	local function row(cells, hl, head, you)
-		local cs = {}
-		for j, c in ipairs(cells) do
-			local col = head and G.C.UI.TEXT_INACTIVE or (hl and hl[j] and colour(hl[j])) or (you and j == 2 and G.C.GOLD) or G.C.WHITE
-			cs[j] = { n = G.UIT.C, config = { align = j <= 2 and "cl" or "cm", minw = widths[j] or 1, maxw = widths[j] or 1 },
-				nodes = { T(c, head and 0.3 or 0.32, col) } }
-		end
-		return { n = G.UIT.R, config = { align = "cm", padding = 0.02 }, nodes = cs }
-	end
-	local tbl = { row(v.header, nil, true) }
-	for _, r in ipairs(v.rows) do tbl[#tbl + 1] = row(r.cells, r.hl, false, r.you) end
-	nodes[#nodes + 1] = { n = G.UIT.R, config = { align = "cm", padding = 0.08, r = 0.1, colour = G.C.BLACK }, nodes = tbl }
-	for _, t in ipairs(v.teams) do nodes[#nodes + 1] = { n = G.UIT.R, config = { align = "cm" }, nodes = { T(t, 0.32, G.C.WHITE) } } end
-	if v.lineup then nodes[#nodes + 1] = { n = G.UIT.R, config = { align = "cm", padding = 0.04 }, nodes = { T(v.lineup, 0.3, G.C.UI.TEXT_INACTIVE) } } end
-	nodes[#nodes + 1] = UIBox_button({ button = "mp_ms_close", label = { L("b_ms_close", "Close") }, minw = 3, minh = 0.65, scale = 0.45 })
-	return create_UIBox_generic_options({ no_back = true, contents = nodes })
+	if v.winner ~= "" then contents[#contents + 1] = { n = G.UIT.R, config = { align = "cm" }, nodes = { dyn(v.winner, 0.6, G.C.WHITE, { bump = true }) } } end
+	contents[#contents + 1] = create_tabs({ tabs = tabs, snap_to_nav = true, colour = G.C.BOOSTER, tab_h = 5.8, tab_w = 13.2, text_scale = 0.45 })
+	return create_UIBox_generic_options({ back_func = "mp_ms_close", back_label = back, contents = contents })
 end
 
 function MS.open()
@@ -276,7 +437,7 @@ function MS.open()
 		end)
 		return
 	end
-	MS.show_at = nil
+	MS.show_at, MS.tab, MS.page = nil, "awards", 1
 	if MP.SPECTATE and MP.SPECTATE.state.active then MP.SPECTATE.state.active = false end
 	pcall(G.FUNCS.overlay_menu, { definition = MS.ui(MS.last) })
 end
@@ -303,6 +464,10 @@ function MS.register()
 	MS.registered = true
 	G.FUNCS.mp_ms_open = function() MS.open() end
 	G.FUNCS.mp_ms_close = function() MS.close() end
+	G.FUNCS.mp_ms_page = function(args)
+		MS.page, MS.tab = args and args.to_key or 1, "players"
+		pcall(G.FUNCS.overlay_menu, { definition = MS.ui(MS.last) })
+	end
 	MP.register_action("matchStats", function(p)
 		MS.last = p
 		MS.show_at = now() + MS.AUTO_DELAY

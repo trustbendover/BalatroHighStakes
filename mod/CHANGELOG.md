@@ -114,11 +114,12 @@
   Works with host migration: the summary travels in the host snapshots and a crashed host rejoins as a guest.
   Spectators can still become host (they get the same snapshots), but only after every seated player.
 - **Match stats screen.** At the end of every multiplayer match (all modes, 2-8 players) everyone - spectators too -
-  sees the same end screen: who wins, coloured award badges (Most damage, Best hand, Most jokers, Fewest lives lost,
-  Most PvPs won, Most money earned, Highest ante) and a table per player (place, damage, best hand + hand type,
-  jokers used, lives lost, PvPs won, money earned, highest ante), the winner's final joker lineup, and in Teams the
+  sees the same end screen, built from Balatro's own UI pieces (panels, DynaText title, red tabs, orange Back):
+  who wins, an **Awards** tab with award cards (Most damage, Best hand, Most jokers, Fewest lives lost,
+  Most PvPs won, Most money earned, Highest ante) a **Players** tab with a panel per player (4 per page; place, damage, best hand + hand type,
+  jokers used, lives lost, PvPs won, money earned, highest ante), the winner's final jokers as real cards, and in Teams a **Teams** tab with the
   team totals (damage, PvPs won, team lives lost). It opens by itself a few seconds after the match ends and from
-  the **Match stats** button on the game-over / win screen; Close goes back to that screen. EN/NL.
+  the **Match stats** button on the game-over / win screen; Back goes back to that screen. EN/NL.
   **Damage** = your score in every PvP blind (the chips you threw at your opponents), the same in every mode.
   The host is authoritative: it counts damage, PvPs and lives itself; each game reports only its own best hand,
   jokers, money earned and ante (checked and capped; numbers only go up, so a restarted run can't lower them).

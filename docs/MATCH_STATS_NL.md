@@ -2,7 +2,10 @@
 
 Aan het einde van elke multiplayer-match (alle modi, 2 tot 8 spelers) ziet iedereen hetzelfde eindscherm,
 ook toeschouwers. Het opent vanzelf een paar seconden na het einde van de match, en via de knop
-**Statistieken** op het game-over- of winscherm. **Sluiten** brengt je terug naar dat scherm.
+**Statistieken** op het game-over- of winscherm. De oranje knop **Terug** brengt je terug naar dat scherm.
+
+Het scherm gebruikt de bouwstenen van Balatro zelf (panelen, tabbladen, DynaText-titel, de m6x11-letter)
+en heeft tabbladen: **Prijzen**, **Spelers** en (bij teams) **Teams**.
 
 ## Wat staat erop?
 
@@ -10,9 +13,9 @@ ook toeschouwers. Het opent vanzelf een paar seconden na het einde van de match,
 - **Prijzen** met een gekleurd label, zoals in de patch notes:
   Meeste schade, Beste hand, Meeste jokers, Minste levens kwijt, Meeste PvP's gewonnen,
   Meeste geld verdiend, Hoogste ante. Bij gelijkspel wint wie hoger eindigde.
-- **Tabel per speler**: plaats, schade, beste hand (score + soort hand), jokers gebruikt, levens kwijt,
+- **Spelers**: per speler een paneel (4 per pagina, bladeren met de pijltjes) met plaats, schade, beste hand (score + soort hand), jokers gebruikt, levens kwijt,
   PvP's gewonnen, geld verdiend, hoogste ante. De winnaar van elke categorie staat in de kleur van die prijs.
-- De **laatste jokers** van de winnaar.
+- De **laatste jokers** van de winnaar, als echte jokerkaarten.
 - In **Teams** ook de teamtotalen: schade, PvP's gewonnen en teamlevens kwijt.
 
 ## Hoe wordt het geteld?

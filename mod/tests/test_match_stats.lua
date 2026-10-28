@@ -362,4 +362,68 @@ do
 	r = MS.collect(G.GAME, jk)
 	ok(r.money == 50 and r.seen == 8, "after a rejoin the counters continue from the host's numbers")
 end
+-- ===== 8. layout (Balatro building blocks, stubbed): tabs, award cards, paged player panels
+do
+	local function rgb(h) return { tonumber(h:sub(1, 2), 16) / 255, tonumber(h:sub(3, 4), 16) / 255, tonumber(h:sub(5, 6), 16) / 255, 1 } end
+	_G.G = { STAGES = { RUN = 2 }, STAGE = 1, CARD_W = 2.4, CARD_H = 3.2,
+		UIT = { ROOT = 0, R = 1, C = 2, T = 3, O = 4 },
+		C = { RED = rgb("FE5F55"), MULT = rgb("FE5F55"), CHIPS = rgb("009dff"), BLUE = rgb("009dff"), MONEY = rgb("f3b958"), FILTER = rgb("ff9a00"),
+			GREEN = rgb("4BC292"), PURPLE = rgb("8867a5"), GOLD = rgb("eac058"), WHITE = rgb("ffffff"), BLACK = rgb("374244"), L_BLACK = rgb("4f6367"),
+			JOKER_GREY = rgb("bfc7d5"), BOOSTER = rgb("646eb7"), CLEAR = { 0, 0, 0, 0 }, SECONDARY_SET = { Planet = rgb("13afce") },
+			UI = { TEXT_LIGHT = rgb("ffffff"), TEXT_INACTIVE = rgb("888888") } },
+		P_CENTERS = { j_joker = { key = "j_joker" }, j_blueprint = { key = "j_blueprint" } } }
+	_G.darken = function(c, a) return { c[1] * (1 - a), c[2] * (1 - a), c[3] * (1 - a), c[4] } end
+	_G.DynaText = function(a) return { dyna = true, text = a.string[1], colour = a.colours[1], scale = a.scale } end
+	local emplaced = {}
+	_G.CardArea = function() return { emplace = function(_, c) emplaced[#emplaced + 1] = c end } end
+	_G.Card = function(_, _, _, _, _, c) return { center = c } end
+	local cycles, tabs_args, generic = {}, nil, nil
+	_G.create_option_cycle = function(a) cycles[#cycles + 1] = a; return { n = 1, cycle = a } end
+	_G.create_tabs = function(a) tabs_args = a; return { n = 1, tabs = a } end
+	_G.create_UIBox_generic_options = function(a) generic = a; return { n = 0, nodes = a.contents } end
+	_G.UIBox_button = function(a) return { n = 1, button = a.button } end
+	_G.localize = function(k) if k == "b_back" then return "Back" end return "ERROR" end
+	local function find_all(node, pred, out)
+		out = out or {}
+		if type(node) ~= "table" then return out end
+		if pred(node) then out[#out + 1] = node end
+		for _, c in ipairs(node.nodes or {}) do find_all(c, pred, out) end
+		if node.config and node.config.object and type(node.config.object) == "table" then find_all(node.config.object, pred, out) end
+		return out
+	end
+	local rows8, book = {}, {}
+	for i = 1, 8 do book["m" .. i] = { id = "m" .. i, name = "Mock" .. i, dealt = 1000 * (9 - i), best = tostring(100 * i), bestHand = "Pair",
+		livesLost = i - 1, pvpWon = 8 - i, pvps = 8, money = 10 * i, ante = 3, seen = i, jokers = 2, lineup = { "j_joker", "j_blueprint" } } end
+	local out, order = {}, {}
+	for i = 8, 2, -1 do out["m" .. i] = true; order[#order + 1] = "m" .. i end
+	local rows, _, aw = Core.match_table(book, out, order, false)
+	MS.last = { winnerId = "m1", rows = rows, awards = aw }
+	MS.tab, MS.page = "awards", 1
+	local root = MS.ui(MS.last)
+	ok(generic.back_func == "mp_ms_close" and generic.back_label == "Back" and not generic.no_back, "Balatro generic panel with the orange Back button")
+	ok(root.nodes[1].nodes[1].config.object.dyna and root.nodes[1].nodes[1].config.object.colour == G.C.GOLD, "title is a gold DynaText (like You Win)")
+	ok(#tabs_args.tabs == 2 and tabs_args.tabs[1].label == "Awards" and tabs_args.tabs[2].label == "Players" and tabs_args.tabs[1].chosen, "tabs: Awards / Players")
+	local v = MS.view(MS.last, "m3")
+	local at = MS.awards_tab(v)
+	local strips = find_all(at, function(n) return n.config and n.config.minw == 0.14 end)
+	ok(#strips == 7, "7 award cards with a colour strip")
+	ok(#at.nodes[1].nodes == 2 and #at.nodes[1].nodes[1].nodes == 4 and #at.nodes[1].nodes[2].nodes == 3, "award cards in two columns (4 + 3)")
+	ok(#emplaced == 2 and emplaced[1].center.key == "j_joker", "the winner's final jokers are real cards in a CardArea")
+	local pt = MS.players_tab(v)
+	local panels = find_all(pt, function(n) return n.config and n.config.minw == MS.PANEL_W end)
+	ok(#panels == 4 and #cycles == 1 and #cycles[1].options == 2 and cycles[1].opt_callback == "mp_ms_page", "8 players: 4 panels per page + a Balatro page cycle")
+	MS.page = 2
+	local pt2 = MS.players_tab(v)
+	local texts = find_all(pt2, function(n) return n.config and n.config.text == "Mock8" end)
+	ok(#texts == 1, "page 2 shows the last players")
+	MS.page = 1
+	local winner_boxes = find_all(MS.players_tab(MS.view(MS.last)), function(n) return n.config and n.config.minh == 0.45 and n.config.colour ~= G.C.BLACK end)
+	ok(#winner_boxes >= 1, "category winners get a coloured value box")
+	local pages = select(2, MS.page_of({ 1, 2, 3, 4, 5 }, 9, 4))
+	ok(pages == 2 and #MS.page_of({ 1, 2, 3, 4, 5 }, 9, 4) == 1 and #MS.page_of({}, 1, 4) == 0, "paging clamps")
+	local tv = MS.view({ rows = rows, awards = aw, teams = { { team = "A", place = 1, dealt = 5000, pvpWon = 3, livesLost = 1, members = { "m1", "m2" } },
+		{ team = "B", place = 2, dealt = 10, pvpWon = 0, livesLost = 2, members = { "m3" } } } })
+	ok(#MS.tab_list(tv) == 3 and MS.tab_list(tv)[3].label == "Teams" and tv.team_panels[1].members == "Mock1, Mock2", "Teams tab with team panels")
+	ok(#find_all(MS.teams_tab(tv), function(n) return n.config and n.config.minw == MS.PANEL_W end) == 2, "a panel per team")
+end
 print("PASS: match stats")
