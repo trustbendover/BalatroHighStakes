@@ -47,6 +47,17 @@
 - **Ouija** — Destroys 3 cards instead of converting all cards to a single suit and reducing hand size.
 - **Judgment** — Now draws from its own queue (vanilla behavior) on Orange Stake and above. Still uses the shop queue on lower stakes.
 
+## 0.6.8~3P (in development - not released yet) - host migration
+
+- **Host migration (Steam P2P).** When the host leaves, quits Balatro or loses connection - in the lobby, in the shop
+  or in the middle of a PvP blind - the next player in seat order becomes host and the match continues for everyone,
+  without restarting anyone's run. "Host left - X is now host" is shown. The host keeps sending a copy of the lobby
+  state to all players; guests number their messages so nothing is lost; a running PvP simply continues.
+  A host who leaves counts as having left (eliminated in Deathmatch); a host who only lost connection keeps the seat
+  and rejoins automatically as a guest. If nobody can take over, you go back to the menu with a clear message.
+- The new host also becomes the Steam lobby owner, so the lobby code and invites keep working.
+- Everyone must be on 0.6.8 (server version 0.6.8). TS server mode is unchanged.
+
 ## 0.6.7~3P - 2026-10-28 - "Balatro High Stakes"
 
 - **Deathmatch** (new mode, 2-8 players): Attrition life rules (4 lives), but guaranteed all-vs-all to the last one standing.

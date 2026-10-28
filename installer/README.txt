@@ -1,11 +1,11 @@
-Balatro High Stakes  v0.6.7~3P  (unofficial fork of Balatro Multiplayer, by Trust Ben Dover)
+Balatro High Stakes  v0.6.8~3P  (unofficial fork of Balatro Multiplayer, by Trust Ben Dover)
 =========================================================================================
 Balatro Multiplayer for 2 to 8 players: 1v1 Duel, Attrition, Showdown, King of the Hill and
 Teams (2v2, 3v3, 4v4, 2v2v2, 2v2v2v2). Everyone in the match needs this mod.
 (Formerly "Balatro Multiplayer 3P"; the install folder is still BalatroMultiplayer3P.)
 Windows + Steam version of Balatro.
 
-UPDATING FROM AN OLDER VERSION: everyone (host AND friends) must install 0.6.7. Just run Install.bat again;
+UPDATING FROM AN OLDER VERSION: everyone (host AND friends) must install 0.6.8. Just run Install.bat again;
 it replaces the old version and keeps your settings.
 
 INSTALL
@@ -18,7 +18,7 @@ INSTALL
 4. Choose how to play:
    1 = via Steam (DEFAULT, recommended): no server, no port forwarding, no Tailscale.
    2 = via a server address (playit.gg / Tailscale / public IP + port, default 8788).
-5. Start Balatro normally from Steam. Version 0.6.7~3P shows in the main menu.
+5. Start Balatro normally from Steam. Version 0.6.8~3P shows in the main menu.
 
 UPDATES (from 0.6.6 on)
 - When a new version is released, the main menu shows an "Update available: vX" button (top left).

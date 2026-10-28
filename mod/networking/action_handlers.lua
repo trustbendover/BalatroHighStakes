@@ -159,6 +159,35 @@ local function action_rejoinedLobby(p)
 	MP.UI.UTILS.overlay_message("Reconnected to lobby!")
 end
 
+-- 0.6.8 host migration (Steam P2P): texts and popups live in lib/host_migration_ui.lua
+local function action_host_migrating(p)
+	if MP.HOST_MIGRATION then MP.HOST_MIGRATION.on_migrating(p) end
+end
+
+local function action_host_migrated(p)
+	-- like rejoinedLobby, but silent: our run simply continues on the new host
+	MP.LOBBY.code = p.code or MP.LOBBY.code
+	MP.LOBBY.type = p.type or MP.LOBBY.type
+	if p.reconnectToken then reconnectToken = p.reconnectToken end
+	lastLobbyCode = MP.LOBBY.code
+	save_reconnect_info()
+	MP.LOBBY.connected = true
+	MP.self_reconnect_countdown = nil
+	MP.UI.update_connection_status()
+	if MP.HOST_MIGRATION then MP.HOST_MIGRATION.on_migrated(p) end
+end
+
+local function action_host_migration_failed(p)
+	-- fall back to the old behaviour: back to the menu with a clear message
+	clear_reconnect_info()
+	MP.enemy_disconnect_countdown = nil
+	if G.STAGE ~= G.STAGES.MAIN_MENU then
+		pcall(G.FUNCS.go_to_menu)
+		pcall(MP.reset_game_states)
+	end
+	if MP.HOST_MIGRATION then MP.HOST_MIGRATION.on_failed(p) end
+end
+
 -- Countdown state for disconnect overlays
 MP.enemy_disconnect_countdown = nil
 MP.self_reconnect_countdown = nil
@@ -1772,6 +1801,9 @@ local HANDLERS = {
 	reconnecting = action_reconnecting,
 	joinedLobby = action_joinedLobby,
 	rejoinedLobby = action_rejoinedLobby,
+	hostMigrating = action_host_migrating,
+	hostMigrated = action_host_migrated,
+	hostMigrationFailed = action_host_migration_failed,
 	enemyDisconnected = action_enemyDisconnected,
 	enemyReconnected = action_enemyReconnected,
 	lobbyInfo = action_lobbyInfo,

@@ -34,7 +34,8 @@ Turn the check off with `update_check=false` in the mod's `.env`.
 
 ## Playing over Steam
 
-- **Host:** Play → Create Lobby. The host's Balatro runs the game server, so keep it open until the match ends.
+- **Host:** Play → Create Lobby. The host's Balatro runs the game server. From 0.6.8 on, if the host leaves, quits or
+  loses connection, the next player in the lobby automatically becomes host and the match goes on (host migration).
 - **Join:** Play → Join Lobby → type the code (wait ~10 s after the lobby is created), or use
   **Invite Steam friend** in the lobby / Steam friends list → *Join game*.
   If an invite doesn't land you in the lobby: Play → *Join Steam invite again*, or *Join From Clipboard*.

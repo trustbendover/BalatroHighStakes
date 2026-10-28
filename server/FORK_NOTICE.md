@@ -12,5 +12,6 @@ src/Lobby.ts, src/actionHandlers.ts, src/actions.ts, src/Client.ts, src/GameMode
 src/teams.ts and src/pvpRules.ts (new), test/multiPlayer.test.mjs (new).
 0.6.7: Deathmatch mode - src/Lobby.ts, src/actionHandlers.ts, src/actions.ts, src/GameMode.ts,
 test/deathmatch.test.mjs (new), test/lua_harness.lua and test/luaBridge.mjs (tick).
+0.6.8 (in development): server version 0.6.8 only (host migration is Steam P2P only; the TS server is authoritative).
 
 Fork (Balatro High Stakes) by Trust Ben Dover. Unofficial; not affiliated with LocalThunk, Playstack, or the Balatro Multiplayer team.

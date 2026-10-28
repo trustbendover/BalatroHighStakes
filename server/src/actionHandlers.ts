@@ -288,7 +288,7 @@ const setAnteAction = (
 };
 
 // TODO: Fix this
-const serverVersion = "0.6.7-MULTIPLAYER3P";
+const serverVersion = "0.6.8-MULTIPLAYER3P";
 /** Verifies the client version and allows connection if it matches the server's */
 const versionAction = (
 	{ version }: ActionHandlerArgs<ActionVersion>,

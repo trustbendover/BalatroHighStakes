@@ -42,3 +42,7 @@ Unofficial fork. Not affiliated with or endorsed by LocalThunk, Playstack, or th
 networking/p2p_server.lua (grace elimination, final-death rule, deathmatchUpdate), lib/modes.lua, lib/jokers_3p.lua,
 ui/game/game_end.lua, ui/main_menu/play_button/gamemode_selection.lua, localization (en-us, nl),
 tests/test_deathmatch_client.lua (new), tests/test_steam_p2p.lua.
+
+0.6.8 (in development): host migration for Steam P2P - networking/host_migration.lua and lib/host_migration_ui.lua (new),
+networking/steam_p2p.lua (router), networking/p2p_server.lua (snapshot/restore), networking/action_handlers.lua, core.lua,
+localization (en-us, nl), tests/test_host_migration*.lua (new), tests/test_steam_p2p.lua.

@@ -20,7 +20,7 @@ function Core.start_error(mode, n, options)
 	end
 	return nil
 end
-Core.SERVER_VERSION = "0.6.7-MULTIPLAYER3P"
+Core.SERVER_VERSION = "0.6.8-MULTIPLAYER3P"
 Core.STARTING_LIVES = { attrition = 4, showdown = 2, survival = 1, koth = 3, teams = 4, duel = 4, deathmatch = 4 }
 -- Deathmatch: seconds a disconnected player may rejoin before counting as eliminated
 Core.DEATHMATCH_GRACE = 60
@@ -38,6 +38,9 @@ Core.TEAMS = Core.TEAMS or nil
 -- King of the Hill rules module (networking/koth_rules.lua), injected by the loader / tests
 Core.KOTH = Core.KOTH or nil
 Core.EMPTY_LOBBY_TTL = 10 * 60
+-- Host migration (Steam P2P): seconds the new host waits for everyone to reconnect before
+-- the missing players count as disconnected (blinds don't start / resolve meanwhile)
+Core.MIGRATION_HOLD = 15
 
 ---------------------------------------------------------------- scores
 -- Score strings like "1234", "1.5e20", "ee1.2e5" (same format as InsaneInt)
@@ -358,7 +361,7 @@ function Server:deathmatch_expire(L, slot)
 end
 
 function Server:try_start_blind(L)
-	if not L.isInGame or L.blindActive then return false end
+	if not L.isInGame or L.blindActive or L.migration then return false end
 	local alive = self:alive(L)
 	if #alive == 0 or not every(alive, function(p) return p.isReady end) then return false end
 	L.blindSeq = L.blindSeq + 1
@@ -375,7 +378,7 @@ function Server:try_start_blind(L)
 end
 
 function Server:try_resolve_pvp(L)
-	if not L.isInGame or not L.blindActive then return end
+	if not L.isInGame or not L.blindActive or L.migration then return end
 	local alive = self:participants(L)
 	if #alive == 0 then return end
 	if not every(alive, function(p) return p.pvpDone or p.handsLeft < 1 end) then return end
@@ -647,9 +650,18 @@ function Server:reclaim(L, c, slot)
 	local o = slot.old
 	for _, f in ipairs(SLOT_FIELDS) do c[f] = o[f] end
 	if not c.username or c.username == "Guest" then c.username = o.username end
-	if L.koth and L.koth.kingId == o.id then L.koth.kingId = c.id end
-	table.insert(L.players, math.min(slot.index, #L.players + 1), c)
+	if slot.keep_id then
+		-- host migration: the seat keeps its player id and token, so every client's view stays valid
+		c.id, c.reconnectToken, c.seat = o.id, o.reconnectToken or c.reconnectToken, o.seat
+		local pos = 1
+		for i, p in ipairs(L.players) do if (p.seat or 500) <= (c.seat or 500) then pos = i + 1 end end
+		table.insert(L.players, pos, c)
+	else
+		if L.koth and L.koth.kingId == o.id then L.koth.kingId = c.id end
+		table.insert(L.players, math.min(slot.index, #L.players + 1), c)
+	end
 	c.lobby = L
+	if slot.migration then return self:migration_reclaimed(L, c) end
 	local missed = c.inPvp and (not L.blindActive or c.blindSeq ~= L.blindSeq)
 	if missed then c.inPvp, c.pvpDone, c.isReady = false, false, false end
 	sendA(c, { action = "rejoinedLobby", code = L.code, type = L.gameMode, reconnectToken = c.reconnectToken })
@@ -741,6 +753,171 @@ function Server:join(L, c)
 	self:lobby_info(L)
 end
 
+---------------------------------------------------------------- host migration (Steam P2P)
+-- The Steam host replicates its lobby state to every guest (Server:snapshot). When the host is
+-- gone, the elected successor rebuilds the lobby from the last snapshot (Core.restore): every
+-- player starts as a held seat that keeps its id and token, and is reclaimed when that player's
+-- client reconnects to the new host. Until everyone is back (or Core.MIGRATION_HOLD runs out)
+-- no blind starts or resolves, so a PvP that was running simply continues.
+local SNAP_FIELDS = { "id", "username", "reconnectToken", "seat" }
+for _, f in ipairs(SLOT_FIELDS) do SNAP_FIELDS[#SNAP_FIELDS + 1] = f end
+local function finite(n) return type(n) == "number" and n == n and n ~= math.huge and n ~= -math.huge end
+local function snap_player(p)
+	local d = {}
+	for _, f in ipairs(SNAP_FIELDS) do
+		local v = p[f]
+		if f == "score" then
+			v = v or ZERO()
+			v = { ec = finite(v.ec) and v.ec or 0, c = finite(v.c) and v.c or 0, e = finite(v.e) and v.e or 0, raw = v.raw, str = v.str }
+		elseif type(v) == "number" and not finite(v) then
+			v = 0
+		end
+		d[f] = v
+	end
+	return d
+end
+local function plain(t)
+	if type(t) ~= "table" then return t end
+	local r = {}
+	for k, v in pairs(t) do
+		if type(v) ~= "function" then r[k] = (type(v) == "table") and plain(v) or ((type(v) == "number" and not finite(v)) and 0 or v) end
+	end
+	return r
+end
+
+--- JSON-safe copy of a lobby's authoritative state (nil if the lobby doesn't exist).
+function Server:snapshot(code, hostId)
+	local L = self.lobbies[code or ""]
+	if not L then return nil end
+	local now = self.now()
+	local s = {
+		v = 1, code = L.code, gameMode = L.gameMode, options = plain(L.options), isInGame = L.isInGame and true or false,
+		seed = L.seed, blindActive = L.blindActive and true or false, blindSeq = L.blindSeq or 0, startPlayers = L.startPlayers,
+		teamSize = L.teamSize, teamLives = plain(L.teamLives), koth = plain(L.koth), elimOrder = plain(L.elimOrder),
+		winnerId = L.winnerId, firstReadyAge = L.firstReadyAt and (now - L.firstReadyAt) or nil,
+		next_id = self.next_id, hostId = hostId, players = {}, slots = {},
+	}
+	for i, p in ipairs(L.players) do s.players[i] = snap_player(p) end
+	for i, sl in ipairs(L.slots) do
+		s.slots[i] = { token = sl.reconnectToken, index = sl.index, age = sl.since and (now - sl.since) or nil,
+			mig = sl.migration or nil, oldHost = sl.oldHost or nil, old = snap_player(sl.old) }
+	end
+	return s
+end
+
+--- Rebuild a server from a snapshot on the new host.
+--- opts: now, log, oldHostId, newHostId, reason ("left" | "disconnected"), hold (seconds)
+function Core.restore(snap, opts)
+	opts = opts or {}
+	local S = Core.new(opts)
+	S.next_id = (tonumber(snap.next_id) or 0) + 100
+	local now = S.now()
+	local L = {
+		code = snap.code, gameMode = snap.gameMode or "attrition", options = snap.options or {},
+		isInGame = snap.isInGame and true or false, seed = snap.seed, blindActive = snap.blindActive and true or false,
+		blindSeq = tonumber(snap.blindSeq) or 0, startPlayers = snap.startPlayers, teamSize = snap.teamSize,
+		teamLives = snap.teamLives, koth = snap.koth, elimOrder = snap.elimOrder, winnerId = snap.winnerId,
+		firstReadyAt = snap.firstReadyAge and (now - snap.firstReadyAge) or nil,
+		players = {}, slots = {}, emptySince = nil,
+	}
+	if L.teamLives and next(L.teamLives) == nil and L.gameMode ~= "teams" then L.teamLives = nil end
+	local noop = function() end
+	local function mk(d)
+		local o = copy(d)
+		o.send, o.close, o.lobby = noop, noop, nil
+		o.score = d.score or ZERO()
+		return o
+	end
+	local oldName
+	for i, d in ipairs(snap.players or {}) do
+		local o = mk(d)
+		local is_old = d.id == opts.oldHostId
+		o.seat = (d.id == opts.newHostId and 0) or (is_old and 1000) or i
+		if is_old then oldName = d.username end
+		L.slots[#L.slots + 1] = { reconnectToken = d.reconnectToken, index = i, old = o, since = now, keep_id = true,
+			migration = (not is_old) or nil, oldHost = is_old or nil }
+	end
+	for i, sd in ipairs(snap.slots or {}) do
+		local o = mk(sd.old or {})
+		o.seat = o.seat or (200 + i)
+		L.slots[#L.slots + 1] = { reconnectToken = sd.token, index = sd.index or 99, old = o,
+			since = sd.age and (now - sd.age) or now, keep_id = true, migration = sd.mig or nil, oldHost = sd.oldHost or nil }
+	end
+	L.migration = { untilT = now + (opts.hold or Core.MIGRATION_HOLD), oldHostId = opts.oldHostId, oldHostName = oldName,
+		newHostId = opts.newHostId, reason = opts.reason or "disconnected" }
+	S.lobbies[L.code] = L
+	return S, L
+end
+
+--- A player reconnected to the new host after a migration.
+function Server:migration_reclaimed(L, c)
+	local m = L.migration or {}
+	local host = L.players[1]
+	sendA(c, { action = "hostMigrated", code = L.code, type = L.gameMode, reconnectToken = c.reconnectToken, you = c.id,
+		hostId = host and host.id, hostName = host and host.username, oldHostName = m.oldHostName, inGame = L.isInGame })
+	sendA(c, copy(copy({ gamemode = L.gameMode }, L.options), { action = "lobbyOptions" }))
+	if L.isInGame then
+		sendA(c, { action = "playerInfo", lives = c.lives })
+		for _, o in ipairs(L.players) do if o ~= c then sendA(c, self:enemy_info(o, true)) end end
+		for _, s in ipairs(L.slots) do sendA(c, self:enemy_info(s.old, true)) end
+		if self:koth_active(L) and L.koth then self:koth_broadcast(L) end
+		self:teams_broadcast(L)
+		self:deathmatch_broadcast(L)
+	end
+	self:lobby_info(L)
+	if not find(L.slots, function(s) return s.migration end) then self:end_migration(L) end
+end
+
+--- A held seat that will not come back (the old host who left on purpose).
+function Server:slot_left(L, o)
+	if not L.isInGame then return end
+	self:broadcast(L, { action = "playerLeft", playerId = o.id, username = o.username })
+	if L.gameMode == "deathmatch" and not o.eliminated then
+		L.elimOrder = L.elimOrder or {}
+		L.elimOrder[#L.elimOrder + 1] = o.id
+		self:broadcast(L, { action = "playerEliminated", playerId = o.id, username = o.username, reason = "left" })
+	end
+	o.team = nil
+end
+
+--- Everyone is back (or the hold ran out): apply the old host's leave and continue the game.
+function Server:end_migration(L)
+	local m = L.migration
+	if not m then return end
+	L.migration = nil
+	local missing = {}
+	for i = #L.slots, 1, -1 do
+		local sl = L.slots[i]
+		if sl.migration then
+			sl.migration = nil
+			if L.isInGame then missing[#missing + 1] = sl.old else table.remove(L.slots, i) end
+		elseif sl.oldHost then
+			sl.oldHost = nil
+			if not L.isInGame then
+				table.remove(L.slots, i)
+			elseif m.reason == "left" then
+				table.remove(L.slots, i)
+				self:slot_left(L, sl.old)
+			else
+				missing[#missing + 1] = sl.old
+			end
+		end
+	end
+	for _, o in ipairs(missing) do
+		for _, p in ipairs(L.players) do sendA(p, { action = "enemyDisconnected", timeout = 0, playerId = o.id, held = true }) end
+	end
+	if #L.players == 0 then L.emptySince = self.now() end
+	if L.isInGame then
+		self:teams_broadcast(L)
+		self:deathmatch_broadcast(L)
+		if not self:check_game_over(L) then
+			self:try_start_blind(L)
+			self:try_resolve_pvp(L)
+		end
+	end
+	self:lobby_info(L)
+end
+
 ---------------------------------------------------------------- actions
 local RELAYS = {
 	sendPhantom = true, removePhantom = true, asteroid = true, letsGoGamblingNemesis = true, eatPizza = true,
@@ -792,6 +969,7 @@ function H.keepAliveAck() end
 function H.startGame(S, c)
 	local L = c.lobby
 	if not L or L.players[1] ~= c then return end
+	if L.migration then return sendA(c, { action = "error", message = "Host migration in progress, try again in a moment." }) end
 	if L.isInGame then return sendA(c, { action = "error", message = "A match is still running." }) end
 	local why = Core.start_error(L.gameMode, #L.players, L.options)
 	if why then return sendA(c, { action = "error", message = why }) end
@@ -949,10 +1127,11 @@ end
 function Server:tick()
 	local now = self.now()
 	for code, L in pairs(self.lobbies) do
-		if L.isInGame and L.gameMode == "deathmatch" then
+		if L.migration and now >= L.migration.untilT then self:end_migration(L) end
+		if L.isInGame and L.gameMode == "deathmatch" and not L.migration then
 			local grace = Core.deathmatch_grace(L.options)
 			for _, sl in ipairs(L.slots) do
-				if not sl.old.eliminated and sl.since and now - sl.since >= grace then self:deathmatch_expire(L, sl) end
+				if not sl.old.eliminated and sl.since and not sl.migration and now - sl.since >= grace then self:deathmatch_expire(L, sl) end
 			end
 		end
 		if #L.players == 0 and L.emptySince and now - L.emptySince > Core.EMPTY_LOBBY_TTL then

@@ -51,6 +51,7 @@ function M.new_ffi_backend()
 		bool SteamAPI_ISteamMatchmaking_SetLobbyData(void *self, uint64_t lobby, const char *k, const char *v);
 		const char *SteamAPI_ISteamMatchmaking_GetLobbyData(void *self, uint64_t lobby, const char *k);
 		uint64_t SteamAPI_ISteamMatchmaking_GetLobbyOwner(void *self, uint64_t lobby);
+		bool SteamAPI_ISteamMatchmaking_SetLobbyOwner(void *self, uint64_t lobby, uint64_t owner);
 		int SteamAPI_ISteamMatchmaking_GetNumLobbyMembers(void *self, uint64_t lobby);
 		uint64_t SteamAPI_ISteamMatchmaking_GetLobbyMemberByIndex(void *self, uint64_t lobby, int i);
 		bool SteamAPI_ISteamMatchmaking_SetLobbyJoinable(void *self, uint64_t lobby, bool joinable);
@@ -163,6 +164,8 @@ function M.new_ffi_backend()
 	end
 	function B.set_joinable(lobby, j) lib.SteamAPI_ISteamMatchmaking_SetLobbyJoinable(mm, s2id(lobby), j) end
 	function B.owner(lobby) return id2s(lib.SteamAPI_ISteamMatchmaking_GetLobbyOwner(mm, s2id(lobby))) end
+	-- host migration: only the current owner can hand the lobby over
+	function B.set_owner(lobby, id) return lib.SteamAPI_ISteamMatchmaking_SetLobbyOwner(mm, s2id(lobby), s2id(id)) end
 	function B.members(lobby)
 		local out, L = {}, s2id(lobby)
 		for i = 0, lib.SteamAPI_ISteamMatchmaking_GetNumLobbyMembers(mm, L) - 1 do
@@ -292,13 +295,29 @@ function M.new_router(o)
 	local core = o.Core.new({ log = log, now = now })
 	B.log = log
 	R.core = core
-	local function push(t) o.push(type(t) == "string" and t or json.encode(t)) end
+	R.gen = 0 -- bumped whenever the in-process server is replaced (old connections go silent)
+	local TOKEN_ACTIONS = { joinedLobby = true, rejoinedLobby = true, hostMigrated = true }
+	local function push(t)
+		if type(t) == "table" and TOKEN_ACTIONS[t.action] then
+			R.token = t.reconnectToken or R.token
+			R.code = t.code or R.code
+		end
+		o.push(type(t) == "string" and t or json.encode(t))
+	end
 	-- the UI's own {"action":"connect"} produces the "connected"; drop the core's automatic one
-	local first = true
-	local localConn = core:connect(function(t)
-		if first and t.action == "connected" then first = false; return end
-		push(t)
-	end, function() end)
+	local localConn
+	local function connect_local(silent)
+		local gen, first = R.gen, true
+		localConn = core:connect(function(t)
+			if R.gen ~= gen then return end
+			if first and t.action == "connected" then first = false; return end
+			if silent and t.action == "version" then silent = false; return end
+			push(t)
+		end, function() end)
+	end
+	connect_local(false)
+	local conn_peer = setmetatable({}, { __mode = "k" }) -- core connection -> Steam id
+	local HM -- host migration (networking/host_migration.lua), optional
 
 	local function peer(id)
 		local p = R.peers[id]
@@ -334,8 +353,18 @@ function M.new_router(o)
 		presence(nil)
 		for id in pairs(R.peers) do drop_peer(id) end
 		R.mode, R.lobby, R.host, R.joining, R.retry, R.invite_retry = "local", nil, nil, false, nil, nil
+		if HM then HM.reset() end
 	end
 	R.to_local = to_local
+	--- Replace the in-process server (host migration). make(opts) -> new server, or nil for a fresh one.
+	local function new_core(make)
+		R.gen = R.gen + 1
+		core = make and make() or o.Core.new({ log = log, now = now })
+		R.core = core
+		for _, p in pairs(R.peers) do p.conn = nil end
+		connect_local(true)
+		return core
+	end
 
 	local function host_lobby_code()
 		return localConn.lobby and localConn.lobby.code or nil
@@ -370,7 +399,7 @@ function M.new_router(o)
 					return
 				end
 				R.joining = false
-				push({ action = "error", message = "Could not join the Steam lobby (" .. tostring(why) .. ")" })
+				if not R.quiet_join then push({ action = "error", message = "Could not join the Steam lobby (" .. tostring(why) .. ")" }) end
 				return
 			end
 			local owner = B.owner(lobby)
@@ -466,8 +495,21 @@ function M.new_router(o)
 			return
 		end
 		if R.mode == "guest" then
-			B.send(R.host, "J" .. json.encode(msg))
+			B.send(R.host, HM and HM.guest_frame(msg) or ("J" .. json.encode(msg)))
 			if a == "leaveLobby" then to_local() end
+			return
+		end
+		if R.mode == "migrating" then
+			-- no host right now: keep game messages for the new host, leaving cancels
+			if a == "leaveLobby" then to_local(); return end
+			HM.guest_frame(msg)
+			return
+		end
+		if a == "leaveLobby" and R.mode == "host" and HM and HM.host_leaving() then
+			-- the guests continue with a new host; our own server goes quiet
+			new_core(nil)
+			for _, k in ipairs({ "version", "username" }) do if R.cached[k] then core:receive(localConn, R.cached[k]) end end
+			to_local()
 			return
 		end
 		if (a == "joinLobby" or a == "rejoinLobby") and msg.code and not core.lobbies[msg.code] then
@@ -475,6 +517,7 @@ function M.new_router(o)
 			return start_join(msg.code, msg)
 		end
 		core:receive(localConn, msg)
+		if HM then HM.mark_dirty() end
 		if a == "createLobby" and host_lobby_code() then
 			start_hosting()
 		elseif R.mode == "host" and not host_lobby_code() then
@@ -519,7 +562,8 @@ function M.new_router(o)
 			for _, e in ipairs(B.join_events()) do
 				if e.session then
 					log("P2P session request from " .. e.session .. " (mode " .. R.mode .. ")")
-					if R.mode == "host" or (R.mode == "guest" and e.session == R.host) then
+					if R.mode == "host" or (R.mode == "guest" and e.session == R.host) or R.mode == "migrating"
+						or (HM and R.lobby and R.mode == "guest") then
 						B.accept(e.session)
 						if R.mode == "host" then peer(e.session) end
 					end
@@ -543,18 +587,31 @@ function M.new_router(o)
 		for _, m in ipairs(B.receive()) do
 			local p = R.peers[m.peer]
 			if R.mode == "host" and not p then p = peer(m.peer) end
-			if p then
-				p.seen = t
-				if m.data:sub(1, 1) == "J" then
-					local ok, msg = pcall(json.decode, m.data:sub(2))
+			if p then p.seen = t end
+			local tag = m.data:sub(1, 1)
+			if HM and (tag == "S" or tag == "A" or tag == "L") then
+				HM.on_frame(m.peer, m.data)
+			elseif p then
+				local body, seq = nil, nil
+				if tag == "J" then
+					body = m.data:sub(2)
+				elseif tag == "Q" then
+					local n, rest = m.data:match("^Q(%d+)|(.*)$")
+					seq, body = tonumber(n), rest
+				end
+				if body then
+					local ok, msg = pcall(json.decode, body)
 					if ok and type(msg) == "table" then
 						if R.mode == "host" then
 							if not p.conn then
-								local id = m.peer
-								p.conn = core:connect(function(x) B.send(id, "J" .. json.encode(x)) end,
-									function() B.send(id, "K") end)
+								local id, gen = m.peer, R.gen
+								p.conn = core:connect(function(x) if R.gen == gen then B.send(id, "J" .. json.encode(x)) end end,
+									function() if R.gen == gen then B.send(id, "K") end end)
+								conn_peer[p.conn] = id
 							end
 							core:receive(p.conn, msg)
+							if seq then p.ack = math.max(p.ack or 0, seq) end
+							if HM then HM.mark_dirty() end
 						elseif R.mode == "guest" and m.peer == R.host and msg.action ~= "connected" then
 							push(msg)
 						end
@@ -577,17 +634,35 @@ function M.new_router(o)
 		end
 		for id, p in pairs(R.peers) do
 			if t - p.seen > M.TIMEOUT then
-				log("Steam peer " .. id .. " timed out")
+				if not p.timeout_logged then log("Steam peer " .. id .. " timed out"); p.timeout_logged = true end
 				if R.mode == "guest" and id == R.host then
-					to_local()
-					push({ action = "error", message = "Lost connection to the Steam host" })
-					push({ action = "disconnected" })
+					if HM then
+						if not HM.host_timeout() then HM.fail("host timed out", "Lost connection to the Steam host. Back to the menu.") end
+					else
+						to_local()
+						push({ action = "error", message = "Lost connection to the Steam host" })
+						push({ action = "disconnected" })
+					end
+				elseif R.mode == "migrating" then
+					R.peers[id] = nil
 				else
 					drop_peer(id)
 				end
 			end
 		end
 		core:tick()
+		if HM then HM.update(); HM.host_tick(false) end
+	end
+
+	if o.Migration then
+		HM = o.Migration.attach({
+			R = R, B = B, json = json, now = now, log = log, push = push, Core = o.Core,
+			peer = peer, drop_peer = drop_peer, to_local = to_local, start_join = function(...) return start_join(...) end,
+			get_core = function() return core end, local_conn = function() return localConn end,
+			conn_peer = function(c) return conn_peer[c] end,
+			new_core = function(make) return new_core(make) end,
+		})
+		R.migration = HM
 	end
 	return R
 end

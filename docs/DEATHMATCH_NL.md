@@ -46,9 +46,9 @@ strikte "laatste die overblijft"-variant. De twee bugfixes (geen winnaar bij gel
 "Terug naar lobby" van een uitgeschakelde speler) gelden voor alle modi.
 
 ## Serverpaden
-- **Steam P2P** (host draait `mod/networking/p2p_server.lua`): alles hierboven. Let op: als de **host**
-  de lobby verlaat of Balatro sluit, stopt de match voor iedereen (ster-topologie). Een uitgeschakelde
-  host kan wél "Terug naar lobby" doen: de match loopt door.
+- **Steam P2P** (host draait `mod/networking/p2p_server.lua`): alles hierboven. Vanaf 0.6.8: verlaat de **host**
+  de lobby of sluit hij Balatro, dan neemt de volgende speler het over (host-migratie, zie
+  `HOST_MIGRATIE_NL.md`); de host telt dan als weggegaan (= uitgeschakeld). In 0.6.7 stopte de match.
 - **TS-server** (`server/src`): dezelfde regels (`Lobby.ts`: `checkGameOver`, `deathmatchExpire`,
   `deathmatchBroadcast`).
 

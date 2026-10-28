@@ -45,7 +45,8 @@ Voorheen "Balatro Multiplayer 3P".*
 - Topologie blijft een **ster**: elke gast praat alleen met de host; de host draait de server-logica
   (`p2p_server.lua`) en stuurt door (host-authoritative relay). Geen mesh nodig: het verkeer groeit
   lineair met het aantal spelers en de berichten zijn klein (scores, levens, jokers bij Game Over).
-- Gevolg: als de host wegvalt, stopt de match (zoals voorheen). De host moet Balatro open houden.
+- 0.6.7: als de host wegviel, stopte de match. **Vanaf 0.6.8** neemt de volgende speler het over (host-migratie,
+  zie `HOST_MIGRATIE_NL.md`).
 
 ## Interface voor tot 7 tegenstanders
 - Lobby-lijst en de in-game lobby-info tonen alle 8 stoelen (kleiner lettertype vanaf 5 spelers,

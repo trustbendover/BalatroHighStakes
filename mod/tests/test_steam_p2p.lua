@@ -54,7 +54,8 @@ end
 local function player(name, ready)
 	local P = { name = name, msgs = {} }
 	P.b = backend(name)
-	P.r = P2P.new_router({ backend = P.b, Core = Core, json = json, now = now, version = "0.6.7~3P", ready = ready,
+	P.r = P2P.new_router({ backend = P.b, Core = Core, json = json, now = now, version = "0.6.8~3P", ready = ready,
+		Migration = (os.getenv("NO_MIGRATION") == nil) and dofile("networking/host_migration.lua") or nil,
 		push = function(s) P.msgs[#P.msgs + 1] = json.decode(s) end })
 	P.send = function(t) P.r.send(t) end
 	P.last = function(a) for i = #P.msgs, 1, -1 do if P.msgs[i].action == a then return P.msgs[i] end end end
@@ -66,7 +67,7 @@ local all = { A, B, C }
 local function pump(n) for _ = 1, n or 6 do for _, p in ipairs(all) do p.r.update() end end end
 local function ok(c, m) assert(c, m); print("ok: " .. m) end
 
-for _, p in ipairs(all) do p.send({ action = "connect" }); p.send({ action = "username", username = p.name, modHash = "t" }); p.send({ action = "version", version = "0.6.7~3P" }) end
+for _, p in ipairs(all) do p.send({ action = "connect" }); p.send({ action = "username", username = p.name, modHash = "t" }); p.send({ action = "version", version = "0.6.8~3P" }) end
 ok(A.last("connected"), "local core says connected")
 A.send({ action = "createLobby", gameMode = "attrition" }); pump()
 local code = A.last("joinedLobby").code
@@ -88,7 +89,8 @@ round({ 300, 100, 200 })
 ok(B.last("endPvP").lost == true and A.last("endPvP").lost == false and C.last("endPvP").lost == false, "PvP over P2P: lowest (bob) loses a life")
 -- bob's connection drops for > timeout: seat held, others continue
 NET.dead = { bob = true }
-for _ = 1, 25 do T = T + 1; pump(1) end
+-- (0.6.8: Steam still lists the host, so bob waits for Steam before giving up instead of taking over)
+for _ = 1, 65 do T = T + 1; pump(1) end
 ok(B.r.mode == "local" and B.last("disconnected"), "guest notices lost host and falls back")
 ok(A.last("enemyDisconnected") or A.last("playerDisconnected") or true, "host dropped bob (seat held)")
 NET.dead = nil
@@ -127,7 +129,7 @@ ok(C.last("joinedLobby"), "code join still works")
 C.send({ action = "leaveLobby" }); pump()
 NET.launch = { dave = "Balatro.exe +connect_lobby " .. lid }
 local D = player("dave"); all[#all + 1] = D
-D.send({ action = "connect" }); D.send({ action = "username", username = "dave", modHash = "t" }); D.send({ action = "version", version = "0.6.7~3P" })
+D.send({ action = "connect" }); D.send({ action = "username", username = "dave", modHash = "t" }); D.send({ action = "version", version = "0.6.8~3P" })
 pump()
 ok(D.r.mode == "guest" and D.last("joinedLobby"), "game started with +connect_lobby joins automatically")
 -- invite to a non-3P / closed lobby
@@ -189,7 +191,7 @@ pump()
 local eight = {}
 for i = 1, 9 do eight[i] = player("p8_" .. i) end
 all = eight
-for _, p in ipairs(eight) do p.send({ action = "connect" }); p.send({ action = "username", username = p.name, modHash = "t" }); p.send({ action = "version", version = "0.6.7~3P" }) end
+for _, p in ipairs(eight) do p.send({ action = "connect" }); p.send({ action = "username", username = p.name, modHash = "t" }); p.send({ action = "version", version = "0.6.8~3P" }) end
 eight[1].send({ action = "createLobby", gameMode = "teams" }); pump()
 local code8 = eight[1].last("joinedLobby").code
 eight[1].send({ action = "lobbyOptions", teams_size = "4", starting_lives = "1" }); pump()
@@ -214,7 +216,7 @@ pump()
 local dm = {}
 for i = 1, 5 do dm[i] = player("dm_" .. i) end
 all = dm
-for _, p in ipairs(dm) do p.send({ action = "connect" }); p.send({ action = "username", username = p.name, modHash = "t" }); p.send({ action = "version", version = "0.6.7~3P" }) end
+for _, p in ipairs(dm) do p.send({ action = "connect" }); p.send({ action = "username", username = p.name, modHash = "t" }); p.send({ action = "version", version = "0.6.8~3P" }) end
 dm[1].send({ action = "createLobby", gameMode = "deathmatch" }); pump()
 local codedm = dm[1].last("joinedLobby").code
 dm[1].send({ action = "lobbyOptions", starting_lives = "1", deathmatch_grace = "10" }); pump()

@@ -380,6 +380,7 @@ if MP.ENV.mode == "steam" then
 		local ui = love.thread.getChannel("networkToUi")
 		return P2P.new_router({
 			backend = backend, Core = Core, json = json, now = os.time,
+			Migration = MP.load_mp_file("networking/host_migration.lua"), -- 0.6.8: host migration
 			version = MP.MOD_VERSION or "3P",
 			push = function(str) ui:push(str) end,
 			-- invites are joined only once the main menu exists (joining during the splash broke the lobby UI)
