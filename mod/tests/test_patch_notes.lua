@@ -38,13 +38,21 @@ local notes, versions = PN.load(function(p) return dofile(p) end)
 ok(notes["0.6.8"] and notes["0.6.7"] and versions[1] == "0.6.8", "loads patchnotes/0.6.8.lua and 0.6.7.lua from the index")
 for _, v in ipairs(versions) do
 	for _, lang in ipairs({ "en", "nl" }) do
+		local n = 0
 		for _, s in ipairs(PN.SECTIONS) do
-			assert(type(notes[v][lang]) == "table" and type(notes[v][lang][s]) == "table" and #notes[v][lang][s] > 0, v .. " " .. lang .. " has section " .. s)
-			assert(#notes[v][lang][s] == #notes[v].en[s], v .. ": NL and EN have the same number of bullets in " .. s)
+			for _, b in ipairs(notes[v][lang][s] or {}) do
+				n = n + 1
+				local segs = PN.parse(b)
+				assert(segs[1] and segs[1].key, v .. " " .. lang .. ": bullet starts with a coloured keyword: " .. b)
+				assert(PN.COLOURS[segs[1].colour], v .. ": known Balatro colour " .. segs[1].colour)
+				assert(#PN.plain(b) <= PN.MAX_CHARS, v .. " " .. lang .. ": one short line (" .. #PN.plain(b) .. " chars): " .. PN.plain(b))
+			end
+			assert(#(notes[v][lang][s] or {}) == #(notes[v].en[s] or {}), v .. ": NL and EN have the same bullets in " .. s)
 		end
+		assert(n >= 3 and n <= PN.MAX_BULLETS, v .. " " .. lang .. ": 3-" .. PN.MAX_BULLETS .. " bullets in total (has " .. n .. ")")
 	end
 end
-ok(true, "0.6.8 and 0.6.7 have New/Changed/Fixed/Known issues in EN and NL")
+ok(true, "0.6.8 and 0.6.7: 3-5 one-line bullets each, coloured keyword first, EN = NL")
 local bad = PN.load(function(p)
 	if p:find("index") then return { "9.9", "1.0" } end
 	if p:find("9%.9") then error("syntax error") end
@@ -52,34 +60,46 @@ local bad = PN.load(function(p)
 end)
 ok(bad["1.0"] and not bad["9.9"], "a broken note file is skipped, the rest still loads")
 
+-- markup
+local sg = PN.parse("{C:green}Host migration{}: goes on {C:mult}now{}")
+ok(#sg == 3 and sg[1].text == "Host migration" and sg[1].colour == "green" and sg[1].key and sg[2].text == ": goes on " and not sg[2].key
+	and sg[3].colour == "mult", "{C:...} markup -> coloured keywords + plain text")
+ok(PN.plain("{C:chips}Patch notes{}: this pop-up!") == "Patch notes: this pop-up!" and #PN.parse("plain") == 1, "markup removed for plain text")
+
 -- language + fallback
 ok(PN.lang("nl") == "nl" and PN.lang("en-us") == "en" and PN.lang("de") == "en" and PN.lang(nil) == "en", "language: nl, otherwise English")
 local function texts(ls) local t = {} for _, l in ipairs(ls) do t[#t + 1] = l.text or "" end return table.concat(t, "\n") end
 local nl = texts(PN.lines(notes, { "0.6.8" }, "nl"))
-ok(nl:find("Nieuw") and nl:find("Bekende problemen") and nl:find("Host%-migratie"), "Dutch headers and text")
+ok(nl:find("Versie 0.6.8") and nl:find("Host%-migratie"), "Dutch text")
+ok(not texts(PN.lines(notes, { "0.6.8" }, "en")):find("development"), "header is just the version number")
 local mixed = { ["1.0"] = { version = "1.0", en = { new = { "English new" }, fixed = { "English fix" } }, nl = { new = { "Nederlands nieuw" } } } }
 local mt = texts(PN.lines(mixed, { "1.0" }, "nl"))
 ok(mt:find("Nederlands nieuw") and mt:find("English fix") and not mt:find("English new"), "missing Dutch section falls back to English")
+local six = { ["2.0"] = { en = { new = { "a", "b", "c" }, fixed = { "d", "e", "f" } } } }
+local c6 = 0; for _, l in ipairs(PN.lines(six, { "2.0" }, "en")) do if l.kind == "bullet" then c6 = c6 + 1 end end
+ok(c6 == PN.MAX_BULLETS, "never more than " .. PN.MAX_BULLETS .. " bullets per version on screen")
 local en = PN.lines(notes, { "0.6.8", "0.6.7" }, "en")
 local heads = 0; for _, l in ipairs(en) do if l.kind == "version" then heads = heads + 1 end end
-ok(heads == 2 and en[1].text:find("0.6.8"), "combined notes: one header per version, newest first")
-for _, l in ipairs(en) do assert(not l.text or #l.text <= PN.WRAP, "line too long: " .. tostring(l.text)) end
-ok(true, "long bullets are wrapped to " .. PN.WRAP .. " characters")
-local w = PN.wrap("aaa bbb ccc ddd", 7)
-ok(#w == 2 and w[1] == "aaa bbb" and w[2] == "ccc ddd", "word wrap")
+ok(heads == 2 and en[1].text == "Version 0.6.8", "combined notes: one header per version, newest first")
+local firsts = 0; for _, l in ipairs(PN.lines(notes, { "0.6.7" }, "en")) do if l.first then firsts = firsts + 1 end end
+ok(firsts == 3, "one section badge per section (NEW / CHANGED / FIXED)")
 
 -- pages
-local pages = PN.pages(en, PN.LINES_PER_PAGE)
+ok(#PN.pages(PN.lines(notes, { "0.6.8" }, "en")) == 1 and #PN.pages(PN.lines(notes, { "0.6.8" }, "nl")) == 1, "0.6.8 fits on one page")
+local pe = PN.pages(en)
+ok(#pe == 2 and pe[1][1].text == "Version 0.6.8" and pe[2][1].text == "Version 0.6.7", "0.6.8 + 0.6.7 together: one page per version, never split")
+local big = {}; local vs = {}
+for i = 1, 5 do local v = "3." .. i; vs[i] = v; big[v] = { en = { new = { "a", "b", "c", "d", "e" } } } end
+local bl = PN.lines(big, vs, "en")
+local pages = PN.pages(bl)
 local n = 0
 for pi, pg in ipairs(pages) do
-	assert(#pg <= PN.LINES_PER_PAGE + 2, "page " .. pi .. " not too long")
-	local last = pg[#pg].kind
-	assert(last ~= "version" and last ~= "title" and last ~= "section", "page " .. pi .. " does not end with a header")
-	assert(pg[1].kind ~= "gap" and pg[1].kind ~= "cont", "page " .. pi .. " starts cleanly")
-	for _, l in ipairs(pg) do if l.kind ~= "gap" then n = n + 1 end end
+	assert(#pg <= PN.ROWS_PER_PAGE, "page " .. pi .. " not too long")
+	assert(pg[#pg].kind ~= "version", "page " .. pi .. " does not end with a version header")
+	assert(pg[1].kind == "version" or pg[1].first, "page " .. pi .. " starts with a header or a badge")
+	n = n + #pg
 end
-local m = 0; for _, l in ipairs(en) do if l.kind ~= "gap" then m = m + 1 end end
-ok(#pages >= 2 and n == m, "long notes split into " .. #pages .. " pages, nothing lost")
+ok(#pages >= 2 and n == #bl, "5 skipped versions: " .. #pages .. " pages, nothing lost")
 
 -- when may it pop up by itself
 local calm = { main_menu = true, menu_age = 5 }
@@ -104,9 +124,25 @@ local def = overlays[1].generic
 local function find(t, pred, seen) seen = seen or {}; if type(t) ~= "table" or seen[t] then return nil end; seen[t] = true
 	if pred(t) then return t end; for _, v in pairs(t) do local r = find(v, pred, seen); if r then return r end end end
 ok(find(def, function(x) return x.button and x.button.button == "mp3p_patchnotes_close" and x.button.label[1] == "Got it" end), "'Got it' button")
-ok(find(def, function(x) return x.cycle and x.cycle.opt_callback == "mp3p_patchnotes_page" end) or #PN.view.pages == 1, "page switcher when there is more than one page")
+ok(#PN.view.pages == 1 and not find(def, function(x) return x.cycle end), "one page: no page switcher")
+ok(find(def, function(x) return x.config and x.config.text == "NEW" end) and find(def, function(x) return x.config and x.config.text == "Host migration" and x.config.colour == "green" and x.config.scale > 0.42 end),
+	"NEW badge, keyword drawn bigger in its colour")
+ok(find(def, function(x) return x.config and x.config.text == "High " end), "no atlas: coloured text logo as fallback")
 G.FUNCS.mp3p_patchnotes_close()
 ok(G.OVERLAY_MENU == nil and PN.view == nil, "'Got it' closes it")
+-- with the sprite atlas: the pixel-art logo, juiced on open and gently every few seconds
+local juiced = {}
+Sprite = function(x, y, w, h, atlas, pos) return { w = w, h = h, atlas = atlas, define_draw_steps = function() end,
+	juice_up = function(self, a) juiced[#juiced + 1] = a end } end
+G.ASSET_ATLAS = { mp_mp3p_logo = { name = "logo" } }
+G.FUNCS.mp3p_patchnotes_open()
+local spr = find(overlays[#overlays], function(x) return x.config and x.config.object and x.config.object.atlas end)
+ok(spr and math.abs(spr.config.object.w / spr.config.object.h - 220 / 54) < 0.01, "pixel-art logo sprite from the mod atlas (aspect kept)")
+PN.tick(); frames(4)
+ok(#juiced >= 2 and juiced[1] > juiced[2], "logo pops in on open, then wobbles gently")
+G.FUNCS.mp3p_patchnotes_close()
+Sprite, G.ASSET_ATLAS = nil, nil
+table.remove(overlays) -- keep the counts below about the automatic pop-up
 frames(10)
 ok(#overlays == 1, "not shown again in the same session")
 -- next start of the game, same version
@@ -118,7 +154,7 @@ SMODS.Mods.Multiplayer.config.patchnotes_seen = "0.6.6"
 G.SETTINGS.language = "nl"
 PN.auto_done, PN.menu_since = nil, nil
 frames(5)
-ok(#overlays == 2 and #PN.view.versions == 2 and PN.view.lang == "nl" and PN.view.combined, "skipped 0.6.7: combined 0.6.8 + 0.6.7 notes, in Dutch")
+ok(#overlays == 2 and #PN.view.versions == 2 and PN.view.lang == "nl" and PN.view.combined and #PN.view.pages == 2, "skipped 0.6.7: combined 0.6.8 + 0.6.7 notes, in Dutch")
 ok(find(overlays[2], function(x) return x.button and x.button.label[1] == "Begrepen" end), "'Begrepen' button in Dutch")
 G.FUNCS.mp3p_patchnotes_close()
 -- invite / lobby: waits, then shows on the menu later

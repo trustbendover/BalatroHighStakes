@@ -8,17 +8,24 @@ MP.PATCH_NOTES = MP.PATCH_NOTES or {}
 local PN = MP.PATCH_NOTES
 
 PN.SECTIONS = { "new", "changed", "fixed", "known" }
-PN.HEADERS = {
-	en = { new = "New", changed = "Changed", fixed = "Fixed", known = "Known issues" },
-	nl = { new = "Nieuw", changed = "Veranderd", fixed = "Opgelost", known = "Bekende problemen" },
+PN.HEADERS = { -- section badges
+	en = { new = "NEW", changed = "CHANGED", fixed = "FIXED", known = "HEADS UP" },
+	nl = { new = "NIEUW", changed = "ANDERS", fixed = "OPGELOST", known = "LET OP" },
 }
 PN.TEXT = {
-	en = { title = "Patch notes", got_it = "Got it", page = "Page", button = "Patch notes", version = "Version", combined = "What changed since you last played" },
-	nl = { title = "Patch notes", got_it = "Begrepen", page = "Pagina", button = "Patch notes", version = "Versie", combined = "Wat er veranderd is sinds je laatst speelde" },
+	en = { title = "What's new", got_it = "Got it", page = "Page", button = "Patch notes", version = "Version",
+		combined = "Since you last played", more = "More details: CHANGELOG on GitHub" },
+	nl = { title = "Wat is er nieuw", got_it = "Begrepen", page = "Pagina", button = "Patch notes", version = "Versie",
+		combined = "Sinds je laatst speelde", more = "Meer details: CHANGELOG op GitHub" },
 }
+-- Balatro's own {C:...} text colours (G.ARGS.LOC_COLOURS); fallbacks for tests / early loading
+PN.COLOURS = { attention = "FILTER", chips = "CHIPS", blue = "BLUE", mult = "MULT", red = "RED", green = "GREEN",
+	money = "MONEY", gold = "GOLD", purple = "PURPLE", tarot = "PURPLE", planet = "SECONDARY_SET", white = "WHITE", inactive = "UI" }
+PN.BADGE = { new = "green", changed = "chips", fixed = "attention", known = "mult" }
+PN.MAX_BULLETS = 5    -- per version, all sections together
+PN.MAX_CHARS = 58     -- per bullet (visible text): one line at the bullet size
 PN.MAX_VERSIONS = 5   -- skipped many versions: show at most this many (newest first)
-PN.WRAP = 62          -- characters per line at the bullet text size
-PN.LINES_PER_PAGE = 14
+PN.ROWS_PER_PAGE = 9  -- version header + up to 5 bullets always fit; more versions -> pages
 PN.MENU_DELAY = 3     -- seconds on the main menu before it may pop up (after the update button at 2 s)
 PN.UPDATER_WAIT = 8   -- wait at most this long for the update check to finish
 
@@ -96,42 +103,49 @@ function PN.load(loader)
 	return notes, versions
 end
 
---- Word wrap to at most `width` characters per line.
-function PN.wrap(text, width)
-	local lines, line = {}, ""
-	for word in tostring(text):gmatch("%S+") do
-		if line == "" then line = word
-		elseif #line + 1 + #word <= width then line = line .. " " .. word
-		else lines[#lines + 1] = line; line = word end
-		while #line > width do lines[#lines + 1] = line:sub(1, width); line = line:sub(width + 1) end
+--- "{C:green}Host migration{}: the match goes on" -> { {text="Host migration", colour="green", key=true},
+--- {text=": the match goes on"} }. Coloured parts are the keywords (drawn bigger, in colour).
+function PN.parse(str)
+	local out, pos = {}, 1
+	str = tostring(str)
+	while pos <= #str do
+		local a, b, col, body = str:find("{C:([%w_]+)}(.-){}", pos)
+		if not a then out[#out + 1] = { text = str:sub(pos) }; break end
+		if a > pos then out[#out + 1] = { text = str:sub(pos, a - 1) } end
+		out[#out + 1] = { text = body, colour = col:lower(), key = true }
+		pos = b + 1
 	end
-	if line ~= "" then lines[#lines + 1] = line end
-	return lines
+	local clean = {}
+	for _, seg in ipairs(out) do if seg.text ~= "" then clean[#clean + 1] = seg end end
+	return clean
 end
 
---- Flat list of display lines for the given versions (newest first):
---- { kind = "version" | "title" | "section" | "bullet" | "cont" | "gap", text, section }
+--- Visible text of a bullet (markup removed)
+function PN.plain(str)
+	local t = {}
+	for _, seg in ipairs(PN.parse(str)) do t[#t + 1] = seg.text end
+	return table.concat(t)
+end
+
+--- Rows for the given versions (newest first):
+--- { kind = "version", text } and { kind = "bullet", section, first (= first of its section), segs }
 function PN.lines(notes, versions, lang)
 	lang = lang or "en"
-	local H = PN.HEADERS[lang] or PN.HEADERS.en
 	local T = PN.TEXT[lang] or PN.TEXT.en
 	local out = {}
-	for i, v in ipairs(versions) do
+	for _, v in ipairs(versions) do
 		local note = notes[v]
 		if note then
 			local loc = type(note[lang]) == "table" and note[lang] or {}
-			if i > 1 then out[#out + 1] = { kind = "gap" } end
-			local date = note.date and (" (" .. tostring(note.date) .. ")") or ""
-			out[#out + 1] = { kind = "version", text = T.version .. " " .. v .. date }
-			local title = loc.title or note.en.title
-			if title then out[#out + 1] = { kind = "title", text = title } end
+			out[#out + 1] = { kind = "version", text = T.version .. " " .. v }
+			local n = 0
 			for _, s in ipairs(PN.SECTIONS) do
 				local items = is_list(loc[s]) and #loc[s] > 0 and loc[s] or note.en[s] -- per-section fallback to English
-				if is_list(items) and #items > 0 then
-					out[#out + 1] = { kind = "section", text = H[s], section = s }
-					for _, b in ipairs(items) do
-						for j, l in ipairs(PN.wrap(b, PN.WRAP - 2)) do
-							out[#out + 1] = { kind = j == 1 and "bullet" or "cont", text = l, section = s }
+				if is_list(items) then
+					for i, b in ipairs(items) do
+						if n < PN.MAX_BULLETS then
+							n = n + 1
+							out[#out + 1] = { kind = "bullet", section = s, first = i == 1, segs = PN.parse(b), text = PN.plain(b) }
 						end
 					end
 				end
@@ -141,17 +155,25 @@ function PN.lines(notes, versions, lang)
 	return out
 end
 
---- Split lines into pages; a header never ends a page and pages never start with a gap.
+--- Split rows into pages; a version never starts at the bottom of a page or splits from its bullets
+--- when it fits on the next page.
 function PN.pages(lines, per_page)
-	per_page = per_page or PN.LINES_PER_PAGE
-	-- lines a header needs below it on the same page (version -> title -> section -> bullet)
-	local need = { version = 3, title = 2, section = 1 }
+	per_page = per_page or PN.ROWS_PER_PAGE
 	local pages, cur = {}, {}
 	local function flush() if #cur > 0 then pages[#pages + 1] = cur; cur = {} end end
-	for _, l in ipairs(lines) do
-		local limit = l.kind == "cont" and per_page + 2 or per_page -- a wrapped bullet may run over a little
-		if #cur >= limit or (need[l.kind] and #cur + need[l.kind] >= per_page) then flush() end
-		if not (l.kind == "gap" and #cur == 0) then cur[#cur + 1] = l end
+	local i = 1
+	while i <= #lines do
+		local l = lines[i]
+		if l.kind == "version" then
+			local n = 1
+			while lines[i + n] and lines[i + n].kind ~= "version" do n = n + 1 end
+			if #cur > 0 and #cur + n > per_page then flush() end
+		elseif #cur >= per_page then
+			flush()
+			l.first = true -- repeat the section badge on the new page
+		end
+		cur[#cur + 1] = l
+		i = i + 1
 	end
 	flush()
 	return pages
@@ -194,43 +216,90 @@ function PN.ensure_loaded()
 	log("loaded patch notes for " .. #PN.versions .. " version(s)")
 end
 
-local function colour_of(section)
-	if not G or not G.C then return nil end
-	if section == "new" then return G.C.GREEN end
-	if section == "changed" then return G.C.CHIPS or G.C.BLUE end
-	if section == "fixed" then return G.C.ORANGE end
-	if section == "known" then return G.C.RED end
-	return G.C.UI.TEXT_LIGHT
+--- Balatro text colour for a {C:name} tag
+function PN.colour(name)
+	if not (G and G.C) then return nil end
+	if type(loc_colour) == "function" then
+		local ok, c = pcall(loc_colour, name, nil) -- also fills G.ARGS.LOC_COLOURS the first time
+		if ok and c then return c end
+	end
+	if G.ARGS and G.ARGS.LOC_COLOURS and G.ARGS.LOC_COLOURS[name] then return G.ARGS.LOC_COLOURS[name] end
+	local k = PN.COLOURS[name]
+	if k == "UI" then return G.C.UI and G.C.UI.TEXT_INACTIVE end
+	return (k and G.C[k]) or G.C.FILTER or G.C.ORANGE
 end
 
-local function text_row(text, scale, colour, pad_left)
+local function T_node(text, scale, colour)
+	return { n = G.UIT.T, config = { text = text, scale = scale, colour = colour, shadow = true } }
+end
+
+--- Coloured pill with the section name (NEW / CHANGED / ...), fixed width so the bullets line up
+local function badge(section, label)
+	return { n = G.UIT.C, config = { align = "cm", minw = 2.1, maxw = 2.1, minh = 0.42, r = 0.1, colour = PN.colour(PN.BADGE[section]),
+		emboss = 0.05, padding = 0.04 }, nodes = { T_node(label, 0.36, G.C.WHITE or G.C.UI.TEXT_LIGHT) } }
+end
+
+--- One bullet: [badge or blank] KEYWORD (bigger, coloured, shadow = "bold") + rest (white)
+local function bullet_row(l, H)
 	local nodes = {}
-	if pad_left then nodes[#nodes + 1] = { n = G.UIT.B, config = { w = pad_left, h = 0.1 } } end
-	nodes[#nodes + 1] = { n = G.UIT.T, config = { text = text, scale = scale, colour = colour, shadow = true } }
-	return { n = G.UIT.R, config = { align = "cl", padding = 0.02 }, nodes = nodes }
+	if l.first then nodes[#nodes + 1] = badge(l.section, H[l.section])
+	else nodes[#nodes + 1] = { n = G.UIT.B, config = { w = 2.1, h = 0.1 } } end
+	nodes[#nodes + 1] = { n = G.UIT.B, config = { w = 0.25, h = 0.1 } }
+	for _, seg in ipairs(l.segs) do
+		if seg.key then nodes[#nodes + 1] = T_node(seg.text, 0.5, PN.colour(seg.colour))
+		else nodes[#nodes + 1] = T_node(seg.text, 0.42, G.C.UI.TEXT_LIGHT) end
+	end
+	return { n = G.UIT.R, config = { align = "cm", padding = 0.04 }, nodes = {
+		{ n = G.UIT.C, config = { align = "cl", minw = 12.5 }, nodes = { { n = G.UIT.R, config = { align = "cl" }, nodes = nodes } } },
+	} }
+end
+
+-- the "Balatro High Stakes" pixel-art logo (own art: tools/make_logo.py), 220x54 px at 1x
+PN.LOGO = { key = "mp3p_logo", atlas = "mp_mp3p_logo", px = 220, py = 54, w = 5.8 }
+if SMODS and SMODS.Atlas and not PN.atlas_done then
+	PN.atlas_done = pcall(SMODS.Atlas, { key = PN.LOGO.key, path = "mp3p_logo.png", px = PN.LOGO.px, py = PN.LOGO.py })
+end
+
+--- Logo node: the sprite (gently wobbling while open, see PN.tick), or coloured text if the atlas is missing
+function PN.logo_node()
+	local atlas = G.ASSET_ATLAS and G.ASSET_ATLAS[PN.LOGO.atlas]
+	if atlas and Sprite then
+		local ok, spr = pcall(function()
+			local w = PN.LOGO.w
+			local sp = Sprite(0, 0, w, w * PN.LOGO.py / PN.LOGO.px, atlas, { x = 0, y = 0 })
+			sp:define_draw_steps({ { shader = "dissolve", shadow_height = 0.07 }, { shader = "dissolve" } })
+			return sp
+		end)
+		if ok and spr then
+			PN.logo = spr
+			return { n = G.UIT.R, config = { align = "cm", padding = 0.05 }, nodes = { { n = G.UIT.O, config = { object = spr } } } }
+		end
+	end
+	PN.logo = nil
+	return { n = G.UIT.R, config = { align = "cm", padding = 0.05 }, nodes = {
+		T_node("Balatro ", 0.6, G.C.UI.TEXT_LIGHT), T_node("High ", 0.85, G.C.GOLD), T_node("Stakes", 0.85, PN.colour("mult")),
+	} }
 end
 
 --- UI definition for one page (also used by the preview renderer)
 function PN.definition(view)
 	local T = PN.TEXT[view.lang] or PN.TEXT.en
+	local H = PN.HEADERS[view.lang] or PN.HEADERS.en
 	local page = view.pages[view.page] or {}
 	local rows = {}
-	for _, l in ipairs(page) do
-		if l.kind == "version" then rows[#rows + 1] = text_row(l.text, 0.55, G.C.GOLD)
-		elseif l.kind == "title" then rows[#rows + 1] = text_row(l.text, 0.45, G.C.UI.TEXT_LIGHT)
-		elseif l.kind == "section" then rows[#rows + 1] = text_row(l.text, 0.5, colour_of(l.section), 0.1)
-		elseif l.kind == "bullet" then rows[#rows + 1] = text_row("- " .. l.text, 0.42, G.C.UI.TEXT_LIGHT, 0.3)
-		elseif l.kind == "cont" then rows[#rows + 1] = text_row("  " .. l.text, 0.42, G.C.UI.TEXT_LIGHT, 0.3)
-		elseif l.kind == "gap" then rows[#rows + 1] = { n = G.UIT.R, config = { minh = 0.2 } } end
+	for i, l in ipairs(page) do
+		if l.kind == "version" then
+			if i > 1 then rows[#rows + 1] = { n = G.UIT.R, config = { minh = 0.15 } } end
+			rows[#rows + 1] = { n = G.UIT.R, config = { align = "cl", padding = 0.04 }, nodes = { T_node(l.text, 0.62, G.C.GOLD) } }
+		else
+			rows[#rows + 1] = bullet_row(l, H)
+		end
 	end
 	local contents = {
-		{ n = G.UIT.R, config = { align = "cm", padding = 0.05 }, nodes = {
-			{ n = G.UIT.T, config = { text = "Balatro High Stakes - " .. T.title, scale = 0.7, colour = G.C.UI.TEXT_LIGHT, shadow = true } },
-		} },
-		view.combined and { n = G.UIT.R, config = { align = "cm" }, nodes = {
-			{ n = G.UIT.T, config = { text = T.combined, scale = 0.4, colour = G.C.UI.TEXT_INACTIVE or G.C.UI.TEXT_LIGHT } },
-		} } or nil,
-		{ n = G.UIT.R, config = { align = "tl", padding = 0.15, r = 0.1, colour = G.C.BLACK, minw = 13.5, minh = 7, emboss = 0.05 }, nodes = {
+		PN.logo_node(),
+		{ n = G.UIT.R, config = { align = "cm", padding = 0.02 }, nodes = { T_node(T.title, 0.6, G.C.UI.TEXT_LIGHT) } },
+		view.combined and { n = G.UIT.R, config = { align = "cm" }, nodes = { T_node(T.combined, 0.4, G.C.UI.TEXT_INACTIVE or G.C.UI.TEXT_LIGHT) } } or nil,
+		{ n = G.UIT.R, config = { align = "tl", padding = 0.2, r = 0.1, colour = G.C.BLACK, minw = 13, emboss = 0.05 }, nodes = {
 			{ n = G.UIT.C, config = { align = "tl" }, nodes = rows },
 		} },
 	}
@@ -242,6 +311,7 @@ function PN.definition(view)
 				w = 4, scale = 0.8, colour = G.C.RED, no_pips = #view.pages > 8 }),
 		} }
 	end
+	contents[#contents + 1] = { n = G.UIT.R, config = { align = "cm" }, nodes = { T_node(T.more, 0.32, G.C.UI.TEXT_INACTIVE or G.C.UI.TEXT_LIGHT) } }
 	contents[#contents + 1] = { n = G.UIT.R, config = { align = "cm", padding = 0.1 }, nodes = {
 		UIBox_button({ label = { T.got_it }, button = "mp3p_patchnotes_close", colour = G.C.GREEN, minw = 4, minh = 0.8, scale = 0.6 }),
 	} }
@@ -330,8 +400,13 @@ function PN.tick()
 			PN.auto_done = false
 		end
 	end
-	if PN.auto_done or not main_menu then return end
 	local t = love.timer.getTime()
+	-- the logo pops in when it opens, then wobbles gently every few seconds (like a juiced card)
+	if PN.logo and PN.is_open() then
+		if not PN.logo_t then PN.logo_t = t; pcall(PN.logo.juice_up, PN.logo, 0.18, 0.06)
+		elseif t - PN.logo_t >= 3.5 then PN.logo_t = t; pcall(PN.logo.juice_up, PN.logo, 0.05, 0.025) end
+	elseif not PN.is_open() then PN.logo_t = nil end
+	if PN.auto_done or not main_menu then return end
 	if PN.next_check and t < PN.next_check then return end
 	PN.next_check = t + 0.5
 	if not PN.can_auto_show(PN.env()) then return end

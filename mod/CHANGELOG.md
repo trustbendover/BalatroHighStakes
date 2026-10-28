@@ -62,8 +62,10 @@
   stuck too). A single guest with a bad connection cannot outvote the others: it returns to the menu after 30 s
   (was 60 s) and can rejoin by code. A frozen host that wakes up sees the newer host, steps down and rejoins as a
   guest on its own seat. Players joining by code while the old owner is frozen still reach the new host.
-- **Patch notes pop-up.** The first time you open the game after an update, a Balatro-style window shows what is
-  New / Changed / Fixed / Known issues (English or Dutch, following the game language). It appears only on the main
+- **Patch notes pop-up.** The first time you open the game after an update, a short Balatro-style window shows only
+  the essentials: the new pixel-art **Balatro High Stakes logo** (gently wobbling), then 3-5 one-line bullets per
+  version with coloured NEW / CHANGED / FIXED / HEADS UP badges and the key word of each line in a Balatro text
+  colour (English or Dutch, following the game language). It appears only on the main
   menu (after the update button, never in a lobby, a match, during a Steam invite join, or on top of another pop-up),
   once per version; skipped versions are combined, newest first. "Got it" closes it; the **Patch notes** button on the
   main menu and in the mod settings reopens it. Notes live in `mod/patchnotes/<version>.lua`; the last version seen

@@ -1,9 +1,19 @@
 # Patch notes-pop-up (0.6.8)
 
-Na een update toont Balatro High Stakes **een keer** een venster met wat er nieuw is, in de stijl van
-het spel: secties **Nieuw**, **Veranderd**, **Opgelost** en **Bekende problemen**, grote tekst, en
-onderaan een groene knop **Begrepen** (Engels: *Got it*). Is de tekst lang, dan staat er een
-paginakiezer onder (`<  Pagina 1/2  >`), zoals bij de andere menu's van Balatro.
+Na een update toont Balatro High Stakes **een keer** een kort venster met alleen het belangrijkste:
+- bovenaan het **Balatro High Stakes-logo** (eigen pixel-art: goud *HIGH*, rood *STAKES*, twee fiches,
+  donkere rand en schaduw). Het springt even op als het venster opent en wiebelt daarna zachtjes om de
+  paar seconden, zoals een kaart in Balatro. Zonder het plaatje valt het terug op gekleurde tekst;
+- per versie alleen de **kop "Versie 0.6.8"** (zonder "in development") en **3 tot 5 korte regels**;
+- **gekleurde labels** per soort: **NIEUW** (groen), **ANDERS** (blauw), **OPGELOST** (oranje),
+  **LET OP** (rood). Engels: NEW / CHANGED / FIXED / HEADS UP;
+- elke regel begint met een **trefwoord in een Balatro-kleur** (zoals in de jokerteksten: oranje,
+  blauw, rood, groen, goud), groter getekend met schaduw. Balatro's lettertype heeft geen vet, dus
+  "vet" = groter + gekleurd + schaduw. De rest van de regel is wit;
+- onderaan een klein regeltje "Meer details: CHANGELOG op GitHub" en de groene knop **Begrepen**
+  (*Got it*).
+Een versie past altijd op een pagina. Heb je versies overgeslagen, dan krijgt elke versie een eigen
+pagina met `<  Pagina 1/2  >`.
 
 ## Wanneer verschijnt hij?
 - Alleen op het **hoofdmenu**, ongeveer 3 seconden nadat het menu er staat (dus na de knop
@@ -34,7 +44,9 @@ Nederlandse sectie in een bestand, dan wordt de Engelse gebruikt.
 1. Maak `mod/patchnotes/<versie>.lua`, bv. `0.6.9.lua` (voorbeeld en uitleg in `mod/patchnotes/README.md`):
    `version`, `date`, en per taal (`en`, `nl`) een `title` en de lijsten `new`, `changed`, `fixed`, `known`.
 2. Zet de versie bovenaan in `mod/patchnotes/index.lua`.
-3. Korte, vriendelijke zinnen; lange zinnen worden vanzelf afgebroken.
+3. Maximaal 5 regels per versie, elk hooguit 58 tekens, en elke regel begint met een gekleurd trefwoord:
+   `"{C:green}Host-migratie{}: de match gaat door als de host weggaat"`. Kleuren: `attention` (oranje),
+   `chips` (blauw), `mult` (rood), `green`, `money` (goud), `purple`. De tests controleren dit.
 Een kapot bestand wordt overgeslagen (de rest werkt nog) en staat in de log.
 
 ## Techniek en tests
@@ -47,5 +59,7 @@ Een kapot bestand wordt overgeslagen (de rest werkt nog) en staat in de log.
   pagina's, en het hele verloop: niet in de eerste seconden, niet tijdens een invite-join, niet in de lobby,
   niet midden in een match, wel daarna op het hoofdmenu, niet twee keer, "Begrepen" sluit, de knop opent
   hem opnieuw.
-- Voorbeeldafbeelding (nagebootst, geen echte schermafbeelding): `patchnotes_preview.png` (EN) en
-  `patchnotes_preview_nl.png` (NL).
+- Logo: `mod/assets/1x/mp3p_logo.png` (220x54) en `2x/` (440x108, nearest-neighbour), gemaakt met
+  `tools/make_logo.py`; geladen als Steamodded-atlas `mp_mp3p_logo`.
+- Voorbeeldafbeelding (nagebootst, geen echte schermafbeelding): `patchnotes_preview_v2.png` (EN) en
+  `patchnotes_preview_v2_nl.png` (NL); het logo los: `high_stakes_logo.png`.
