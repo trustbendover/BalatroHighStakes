@@ -440,6 +440,7 @@ local function action_start_game(p)
 	MP.reset_game_states()
 	if MP.REJOIN then MP.REJOIN.on_start(p) end
 	if MP.SPECTATE then MP.SPECTATE.on_match_start() end
+	if MP.MATCH_STATS then MP.MATCH_STATS.on_start() end
 	local stake = tonumber(p.stake)
 	MP.ACTIONS.set_ante(0)
 	if not MP.LOBBY.config.different_seeds and MP.LOBBY.config.custom_seed ~= "random" then
@@ -727,6 +728,7 @@ local function restart_at_ante(p)
 	sendWarnMessage(string.format("Resuming game at ante %d (%s)", target_ante, p.lateJoin and "late join" or "rejoin"), "MULTIPLAYER")
 	if G.STAGE == G.STAGES.RUN then MP.reset_game_states() end
 	action_start_game({ seed = p.seed })
+	if MP.MATCH_STATS then MP.MATCH_STATS.on_resume(p) end
 	-- We can't finish a PvP blind that's already running with a fresh run
 	Client.send({ action = "resumeRestarted" })
 	local function jump()

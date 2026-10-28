@@ -50,5 +50,6 @@ localization (en-us, nl), tests/test_host_migration*.lua (new), tests/test_steam
 tools/make_logo.py); credits tab rewritten for the fork (ui/smods_menu/credits_tab.lua, smods_menu.lua GitHub link) with
 the original authors credited in CREDITS.md (new); Multiplayer.json author/description. The original copyright and
 license notices are unchanged.
+- 0.6.8: match stats screen (`lib/match_stats.lua` new; `networking/p2p_server.lua` stats book, `networking/action_handlers.lua`, `overrides/game.lua`, `ui/game/game_end.lua`, `lib/rejoin.lua`, `core.lua`, localization en-us/nl; `tests/test_match_stats.lua` new). Dutch doc: `docs/MATCH_STATS_NL.md`.
 - 0.6.8: spectator mode and rejoin after a disconnect (`lib/spectator.lua`, `lib/rejoin.lua` new; `networking/p2p_server.lua`, `networking/host_migration.lua`, `networking/steam_p2p.lua`, `networking/action_handlers.lua`, `overrides/game.lua`, `ui/game/game_end.lua`, `ui/lobby/_lobby_options/modifiers_tab.lua`, `core.lua`, localization en-us/nl; `tests/test_spectator_rejoin.lua` new). Dutch doc: `docs/SPECTATOR_REJOIN_NL.md`.
 - 0.6.8: startup compatibility guard and safe mode (`lib/compat_guard.lua`, `compat.json`); main-menu hooks wrapped in pcall; networking skipped in safe mode (`core.lua`, `networking/action_handlers.lua`). Dutch doc: `docs/BESCHERMING_NL.md`.

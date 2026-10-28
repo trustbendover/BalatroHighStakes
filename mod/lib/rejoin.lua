@@ -147,6 +147,7 @@ function RJ.restore(p)
 	if lives then MP.GAME.lives = lives end
 	RJ.ckpt, RJ.server_seed = tonumber(chk.meta.ckpt) or 0, p.seed
 	G.FUNCS.start_run(nil, { savetext = chk.run })
+	if MP.MATCH_STATS then MP.MATCH_STATS.on_resume(p) end
 	if lives then MP.GAME.lives = lives end
 	local ante = tonumber(chk.meta.ante) or tonumber(p.ante) or 1
 	MP.ACTIONS.set_ante(ante)

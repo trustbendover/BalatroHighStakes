@@ -1,5 +1,6 @@
 local ease_dollars_ref = ease_dollars
 function ease_dollars(mod, instant)
+	if MP and MP.MATCH_STATS and MP.MATCH_STATS.on_dollars then pcall(MP.MATCH_STATS.on_dollars, mod) end
 	sendTraceMessage(string.format("Client sent message: action:moneyMoved,amount:%s", tostring(mod)), "MULTIPLAYER")
 	return ease_dollars_ref(mod, instant)
 end

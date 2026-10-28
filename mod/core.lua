@@ -372,6 +372,7 @@ MP.load_mp_dir("objects/challenges")
 -- 0.6.8: spectator mode + rejoin (need action_handlers and the lobby UI loaded first)
 if MP.SPECTATE and MP.SPECTATE.register then MP.SPECTATE.register() end
 if MP.REJOIN and MP.REJOIN.register then MP.REJOIN.register() end
+if MP.MATCH_STATS and MP.MATCH_STATS.register then MP.MATCH_STATS.register() end
 
 -- 3P fork: optional Steam peer-to-peer mode (.env: mode=steam). TCP stays the default/fallback.
 -- 0.6.8 compat guard: untested Balatro/Steamodded/Lovely -> warning on the main menu; blocked

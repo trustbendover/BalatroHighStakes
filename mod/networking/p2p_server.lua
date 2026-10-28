@@ -187,6 +187,8 @@ function Server:lose_life(c, cause)
 		c.roundLivesBlocker = true
 	end
 	c.lives = c.lives - 1
+	local b = c.lobby and self.book_entry and self:book_entry(c.lobby, c)
+	if b then b.livesLost = (b.livesLost or 0) + 1 end
 	sendA(c, { action = "playerInfo", lives = c.lives })
 	if c.lobby then
 		local info = self:enemy_info(c, true)
@@ -304,6 +306,7 @@ end
 
 --- 0.6.8: spectators learn when the match is over (they get no winGame / loseGame).
 local function notify_match_over(self, L)
+	if self.stats_finish then self:stats_finish(L) end
 	for _, p in ipairs(L.players) do
 		if p.spectator then sendA(p, { action = "matchOver", winnerId = L.winnerId }) end
 	end
@@ -464,6 +467,12 @@ function Server:try_resolve_pvp(L)
 		roundLosers = filter(roundLosers, function(p) return p.id ~= koth_ev.shieldedId end)
 	end
 	for _, p in ipairs(roundLosers) do self:lose_life(p, "round") end
+	do
+		local lost = {}
+		for _, p in ipairs(roundLosers) do lost[p] = true end
+		for _, p in ipairs(timerLosers) do lost[p] = true end
+		self:stats_pvp(L, alive, lost)
+	end
 	for _, p in ipairs(alive) do p.firstReady, p.pvpDone, p.pvpTimerFailed = false, false, false end
 	-- everyone (also eliminated players and spectators) sees the new scores and lives
 	for _, p in ipairs(L.players) do
@@ -480,6 +489,188 @@ function Server:try_resolve_pvp(L)
 	for _, p in ipairs(alive) do
 		sendA(p, { action = "endPvP", lost = losers[p] or false, pvpTimerLost = (#timerLosers > 0) or nil, loserIds = ids })
 	end
+end
+
+---------------------------------------------------------------- 0.6.8 match stats
+-- The host keeps a stats book per player (L.book, keyed by player id) for the whole match:
+-- damage (your score in every PvP blind = the chips you threw at your opponents, all modes),
+-- PvPs played / won and lives lost come from the host itself; best hand, jokers, money earned
+-- and highest ante are reported by each player's game ("statsReport", sanitised, only ever go
+-- up). The book is part of the host snapshot, so it survives host migration and rejoin.
+-- At match end the host builds one table + awards and sends the same "matchStats" to everyone
+-- in the lobby (spectators too).
+Core.STATS_MAX_LINEUP = 8
+local function score_num(s)
+	if type(s) ~= "table" then s = parse_score(s) end
+	if (s.ec or 0) > 0 then return 1e308 end
+	local v = (tonumber(s.c) or 0) * 10 ^ (tonumber(s.e) or 0)
+	if v ~= v then return 0 end
+	return math.min(v, 1e308)
+end
+Core.score_num = score_num
+
+local function stat_num(v, max)
+	v = tonumber(v)
+	if not v or v ~= v or v < 0 then return nil end
+	return math.floor(math.min(v, max or 1e9))
+end
+
+function Server:book_entry(L, p)
+	if not (L.book and p and p.id) then return nil end
+	local b = L.book[p.id]
+	if not b then
+		b = { id = p.id, name = p.username, dealt = 0, pvps = 0, pvpWon = 0, livesLost = 0, best = "0",
+			jokers = 0, seen = 0, money = 0, ante = 1 }
+		L.book[p.id] = b
+	end
+	b.name = p.username or b.name
+	b.team = p.team or b.team
+	return b
+end
+
+function Server:stats_start(L)
+	L.book, L.teamBook, L.lastStats = {}, {}, nil
+	for _, p in ipairs(self:seated(L)) do self:book_entry(L, p) end
+end
+
+--- One PvP blind resolved: everyone who took part dealt their score; losers = set of players.
+function Server:stats_pvp(L, alive, losers)
+	if not L.book then return end
+	for _, p in ipairs(alive) do
+		local b = self:book_entry(L, p)
+		if b then
+			b.dealt = math.min(1e308, (b.dealt or 0) + score_num(p.score))
+			b.pvps = (b.pvps or 0) + 1
+			if not losers[p] then b.pvpWon = (b.pvpWon or 0) + 1 end
+		end
+	end
+end
+
+local HAND_OK = "^[%w%s%-'&%.]+$"
+local KEY_OK = "^[%w_%-]+$"
+--- A player's own numbers (sanitised; values only go up, so a rejoin can't lower them).
+function Server:stats_report(L, c, a)
+	local b = self:book_entry(L, c)
+	if not b then return end
+	local best = tostring(a.best or "")
+	if #best > 0 and #best <= 40 and best:match("^[%deE%.%+%-#]+$") then
+		local s = parse_score(best)
+		if s_gt(s, parse_score(b.best or "0")) then
+			b.best = best
+			local h = tostring(a.bestHand or "")
+			b.bestHand = (#h <= 24 and h:match(HAND_OK)) and h or nil
+		end
+	end
+	local j = stat_num(a.jokers, 999)
+	if j then b.jokers = j end
+	if type(a.lineup) == "table" then
+		local l = {}
+		for i = 1, math.min(#a.lineup, Core.STATS_MAX_LINEUP) do
+			local k = tostring(a.lineup[i] or "")
+			if #k <= 40 and k:match(KEY_OK) then l[#l + 1] = k end
+		end
+		b.lineup = l
+	end
+	for _, f in ipairs({ "seen", "money", "ante" }) do
+		local v = stat_num(a[f])
+		if v and v > (b[f] or 0) then b[f] = v end
+	end
+end
+
+--- Pure: final table rows (best place first), team totals and awards from a stats book.
+--- out[id] = true for players who are out; order = elimination order (first out first).
+function Core.match_table(book, out, order, teams_mode)
+	local rows, place_of = {}, {}
+	local n = 0
+	for _ in pairs(book or {}) do n = n + 1 end
+	-- winners: everyone still in; then the reverse elimination order
+	local p = 1
+	local alive = {}
+	for id in pairs(book or {}) do if not out[id] then alive[#alive + 1] = id end end
+	table.sort(alive)
+	for _, id in ipairs(alive) do place_of[id] = 1 end
+	if #alive > 0 then p = 2 end
+	local seen = {}
+	for i = #(order or {}), 1, -1 do
+		local id = order[i]
+		if book[id] and not place_of[id] and not seen[id] then seen[id] = true; place_of[id] = p; p = p + 1 end
+	end
+	for id in pairs(book or {}) do if not place_of[id] then place_of[id] = p end end
+	for id, b in pairs(book or {}) do
+		local r = {}
+		for k, v in pairs(b) do r[k] = v end
+		r.place, r.out = place_of[id], out[id] and true or false
+		rows[#rows + 1] = r
+	end
+	table.sort(rows, function(a, b)
+		if a.place ~= b.place then return a.place < b.place end
+		if (a.dealt or 0) ~= (b.dealt or 0) then return (a.dealt or 0) > (b.dealt or 0) end
+		return tostring(a.name) < tostring(b.name)
+	end)
+	-- awards: the first row (best place) wins ties
+	local function best_by(f, better)
+		local w
+		for _, r in ipairs(rows) do if w == nil or better(f(r), f(w)) then w = r end end
+		return w and w.id or nil
+	end
+	local gt = function(x, y) return x > y end
+	local awards = {}
+	if #rows > 0 then
+		awards.damage = best_by(function(r) return r.dealt or 0 end, gt)
+		awards.best = best_by(function(r) return parse_score(r.best or "0") end, s_gt)
+		awards.jokers = best_by(function(r) return math.max(r.seen or 0, r.jokers or 0) end, gt)
+		awards.lives = best_by(function(r) return -(r.livesLost or 0) end, gt)
+		awards.pvp = best_by(function(r) return r.pvpWon or 0 end, gt)
+		awards.money = best_by(function(r) return r.money or 0 end, gt)
+		awards.ante = best_by(function(r) return r.ante or 0 end, gt)
+	end
+	local teams = nil
+	if teams_mode then
+		local by = {}
+		teams = {}
+		for _, r in ipairs(rows) do
+			if r.team then
+				local t = by[r.team]
+				if not t then
+					t = { team = r.team, dealt = 0, pvpWon = 0, livesLost = 0, money = 0, best = "0", members = {}, place = r.place }
+					by[r.team] = t
+					teams[#teams + 1] = t
+				end
+				t.dealt = math.min(1e308, t.dealt + (r.dealt or 0))
+				t.pvpWon = t.pvpWon + (r.pvpWon or 0)
+				t.money = t.money + (r.money or 0)
+				t.place = math.min(t.place, r.place)
+				if s_gt(parse_score(r.best or "0"), parse_score(t.best)) then t.best = r.best end
+				t.members[#t.members + 1] = r.id
+			end
+		end
+		table.sort(teams, function(a, b) if a.place ~= b.place then return a.place < b.place end return a.team < b.team end)
+	end
+	return rows, teams, awards
+end
+
+--- Match over: build the final table once and send it to everyone in the lobby.
+function Server:stats_finish(L)
+	if not L.book or L.lastStats then return end
+	local out = {}
+	local function mark(p) if p.eliminated then out[p.id] = true end end
+	for _, p in ipairs(L.players) do mark(p) end
+	for _, sl in ipairs(L.slots or {}) do mark(sl.old) end
+	for id in pairs(L.book) do
+		local here = find(L.players, function(p) return p.id == id end)
+		if not here then out[id] = true end -- left the match
+	end
+	if L.winnerId then out[L.winnerId] = nil end
+	local teams_mode = L.gameMode == "teams" and L.teamLives ~= nil
+	local rows, teams, awards = Core.match_table(L.book, out, L.elimOrder, teams_mode)
+	if teams then
+		for _, t in ipairs(teams) do
+			t.livesLost = (L.teamBook and L.teamBook[t.team]) or 0
+			t.lives = L.teamLives and L.teamLives[t.team]
+		end
+	end
+	L.lastStats = { action = "matchStats", gameMode = L.gameMode, winnerId = L.winnerId, rows = rows, teams = teams, awards = awards }
+	for _, p in ipairs(L.players) do sendA(p, L.lastStats) end
 end
 
 ---------------------------------------------------------------- Teams (2v2 ... 4v4, 2v2v2, 2v2v2v2)
@@ -509,6 +700,8 @@ end
 --- Set a team's shared lives and sync them to everyone.
 function Server:set_team_lives(L, team, lives)
 	if not L.teamLives then return end
+	local before = L.teamLives[team]
+	if L.teamBook and before and lives < before then L.teamBook[team] = (L.teamBook[team] or 0) + (before - lives) end
 	L.teamLives[team] = lives
 	for _, m in ipairs(self:team_members(L, team)) do m.lives = lives end
 	for _, p in ipairs(L.players) do
@@ -563,6 +756,11 @@ function Server:resolve_teams_pvp(L, alive)
 	if #timerLosers == 0 and n_teams >= 2 then
 		loser = Core.TEAMS.resolve(present, L.teamSize, s_gt, s_eq)
 		if loser then self:set_team_lives(L, loser, math.max(0, L.teamLives[loser] - 1)) end
+	end
+	do
+		local lost = {}
+		for _, p in ipairs(alive) do if (loser and p.team == loser) or p.pvpTimerFailed then lost[p] = true end end
+		self:stats_pvp(L, alive, lost)
 	end
 	for _, p in ipairs(alive) do p.firstReady, p.pvpDone, p.pvpTimerFailed = false, false, false end
 	for _, p in ipairs(alive) do
@@ -634,6 +832,8 @@ function Server:koth_hill_win(L, winnerId)
 	end
 	sendA(winner, { action = "winGame", reason = "koth_hill" })
 	L.isInGame, L.blindActive, L.slots = false, false, {}
+	L.winnerId = winner.id
+	notify_match_over(self, L)
 	return true
 end
 
@@ -704,6 +904,7 @@ local SLOT_FIELDS = { "team", "lives", "score", "handsLeft", "ante", "skips", "f
 function Server:send_resume(L, c, late)
 	sendA(c, { action = "resumeGame", seed = L.seed, ante = math.max(1, c.ante), lives = c.lives, lateJoin = late,
 		eliminated = c.eliminated, blindActive = L.blindActive, runState = c.runState,
+		stats = L.book and L.book[c.id] or nil,
 		inCurrentBlind = (c.inPvp and L.blindActive and c.blindSeq == L.blindSeq) or false })
 	sendA(c, { action = "playerInfo", lives = c.lives })
 	for _, o in ipairs(L.players) do if o ~= c and not o.spectator then sendA(c, self:enemy_info(o, true)) end end
@@ -883,6 +1084,7 @@ function Server:snapshot(code, hostId)
 		v = 1, code = L.code, gameMode = L.gameMode, options = plain(L.options), isInGame = L.isInGame and true or false,
 		seed = L.seed, blindActive = L.blindActive and true or false, blindSeq = L.blindSeq or 0, startPlayers = L.startPlayers,
 		teamSize = L.teamSize, teamLives = plain(L.teamLives), koth = plain(L.koth), elimOrder = plain(L.elimOrder),
+		book = plain(L.book), teamBook = plain(L.teamBook), lastStats = plain(L.lastStats),
 		winnerId = L.winnerId, firstReadyAge = L.firstReadyAt and (now - L.firstReadyAt) or nil,
 		next_id = self.next_id, hostId = hostId, players = {}, slots = {},
 	}
@@ -906,6 +1108,7 @@ function Core.restore(snap, opts)
 		isInGame = snap.isInGame and true or false, seed = snap.seed, blindActive = snap.blindActive and true or false,
 		blindSeq = tonumber(snap.blindSeq) or 0, startPlayers = snap.startPlayers, teamSize = snap.teamSize,
 		teamLives = snap.teamLives, koth = snap.koth, elimOrder = snap.elimOrder, winnerId = snap.winnerId,
+		book = snap.book, teamBook = snap.teamBook, lastStats = snap.lastStats,
 		firstReadyAt = snap.firstReadyAge and (now - snap.firstReadyAge) or nil,
 		players = {}, slots = {}, emptySince = nil,
 	}
@@ -1064,6 +1267,7 @@ function H.startGame(S, c)
 	if why then return sendA(c, { action = "error", message = why }) end
 	S:promote_spectators(L)
 	L.startPlayers = #S:seated(L)
+	L.lastStats = nil
 	local lives = tonumber(L.options.starting_lives) or Core.STARTING_LIVES[L.gameMode] or 4
 	local seed = nil
 	if not L.options.different_seeds then seed = rand_str("ABCDEFGHIJKLMNPQRSTUVWXYZ123456789", 8) end
@@ -1081,6 +1285,7 @@ function H.startGame(S, c)
 	L.koth = nil
 	S:koth_broadcast(L)
 	S:teams_start(L, lives)
+	S:stats_start(L)
 	for i = 2, #L.players do L.players[i].isReadyLobby = false end
 	for _, p in ipairs(L.players) do
 		for _, o in ipairs(seated) do if o ~= p then sendA(p, S:enemy_info(o, true)) end end
@@ -1181,6 +1386,12 @@ function H.skip(S, c, a)
 end
 --- 0.6.8: the player's last known run state (sent at every checkpoint: shop / blind select).
 --- The host keeps it with the seat (also through host migration) and sends it back on rejoin.
+--- 0.6.8: a player's own match stats (best hand, jokers, money earned, highest ante)
+function H.statsReport(S, c, a)
+	local L = c.lobby
+	if not L or not L.isInGame or c.spectator then return end
+	S:stats_report(L, c, a)
+end
 local RUN_FIELDS = { "ante", "round", "dollars", "jokers", "deck", "hands", "discards", "ckpt" }
 function H.runState(S, c, a)
 	if c.spectator or c.eliminated or not (c.lobby and c.lobby.isInGame) then return end

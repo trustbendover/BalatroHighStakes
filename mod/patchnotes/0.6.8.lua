@@ -4,8 +4,8 @@ return {
 	en = {
 		new = {
 			"{C:green}Host migration{}: goes on if the host leaves or freezes",
-			"{C:attention}Spectate{}: watch the match when you're out",
-			"{C:chips}Rejoin{}: crashed? Come back in 3 min, keep your run",
+			"{C:attention}Spectate & rejoin{}: watch when out, rejoin in 3 min",
+			"{C:chips}Match stats{}: damage, best hand, jokers & more at the end",
 			"{C:money}Safer updates{}: warns if Balatro/Steamodded changes",
 		},
 		known = {
@@ -15,8 +15,8 @@ return {
 	nl = {
 		new = {
 			"{C:green}Host-migratie{}: gaat door als de host weggaat of vastloopt",
-			"{C:attention}Meekijken{}: kijk de match uit als je eruit ligt",
-			"{C:chips}Terugkeren{}: gecrasht? Kom binnen 3 min terug met je run",
+			"{C:attention}Meekijken & terugkeren{}: als je eruit ligt of crasht",
+			"{C:chips}Matchstatistieken{}: schade, beste hand, jokers & meer",
 			"{C:money}Veiliger{}: waarschuwt als Balatro/Steamodded wijzigt",
 		},
 		known = {

@@ -421,6 +421,9 @@ function MP.UI.create_UIBox_mp_game_end(has_won)
 											-- Deathmatch: live standings while you spectate (empty row otherwise)
 											(MP.DEATHMATCH and MP.DEATHMATCH.spectate_row and MP.DEATHMATCH.spectate_row())
 												or { n = G.UIT.R, config = { align = "cm" }, nodes = {} },
+											-- 0.6.8: match stats (also shown automatically when the match ends)
+											(MP.MATCH_STATS and MP.MATCH_STATS.end_button and MP.MATCH_STATS.end_button())
+												or { n = G.UIT.R, config = { align = "cm" }, nodes = {} },
 											-- 0.6.8: keep watching the remaining players
 											(MP.SPECTATE and MP.SPECTATE.end_button and MP.SPECTATE.end_button())
 												or { n = G.UIT.R, config = { align = "cm" }, nodes = {} },
