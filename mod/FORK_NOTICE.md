@@ -50,3 +50,4 @@ localization (en-us, nl), tests/test_host_migration*.lua (new), tests/test_steam
 tools/make_logo.py); credits tab rewritten for the fork (ui/smods_menu/credits_tab.lua, smods_menu.lua GitHub link) with
 the original authors credited in CREDITS.md (new); Multiplayer.json author/description. The original copyright and
 license notices are unchanged.
+- 0.6.8: startup compatibility guard and safe mode (`lib/compat_guard.lua`, `compat.json`); main-menu hooks wrapped in pcall; networking skipped in safe mode (`core.lua`, `networking/action_handlers.lua`). Dutch doc: `docs/BESCHERMING_NL.md`.

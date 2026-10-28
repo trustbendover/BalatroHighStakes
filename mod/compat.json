@@ -1,0 +1,32 @@
+{
+  "schema": 1,
+  "mod_version": "0.6.8",
+  "applies_from": "0.6.8",
+  "note": "Tested versions of the game, Steamodded and Lovely. Used by the installer (pins), the mod (startup guard) and the release build. A newer release's compat.json (fetched by the in-game update check) can add tested versions for installed mods >= applies_from.",
+  "balatro": {
+    "tested": ["1.0.1o"],
+    "min": "1.0.1o"
+  },
+  "steamodded": {
+    "tested": ["1.0.0~BETA-1620a"],
+    "min": "1.0.0~BETA-1620a",
+    "pin": {
+      "version": "1.0.0~BETA-1620a",
+      "url": "https://github.com/Steamodded/smods/archive/refs/tags/1.0.0-beta-1620a.zip",
+      "sha256": "c98754fdf009f0addd198fe062989ef0f5bf212220c54cc89ed27ad5b0ea56ec",
+      "license": "GPL-3.0"
+    }
+  },
+  "lovely": {
+    "tested": ["0.10.0"],
+    "min": "0.9.0",
+    "pin": {
+      "version": "0.10.0",
+      "url": "https://github.com/ethangreen-dev/lovely-injector/releases/download/v0.10.0/lovely-x86_64-pc-windows-msvc.zip",
+      "sha256": "7f481f984ab8ee633c90ce18220c88a2da8f93ca86b6c3e3ff70a725c05807ab",
+      "winmm_sha256": "6f707d32ff022f155584340bfb19cd93205cb47234e8bec80ccfc747222dfea2",
+      "license": "MIT"
+    }
+  },
+  "blocked": []
+}

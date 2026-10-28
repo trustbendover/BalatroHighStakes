@@ -180,9 +180,10 @@ function PN.pages(lines, per_page)
 end
 
 --- May the pop-up appear by itself now? env: { main_menu, overlay, in_lobby, in_run, p2p_busy,
---- updater_busy, menu_age, shown }
+--- updater_busy, menu_age, shown, compat_pending }
 function PN.can_auto_show(env)
 	if env.shown or not env.main_menu or env.overlay or env.in_lobby or env.in_run or env.p2p_busy then return false end
+	if env.compat_pending then return false end -- the compat warning goes first, never stacked
 	if (env.menu_age or 0) < PN.MENU_DELAY then return false end
 	if env.updater_busy and (env.menu_age or 0) < PN.UPDATER_WAIT then return false end
 	return true
@@ -382,6 +383,7 @@ function PN.env()
 		p2p_busy = R and (R.joining or R.pending_invite ~= nil or R.invite_retry ~= nil or (R.mode and R.mode ~= "local")) or false,
 		updater_busy = U and (U.state == "idle" or U.state == "checking") or false,
 		menu_age = PN.menu_since and (love.timer.getTime() - PN.menu_since) or 0,
+		compat_pending = MP.COMPAT_GUARD and (MP.COMPAT_GUARD.pending or (MP.COMPAT_GUARD.is_open and MP.COMPAT_GUARD.is_open())) or false,
 	}
 end
 

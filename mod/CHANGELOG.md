@@ -74,6 +74,15 @@
   and one small line "Based on Balatro Multiplayer by the Balatro Multiplayer team (GPL-3.0)" with an "Original mod"
   link. The original authors are credited by name in the new `CREDITS.md` (plus FORK_NOTICE.md and LICENSE.md,
   unchanged). The mods list shows Trust Ben Dover as author.
+- **Break protection (compatibility guard).** On start the mod compares your Balatro, Steamodded and Lovely versions
+  with `mod/compat.json` (tested: Balatro 1.0.1o, Steamodded 1.0.0~BETA-1620a, Lovely 0.10.0). An untested version
+  shows a short Balatro-style warning on the main menu (English/Dutch) naming it, with "Play anyway" (remembered for
+  that exact combination) or "Disable multiplayer for now" (this session only; singleplayer keeps working). It never
+  stacks with the patch notes (the warning goes first). A blocked version (blocklist or older than the minimum) or a
+  core mod file / main-menu hook that fails to load turns on **safe mode**: networking is not started, the multiplayer
+  buttons are hidden, a note explains why, and the log says `SAFE MODE` with the reason - instead of a crash.
+  Main-menu hooks are wrapped in pcall. A newer `compat.json` (e.g. cached from a newer release) can only add tested
+  versions or blocks for other versions; it never blocks what this build shipped as tested.
 - Everyone must be on 0.6.8 (server version 0.6.8). TS server mode is unchanged.
 
 ## 0.6.7~3P - 2026-10-28 - "Balatro High Stakes"

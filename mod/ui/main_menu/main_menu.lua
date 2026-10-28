@@ -3,11 +3,13 @@ local game_main_menu_ref = Game.main_menu
 function Game:main_menu(change_context)
 	local ret = game_main_menu_ref(self, change_context)
 
-	Add_custom_multiplayer_cards(change_context)
-	Add_version_display()
-	MP.UI.show_dev_build_warning()
-	if MP.UPDATER then MP.UPDATER.on_main_menu() end
-	if MP.PATCH_NOTES then MP.PATCH_NOTES.add_menu_button() end -- the pop-up itself waits in PN.tick
+	-- 0.6.8: each extra is guarded, so a game update that changes the menu cannot crash it
+	local safe = MP.safe_call or function(_, f, ...) return pcall(f, ...) end
+	safe("main menu cards", Add_custom_multiplayer_cards, change_context)
+	safe("version display", Add_version_display)
+	safe("dev build warning", MP.UI.show_dev_build_warning)
+	if MP.UPDATER then safe("updater", MP.UPDATER.on_main_menu) end
+	if MP.PATCH_NOTES then safe("patch notes button", MP.PATCH_NOTES.add_menu_button) end -- the pop-up waits in PN.tick
 
 	return ret
 end
@@ -17,7 +19,11 @@ local create_UIBox_main_menu_buttonsRef = create_UIBox_main_menu_buttons
 ---@diagnostic disable-next-line: lowercase-global
 function create_UIBox_main_menu_buttons()
 	local menu = create_UIBox_main_menu_buttonsRef()
-	menu.nodes[1].nodes[1].nodes[1].nodes[1].config.button = "play_options"
+	-- 0.6.8: if a Balatro update moved the play button, keep the vanilla menu and turn multiplayer off
+	local ok, err = pcall(function() menu.nodes[1].nodes[1].nodes[1].nodes[1].config.button = "play_options" end)
+	if not ok and MP.COMPAT_GUARD and MP.COMPAT_GUARD.hook_failed then
+		MP.COMPAT_GUARD.hook_failed("play button", err, true)
+	end
 	return menu
 end
 

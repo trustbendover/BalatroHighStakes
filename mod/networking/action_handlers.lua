@@ -33,6 +33,7 @@ local no_log_actions = {
 }
 
 function Client.send(msg)
+	if MP.SAFE_MODE then return end -- 0.6.8 compat guard: multiplayer is off, send nothing
 	if MP.STEAM_P2P and type(msg) == "table" then
 		if not (msg.action and no_log_actions[msg.action]) then
 			sendTraceMessage("Client sent P2P message: " .. tostring(msg.action), "MULTIPLAYER")
@@ -1869,6 +1870,7 @@ function Game:update(dt)
 	game_update_ref(self, dt)
 
 	repeat
+		if MP.SAFE_MODE then network_to_ui_channel:clear(); break end -- 0.6.8: multiplayer is off
 		local msg = network_to_ui_channel:pop()
 		if msg then
 			-- horribly messy catch

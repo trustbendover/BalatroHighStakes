@@ -79,7 +79,14 @@ function G.UIDEF.override_main_menu_play_button()
 					minw = 5,
 					minh = 0.7,
 				}) or nil,
-				not MP.LOBBY.connected and UIBox_button({
+				MP.SAFE_MODE and {
+					n = G.UIT.R,
+					config = { align = "cm", padding = 0.2 },
+					nodes = { { n = G.UIT.T, config = {
+						text = (MP.COMPAT_GUARD and MP.COMPAT_GUARD.note and MP.COMPAT_GUARD.note()) or "Multiplayer is off (safe mode)",
+						colour = G.C.UI.TEXT_INACTIVE, scale = 0.4 } } },
+				} or nil,
+				not MP.LOBBY.connected and not MP.SAFE_MODE and UIBox_button({
 					label = { localize("b_reconnect") },
 					colour = G.C.RED,
 					button = "reconnect",

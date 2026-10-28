@@ -44,6 +44,9 @@ jobs:
           luajit tests/test_deathmatch_client.lua
           luajit tests/test_host_migration.lua
           luajit tests/test_host_migration_ui.lua
+          luajit tests/test_patch_notes.lua
+          luajit tests/test_credits.lua
+          luajit tests/test_compat_guard.lua
 
       - name: Server tests
         working-directory: server

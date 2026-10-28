@@ -137,6 +137,8 @@ function MP.current_ruleset()
     return {}
 end
 
+-- 0.6.8: files that failed to load (the compat guard turns multiplayer off if a core one did)
+MP.LOAD_ERRORS = MP.LOAD_ERRORS or {}
 function MP.load_mp_file(file)
 	local chunk, err = SMODS.load_file(file, "Multiplayer")
 	if chunk then
@@ -144,10 +146,12 @@ function MP.load_mp_file(file)
 		if ok then
 			return func
 		else
-			sendWarnMessage("Failed to process file: " .. func, "MULTIPLAYER")
+			sendWarnMessage("Failed to process file: " .. tostring(func), "MULTIPLAYER")
+			MP.LOAD_ERRORS[#MP.LOAD_ERRORS + 1] = { file = file, err = tostring(func) }
 		end
 	else
 		sendWarnMessage("Failed to find or compile file: " .. tostring(err), "MULTIPLAYER")
+		MP.LOAD_ERRORS[#MP.LOAD_ERRORS + 1] = { file = file, err = tostring(err) }
 	end
 	return nil
 end
@@ -365,8 +369,16 @@ MP.load_mp_dir("objects/boosters")
 MP.load_mp_dir("objects/challenges")
 
 -- 3P fork: optional Steam peer-to-peer mode (.env: mode=steam). TCP stays the default/fallback.
+-- 0.6.8 compat guard: untested Balatro/Steamodded/Lovely -> warning on the main menu; blocked
+-- version or a core file that failed to load -> safe mode (no networking, singleplayer works)
+local net_allowed = true
+if MP.COMPAT_GUARD and MP.COMPAT_GUARD.startup then
+	local gok, allowed = pcall(MP.COMPAT_GUARD.startup)
+	net_allowed = not gok or allowed ~= false
+end
+
 MP.STEAM_P2P = nil
-if MP.ENV.mode == "steam" then
+if MP.ENV.mode == "steam" and net_allowed then
 	local function create_router()
 		local P2P = MP.load_mp_file("networking/steam_p2p.lua")
 		local Core = MP.load_mp_file("networking/p2p_server.lua")
@@ -481,9 +493,9 @@ sendInfoMessage(
 )
 local tcp_started = false
 function MP.START_TCP()
-	if tcp_started then return end
+	if tcp_started or MP.SAFE_MODE then return end
 	tcp_started = true
 	MP.NETWORKING_THREAD:start(server_url, server_port)
 end
-if not MP.STEAM_P2P then MP.START_TCP() end
-MP.ACTIONS.connect()
+if not MP.STEAM_P2P and net_allowed then MP.START_TCP() end
+if net_allowed then MP.ACTIONS.connect() end
