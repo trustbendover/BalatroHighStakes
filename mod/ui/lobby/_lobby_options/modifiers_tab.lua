@@ -25,6 +25,13 @@ G.FUNCS.change_pvp_countdown_seconds = function(args)
 	send_lobby_options()
 end
 
+-- 0.6.8: how long a dropped player's seat is held for a rejoin (0 = mode default)
+local REJOIN_VALUES = { 0, 60, 120, 180, 300, 600 }
+G.FUNCS.change_rejoin_grace = function(args)
+	MP.LOBBY.config.rejoin_grace = REJOIN_VALUES[args.to_key] or 0
+	send_lobby_options()
+end
+
 function MP.UI.create_gamemode_modifiers_tab()
     local mult = MP.LOBBY.config.timer_base_multiplier or MP.current_ruleset().timer_base_multiplier or 1
 
@@ -95,6 +102,14 @@ function MP.UI.create_gamemode_modifiers_tab()
 						{ 0, 3, 5, 10 },
 						MP.UTILS.get_array_index_by_value({ 0, 3, 5, 10 }, MP.LOBBY.config.pvp_countdown_seconds),
 						"change_pvp_countdown_seconds"
+					),
+					create_lobby_option_cycle(
+						"rejoin_grace_option",
+						"k_opts_rejoin_grace",
+						0.85,
+						{ localize("k_opts_default"), "1m", "2m", "3m", "5m", "10m" },
+						MP.UTILS.get_array_index_by_value(REJOIN_VALUES, MP.LOBBY.config.rejoin_grace or 0) or 1,
+						"change_rejoin_grace"
 					),
 				},
 			},

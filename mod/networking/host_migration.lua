@@ -312,12 +312,16 @@ function M.attach(ctx)
 	function H.mark_dirty() H.dirty = true end
 
 	--- Seat order of the other players (Steam ids): the succession list.
+	--- 0.6.8: spectators can take over too (they get the same snapshots and run the same server
+	--- code), but only after every seated player (alive or eliminated), so a player keeps priority.
 	local function succession(L, lc)
 		local list = {}
-		for _, pl in ipairs(L.players) do
-			if pl ~= lc then
-				local id = ctx.conn_peer(pl)
-				if id then list[#list + 1] = id end
+		for pass = 1, 2 do
+			for _, pl in ipairs(L.players) do
+				if pl ~= lc and ((pass == 1) == (not pl.spectator)) then
+					local id = ctx.conn_peer(pl)
+					if id then list[#list + 1] = id end
+				end
 			end
 		end
 		return list

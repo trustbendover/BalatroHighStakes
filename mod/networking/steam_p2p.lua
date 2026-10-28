@@ -23,7 +23,7 @@ M.TIMEOUT = 20
 M.LOBBY_KEY = "mp3p_code" -- protocol key, kept for compatibility with earlier builds
 -- Steam lobby member limit. Star topology: every guest talks only to the host, which runs the
 -- server core and relays, so traffic grows linearly with players (8 is light).
-M.MAX_MEMBERS = 8
+M.MAX_MEMBERS = 16 -- 0.6.8: up to 8 players + room for spectators and rejoining players
 M.SEARCH_TRIES = 4
 M.SEARCH_DELAY = 3
 M.INVITE_TRIES = 4

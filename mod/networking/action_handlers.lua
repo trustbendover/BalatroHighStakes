@@ -237,7 +237,8 @@ local function action_enemyDisconnected(p)
 		sendWarnMessage(name .. " disconnected (seat held)", "MULTIPLAYER")
 		if MP.GAME.enemies and p.playerId and MP.GAME.enemies[p.playerId] then MP.GAME.enemies[p.playerId].away = true end
 		if MP.THREEP.refresh_hud then MP.THREEP.refresh_hud() end
-		MP.UI.UTILS.overlay_message(name .. " disconnected.\nThey can rejoin with the lobby code;\nPvP continues without them.")
+		-- 0.6.8: a status bar with the rejoin countdown instead of a popup (lib/rejoin.lua)
+		if MP.REJOIN and not p.eliminated then MP.REJOIN.on_away(p) end
 		return
 	end
 	local timeout = p.timeout or 60
@@ -263,12 +264,18 @@ end
 local function action_enemyReconnected(p)
 	if p and p.playerId and MP.GAME.enemies and MP.GAME.enemies[p.playerId] then MP.GAME.enemies[p.playerId].away = nil end
 	MP.enemy_disconnect_countdown = nil
+	if p and p.playerId and MP.REJOIN then
+		MP.REJOIN.on_back(p)
+		if MP.THREEP.refresh_hud then pcall(MP.THREEP.refresh_hud) end
+		return
+	end
 	sendWarnMessage("Opponent reconnected!", "MULTIPLAYER")
 	G.FUNCS.exit_overlay_menu()
 	MP.UI.UTILS.overlay_message("Opponent reconnected!")
 end
 
 local function action_lobbyInfo(p)
+	if p.inGame == false and MP.SPECTATE and MP.SPECTATE.state.joined then MP.SPECTATE.on_match_end() end
 	local host, hostHash, hostCached = p.host, p.hostHash, p.hostCached
 	local guest, guestHash, guestCached, guestReady = p.guest, p.guestHash, p.guestCached, p.guestReady
 	local is_host = p.isHost
@@ -390,6 +397,8 @@ end
 
 local function action_disconnected()
 	MP.LOBBY.connected = false
+	if MP.REJOIN then MP.REJOIN.reset() end
+	if MP.SPECTATE then MP.SPECTATE.on_match_end() end
 	MP.self_reconnect_countdown = nil
 	if MP.LOBBY.code then MP.LOBBY.code = nil end
 	-- Clear reconnect state since all reconnection attempts failed
@@ -429,6 +438,8 @@ local function action_start_game(p)
 	MP.GHOST.clear()
 
 	MP.reset_game_states()
+	if MP.REJOIN then MP.REJOIN.on_start(p) end
+	if MP.SPECTATE then MP.SPECTATE.on_match_start() end
 	local stake = tonumber(p.stake)
 	MP.ACTIONS.set_ante(0)
 	if not MP.LOBBY.config.different_seeds and MP.LOBBY.config.custom_seed ~= "random" then
@@ -651,6 +662,8 @@ action_enemy_info = function(p)
 	e.lives = tonumber(p.lives) or e.lives
 	e.skips = tonumber(p.skips) or e.skips
 	e.eliminated = p.eliminated and true or false
+	e.ante = tonumber(p.ante) or e.ante
+	e.away = p.away and true or nil
 	if not p.noScore and p.score ~= nil then
 		e.raw_score = tostring(p.score)
 		e.real_score = MP.INSANE_INT.from_string(e.raw_score)
@@ -664,6 +677,8 @@ action_enemy_info = function(p)
 		p.pvpTimerOrder = (p.pvpOrder[1] == MP.LOBBY.my_id) and my_role or other_role
 	end
 
+	-- 0.6.8: spectating from the lobby: just keep the per-player table (no run, no HUD)
+	if G.STAGE ~= G.STAGES.RUN and MP.SPECTATE and MP.SPECTATE.state.joined then return end
 	local prev_focus = MP.GAME.enemy_focus_id
 	local focus = MP.THREEP.pick_focus()
 	MP.GAME.enemy_focus_id = focus and focus.id or id
@@ -687,16 +702,17 @@ local function action_player_eliminated(p)
 	MP.GAME.enemies = MP.GAME.enemies or {}
 	local e = MP.GAME.enemies[p.playerId]
 	if e then e.eliminated = true; e.lives = 0 end
+	if p.reason == "disconnected" and MP.REJOIN then MP.REJOIN.on_expired(p) end
 	MP.GAME.elim_order = MP.GAME.elim_order or {}
 	table.insert(MP.GAME.elim_order, p.playerId)
 	MP.GAME.enemy_focus_id = nil
 	local focus = MP.THREEP.pick_focus()
-	if focus then
+	if focus and G.STAGE == G.STAGES.RUN then
 		MP.GAME.enemy_focus_id = focus.id
 		action_enemy_info_single({ handsLeft = focus.hands, skips = MP.GAME.enemy.skips, lives = focus.lives, score = focus.raw_score or "0" })
 		MP.GAME.enemy.username = focus.username
 	end
-	MP.THREEP.refresh_hud()
+	if G.STAGE == G.STAGES.RUN then MP.THREEP.refresh_hud() end
 	local name = (MP.LOBBY.names_by_id and MP.LOBBY.names_by_id[p.playerId]) or p.username or "?"
 	sendWarnMessage(name .. " eliminated", "MULTIPLAYER")
 	if MP.UI.UTILS and MP.UI.UTILS.overlay_message and G.STAGE ~= G.STAGES.RUN then MP.UI.UTILS.overlay_message(name .. " is out!") end
@@ -706,17 +722,7 @@ end
 -- joinedLobby (late join). If our run is still alive locally (network blip)
 -- we just continue; otherwise we start a fresh run on the lobby seed and jump
 -- to the given ante.
-local function action_resume_game(p)
-	local run_alive = G.STAGE == G.STAGES.RUN and not p.lateJoin and MP.GAME and (MP.GAME.lives or 0) > 0
-		and G.STATE ~= G.STATES.GAME_OVER
-	if run_alive then
-		sendWarnMessage("Rejoined - continuing current run", "MULTIPLAYER")
-		return
-	end
-	if p.eliminated then
-		MP.UI.UTILS.overlay_message("Rejoined, but you are already eliminated.")
-		return
-	end
+local function restart_at_ante(p)
 	local target_ante = math.max(1, tonumber(p.ante) or 1)
 	sendWarnMessage(string.format("Resuming game at ante %d (%s)", target_ante, p.lateJoin and "late join" or "rejoin"), "MULTIPLAYER")
 	if G.STAGE == G.STAGES.RUN then MP.reset_game_states() end
@@ -742,8 +748,44 @@ local function action_resume_game(p)
 	if not jump() then
 		G.E_MANAGER:add_event(Event({ blockable = false, blocking = false, func = jump }))
 	end
+	-- 0.6.8: no usable checkpoint, but the host knows how much money we had
+	local known = p.runState and tonumber(p.runState.dollars)
+	if not p.lateJoin and known then
+		G.E_MANAGER:add_event(Event({ blockable = false, blocking = false, func = function()
+			if not (G.GAME and G.GAME.round_resets and (G.GAME.round_resets.ante or 1) >= target_ante) then return false end
+			G.GAME.dollars = math.max(G.GAME.dollars or 0, known)
+			return true
+		end }))
+	end
+	if p.lives then MP.GAME.lives = tonumber(p.lives) or MP.GAME.lives end
 	MP.UI.UTILS.overlay_message(p.lateJoin and ("Joined the running game at ante " .. target_ante .. "!")
+		or (MP.SPECTATE and MP.SPECTATE.L("k_rj_restarted", "Rejoined! Your run restarts at ante #1# (same seed, lives kept)", { target_ante }))
 		or ("Rejoined! Your run restarts at ante " .. target_ante .. "\n(same seed, lives kept)."))
+end
+MP.THREEP.restart_at_ante = restart_at_ante
+
+-- 0.6.8: our own checkpoint (lib/rejoin.lua) restores the run when it matches the lobby;
+-- otherwise restart_at_ante. Both wait until the lobby screen has settled after the rejoin.
+local function action_resume_game(p)
+	local run_alive = G.STAGE == G.STAGES.RUN and not p.lateJoin and MP.GAME and (MP.GAME.lives or 0) > 0
+		and G.STATE ~= G.STATES.GAME_OVER
+	if run_alive then
+		sendWarnMessage("Rejoined - continuing current run", "MULTIPLAYER")
+		return
+	end
+	if p.eliminated then
+		MP.GAME.lives = 0
+		if MP.SPECTATE then
+			MP.SPECTATE.state.match, MP.SPECTATE.state.joined = true, G.STAGE ~= G.STAGES.RUN
+			MP.UI.UTILS.overlay_message(MP.SPECTATE.L("k_rj_out", "Rejoined, but you are already out - you can watch the match"))
+		else
+			MP.UI.UTILS.overlay_message("Rejoined, but you are already eliminated.")
+		end
+		return
+	end
+	if MP.SPECTATE then MP.SPECTATE.state.match, MP.SPECTATE.state.joined = true, false end
+	if MP.REJOIN and not p.lateJoin then return MP.REJOIN.queue(p) end
+	return restart_at_ante(p)
 end
 
 local function action_player_joined(p)
@@ -764,6 +806,8 @@ end
 
 local function action_stop_game()
 	clear_reconnect_info()
+	if MP.REJOIN then MP.REJOIN.clear(); MP.REJOIN.reset() end
+	if MP.SPECTATE then MP.SPECTATE.on_match_end() end
 	MP.enemy_disconnect_countdown = nil
 	if G.STAGE ~= G.STAGES.MAIN_MENU then
 		G.FUNCS.go_to_menu()
@@ -838,6 +882,8 @@ local function action_win_game()
 	MP.nemesis_deck_received = false
 	MP.GAME.won = true
 	clear_reconnect_info()
+	if MP.REJOIN then MP.REJOIN.clear(); MP.REJOIN.reset() end
+	if MP.SPECTATE then MP.SPECTATE.on_match_end() end
 	MP.STATS.record_match(true)
 	MP.RLOG.end_run({ result = "win" })
 	MP.UTILS.log_mem_debug_messages()
@@ -852,6 +898,7 @@ local function action_lose_game()
 	MP.nemesis_deck_received = false
 	MP.STATS.record_match(false)
 	clear_reconnect_info()
+	if MP.REJOIN then MP.REJOIN.clear() end
 	G.STATE_COMPLETE = false
 	G.STATE = G.STATES.GAME_OVER
 	MP.RLOG.end_run({ result = "loss" })
@@ -1000,6 +1047,10 @@ local function enemyLocation(options)
 		end
 	end
 
+	-- 0.6.8: per player too (spectator panel)
+	local e = options.playerId and MP.GAME.enemies and MP.GAME.enemies[options.playerId]
+	if e then e.location = loc_location end
+	if G.STAGE ~= G.STAGES.RUN and MP.SPECTATE and MP.SPECTATE.state.joined then return end
 	MP.GAME.enemy.location = loc_location
 	MP.GAME.enemy.location_blind = value
 	MP.GAME.enemy.location_type = location
@@ -1907,7 +1958,15 @@ function Game:update(dt)
                 end
     
                 local handler = HANDLERS[parsedAction.action]
-                if handler then handler(parsedAction) end
+                if handler then
+                    if MP.SPECTATE and MP.SPECTATE.state.joined and G.STAGE ~= G.STAGES.RUN then
+                        -- 0.6.8: watching from the lobby (no run): match messages must never crash the menu
+                        local hok, herr = pcall(handler, parsedAction)
+                        if not hok then sendDebugMessage("Spectator ignored " .. tostring(parsedAction.action) .. ": " .. tostring(herr), "MULTIPLAYER") end
+                    else
+                        handler(parsedAction)
+                    end
+                end
             else
                 sendWarnMessage(
                     "Invalid server response: " .. msg,

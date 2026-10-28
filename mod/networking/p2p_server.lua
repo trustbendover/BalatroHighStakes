@@ -29,6 +29,25 @@ function Core.deathmatch_grace(options)
 	if g and g >= 1 and g <= 300 then return g end
 	return Core.DEATHMATCH_GRACE
 end
+-- 0.6.8: a player who drops keeps their seat this long (status "disconnected", PvP goes on without
+-- them); rejoining within it restores their run. After it they are eliminated as before.
+-- Lobby option rejoin_grace (10-900 s) overrides; Deathmatch keeps its own deathmatch_grace (60 s).
+Core.REJOIN_GRACE = 180
+function Core.rejoin_grace(options, mode)
+	local g = tonumber((options or {}).rejoin_grace)
+	if g and g == g and g > 0 then return math.max(10, math.min(900, math.floor(g))) end -- 0 / unset = mode default
+	if mode == "deathmatch" then return Core.deathmatch_grace(options) end
+	return Core.REJOIN_GRACE
+end
+-- 0.6.8: spectators (joined while a match runs and could not late join, or asked to watch).
+-- They never count as players: not alive, no PvP, no win, no seat. Max this many per lobby.
+Core.MAX_SPECTATORS = 8
+-- what a spectator may send (everything else is ignored: spectators cannot affect the game)
+Core.SPECTATOR_OK = { username = true, version = true, leaveLobby = true, lobbyInfo = true, keepAlive = true,
+	keepAliveAck = true, stopGame = true, syncClient = true }
+-- relays an eliminated player may still send (end-of-game screens)
+Core.END_GAME_RELAYS = { getEndGameJokers = true, receiveEndGameJokers = true, getNemesisDeck = true,
+	receiveNemesisDeck = true, endGameStatsRequested = true, nemesisEndGameStats = true }
 --- Modes without late join (teams are fixed; Deathmatch guarantees everyone fights every PvP)
 function Core.no_late_join(mode) return mode == "teams" or mode == "deathmatch" end
 -- free-for-all life-loss rule for 2-8 players (networking/pvp_rules.lua), injected by the loader / tests
@@ -193,6 +212,8 @@ end
 
 function Server:alive(L) return filter(L.players, function(p) return not p.eliminated end) end
 function Server:away_alive(L) return filter(L.slots, function(s) return not s.old.eliminated and s.old.lives > 0 end) end
+function Server:spectators(L) return filter(L.players, function(p) return p.spectator end) end
+function Server:seated(L) return filter(L.players, function(p) return not p.spectator end) end
 function Server:participants(L) return filter(self:alive(L), function(p) return not p.sitOut end) end
 
 function Server:broadcast(L, t) for _, p in ipairs(L.players) do sendA(p, t) end end
@@ -214,7 +235,8 @@ function Server:enemy_info(p, with_score)
 	return {
 		action = "enemyInfo", playerId = p.id, username = p.username, handsLeft = p.handsLeft,
 		score = with_score and (p.score.str or "0") or nil, noScore = (not with_score) or nil,
-		skips = p.skips, lives = p.lives, eliminated = p.eliminated,
+		skips = p.skips, lives = p.lives, eliminated = p.eliminated, ante = p.ante,
+		away = (p.lobby == nil) or nil, spectator = p.spectator or nil,
 	}
 end
 
@@ -230,10 +252,15 @@ function Server:lobby_info(L)
 	end
 	for i, p in ipairs(L.players) do
 		players[i] = { id = p.id, username = p.username, hash = p.modHash, cached = p.isCached, ready = p.isReadyLobby,
-			isHost = i == 1, lives = p.lives, eliminated = p.eliminated, team = preview and (p.team or preview[p.id]) or nil }
+			isHost = i == 1, lives = p.lives, eliminated = p.eliminated, team = preview and (p.team or preview[p.id]) or nil,
+			spectator = p.spectator or nil }
 	end
 	local away = {}
-	for i, s in ipairs(L.slots) do away[i] = { id = s.old.id, username = s.old.username, lives = s.old.lives } end
+	local now, grace = self.now(), Core.rejoin_grace(L.options, L.gameMode)
+	for i, s in ipairs(L.slots) do
+		away[i] = { id = s.old.id, username = s.old.username, lives = s.old.lives, eliminated = s.old.eliminated or nil,
+			left = (L.isInGame and s.since and not s.old.eliminated) and math.max(0, math.floor(grace - (now - s.since))) or nil }
+	end
 	for _, p in ipairs(L.players) do
 		local a = { action = "lobbyInfo", host = host.username, hostHash = host.modHash, isHost = p == host,
 			hostCached = host.isCached, players = players, you = p.id, maxPlayers = Core.max_players(L.gameMode), away = away, inGame = L.isInGame }
@@ -256,10 +283,30 @@ function Server:reset_players(L)
 		p.furthestBlind, p.skips, p.score, p.handsLeft = 0, 0, ZERO(), 4
 		p.pvpDone, p.pvpTimerFailed, p.playedThisBlind, p.inPvp, p.sitOut, p.ante = false, false, false, false, false, 1
 		p.team = nil
+		p.runState = nil
 	end
+	self:promote_spectators(L)
 	L.firstReadyAt, L.blindActive, L.slots = nil, false, {}
 	L.teamLives = nil
 	L.elimOrder, L.winnerId = nil, nil
+end
+
+--- Spectators become normal lobby members for the next match while there are free seats.
+function Server:promote_spectators(L)
+	local seated = #self:seated(L)
+	for _, p in ipairs(L.players) do
+		if p.spectator and seated < Core.max_players(L.gameMode) then
+			p.spectator, p.eliminated, p.sitOut = nil, false, false
+			seated = seated + 1
+		end
+	end
+end
+
+--- 0.6.8: spectators learn when the match is over (they get no winGame / loseGame).
+local function notify_match_over(self, L)
+	for _, p in ipairs(L.players) do
+		if p.spectator then sendA(p, { action = "matchOver", winnerId = L.winnerId }) end
+	end
 end
 
 function Server:destroy(L)
@@ -269,6 +316,12 @@ end
 
 function Server:check_game_over(L)
 	if not L.isInGame then return true end
+	local over = self:check_game_over_inner(L)
+	if not L.isInGame then notify_match_over(self, L) end
+	return over
+end
+
+function Server:check_game_over_inner(L)
 	-- Deathmatch: a player at 0 lives during a PvP blind dies when that PvP resolves, so players
 	-- who die in the same PvP die together (simultaneous final deaths -> highest score wins).
 	if L.gameMode == "deathmatch" and L.blindActive then return false end
@@ -342,11 +395,12 @@ function Server:deathmatch_broadcast(L)
 	end
 end
 
---- Deathmatch: a held seat whose grace ran out counts as eliminated (the seat stays, so a late
---- reconnect comes back as a spectator).
-function Server:deathmatch_expire(L, slot)
+--- A held seat whose grace ran out counts as eliminated (all modes since 0.6.8; the seat stays,
+--- so a late reconnect comes back as a spectator of its own seat).
+function Server:expire_slot(L, slot)
 	local o = slot.old
 	if o.eliminated then return end
+	self.log("Player " .. tostring(o.username) .. " did not rejoin in time: eliminated")
 	o.eliminated, o.lives = true, 0
 	L.elimOrder = L.elimOrder or {}
 	L.elimOrder[#L.elimOrder + 1] = o.id
@@ -355,10 +409,13 @@ function Server:deathmatch_expire(L, slot)
 		sendA(p, self:enemy_info(o, true))
 	end
 	self:deathmatch_broadcast(L)
+	self:teams_broadcast(L)
 	if self:check_game_over(L) then return end
 	self:try_start_blind(L)
 	self:try_resolve_pvp(L)
+	self:lobby_info(L)
 end
+Server.deathmatch_expire = Server.expire_slot
 
 function Server:try_start_blind(L)
 	if not L.isInGame or L.blindActive or L.migration then return false end
@@ -408,8 +465,9 @@ function Server:try_resolve_pvp(L)
 	end
 	for _, p in ipairs(roundLosers) do self:lose_life(p, "round") end
 	for _, p in ipairs(alive) do p.firstReady, p.pvpDone, p.pvpTimerFailed = false, false, false end
-	for _, p in ipairs(alive) do
-		for _, o in ipairs(L.players) do if o ~= p then sendA(p, self:enemy_info(o, true)) end end
+	-- everyone (also eliminated players and spectators) sees the new scores and lives
+	for _, p in ipairs(L.players) do
+		for _, o in ipairs(L.players) do if o ~= p and not o.spectator then sendA(p, self:enemy_info(o, true)) end end
 	end
 	if koth_ev then
 		self:koth_broadcast(L, koth_ev)
@@ -588,6 +646,12 @@ function Server:leave(c)
 	c.lobby, c.eliminated = nil, false
 	if not was then return end
 	if #L.players == 0 then self:destroy(L); return end
+	if c.spectator then
+		c.spectator = nil
+		self:broadcast(L, { action = "spectatorLeft", playerId = c.id, username = c.username })
+		self:lobby_info(L)
+		return
+	end
 	c.eliminated = was_eliminated -- (for the checks below; reset after)
 	if L.isInGame then
 		self:broadcast(L, { action = "playerLeft", playerId = c.id, username = c.username })
@@ -617,13 +681,15 @@ function Server:disconnect(c)
 	if not L then return end
 	local _, idx = find(L.players, function(p) return p == c end)
 	if not idx then return end
-	if not L.isInGame then self:leave(c); return end
-	self.log("Player " .. c.username .. " disconnected from " .. L.code .. "; seat held")
+	if not L.isInGame or c.spectator then self:leave(c); return end
+	local grace = Core.rejoin_grace(L.options, L.gameMode)
+	self.log("Player " .. c.username .. " disconnected from " .. L.code .. "; seat held for " .. grace .. " s")
 	L.slots[#L.slots + 1] = { reconnectToken = c.reconnectToken, index = idx, old = c, since = self.now() }
 	table.remove(L.players, idx)
 	c.lobby = nil
 	for _, p in ipairs(L.players) do
-		sendA(p, { action = "enemyDisconnected", timeout = 0, playerId = c.id, held = true })
+		sendA(p, { action = "enemyDisconnected", timeout = 0, playerId = c.id, username = c.username, held = true,
+			grace = (not c.eliminated) and grace or nil })
 	end
 	if #L.players == 0 then L.emptySince = self.now(); return end
 	self:try_start_blind(L)
@@ -633,15 +699,15 @@ end
 
 local SLOT_FIELDS = { "team", "lives", "score", "handsLeft", "ante", "skips", "furthestBlind", "isReady", "firstReady",
 	"isReadyLobby", "roundLivesBlocker", "timerLivesBlocker", "location", "eliminated", "pvpDone",
-	"pvpTimerFailed", "playedThisBlind", "blindSeq", "inPvp", "sitOut", "modHash", "isCached" }
+	"pvpTimerFailed", "playedThisBlind", "blindSeq", "inPvp", "sitOut", "modHash", "isCached", "spectator", "runState" }
 
 function Server:send_resume(L, c, late)
 	sendA(c, { action = "resumeGame", seed = L.seed, ante = math.max(1, c.ante), lives = c.lives, lateJoin = late,
-		eliminated = c.eliminated, blindActive = L.blindActive,
+		eliminated = c.eliminated, blindActive = L.blindActive, runState = c.runState,
 		inCurrentBlind = (c.inPvp and L.blindActive and c.blindSeq == L.blindSeq) or false })
 	sendA(c, { action = "playerInfo", lives = c.lives })
-	for _, o in ipairs(L.players) do if o ~= c then sendA(c, self:enemy_info(o, true)) end end
-	for _, s in ipairs(L.slots) do sendA(c, self:enemy_info(s.old, true)) end
+	for _, o in ipairs(L.players) do if o ~= c and not o.spectator then sendA(c, self:enemy_info(o, true)) end end
+	for _, s in ipairs(L.slots) do if not s.old.spectator then sendA(c, self:enemy_info(s.old, true)) end end
 end
 
 function Server:reclaim(L, c, slot)
@@ -657,7 +723,9 @@ function Server:reclaim(L, c, slot)
 		for i, p in ipairs(L.players) do if (p.seat or 500) <= (c.seat or 500) then pos = i + 1 end end
 		table.insert(L.players, pos, c)
 	else
-		if L.koth and L.koth.kingId == o.id then L.koth.kingId = c.id end
+		-- 0.6.8: a rejoining player keeps its player id, so everyone's HUD / standings / spectator
+		-- panel keep pointing at the same seat (no stale "disconnected" ghost entry)
+		c.id = o.id or c.id
 		table.insert(L.players, math.min(slot.index, #L.players + 1), c)
 	end
 	c.lobby = L
@@ -672,7 +740,7 @@ function Server:reclaim(L, c, slot)
 	if missed then sendA(c, { action = "endPvP", lost = false, loserIds = {} }) end
 	for _, p in ipairs(L.players) do
 		if p ~= c then
-			sendA(p, { action = "enemyReconnected", playerId = c.id })
+			sendA(p, { action = "enemyReconnected", playerId = c.id, username = c.username })
 			sendA(p, self:enemy_info(c, true))
 		end
 	end
@@ -726,7 +794,30 @@ function Server:late_join(L, c)
 	self:lobby_info(L)
 end
 
-function Server:join(L, c)
+--- 0.6.8: watch a running match. Spectators get the same live info as eliminated players
+--- (scores, lives, location, standings) but every game action they send is ignored.
+function Server:spectate(L, c)
+	if #self:spectators(L) >= Core.MAX_SPECTATORS then
+		return sendA(c, { action = "error", message = "Too many spectators in this lobby." })
+	end
+	c.spectator, c.eliminated, c.lives, c.isReady, c.sitOut, c.inPvp = true, true, 0, false, true, false
+	c.isReadyLobby, c.lobby = true, L
+	L.players[#L.players + 1] = c
+	sendA(c, { action = "joinedLobby", code = L.code, type = L.gameMode, reconnectToken = c.reconnectToken, spectator = true })
+	sendA(c, copy(copy({ gamemode = L.gameMode }, L.options), { action = "lobbyOptions" }))
+	sendA(c, { action = "spectateStart", code = L.code, gameMode = L.gameMode, blindActive = L.blindActive })
+	for _, o in ipairs(L.players) do if o ~= c and not o.spectator then sendA(c, self:enemy_info(o, true)) end end
+	for _, s in ipairs(L.slots) do if not s.old.spectator then sendA(c, self:enemy_info(s.old, true)) end end
+	self:koth_broadcast(L)
+	self:teams_broadcast(L)
+	self:deathmatch_broadcast(L)
+	for _, p in ipairs(L.players) do
+		if p ~= c then sendA(p, { action = "spectatorJoined", playerId = c.id, username = c.username }) end
+	end
+	self:lobby_info(L)
+end
+
+function Server:join(L, c, want_spectate)
 	if L.isInGame then
 		local name = base_name(c.username)
 		local slot = find(L.slots, function(s) return base_name(s.old.username) == name end)
@@ -736,14 +827,12 @@ function Server:join(L, c)
 			local s2 = self:take_over(L, stale)
 			if s2 then return self:reclaim(L, c, s2) end
 		end
-		-- late join if there's a free seat (not in Teams: teams are fixed at the start)
-		if L.gameMode == "deathmatch" then
-			return sendA(c, { action = "error", message = "Deathmatch in progress: no late join." })
-		end
-		if not Core.no_late_join(L.gameMode) and #L.players + #L.slots < Core.max_players(L.gameMode) then return self:late_join(L, c) end
-		return sendA(c, { action = "error", message = "Lobby is full." })
+		-- late join if there's a free seat (not in Teams / Deathmatch); otherwise (or when asked) watch
+		if not want_spectate and not Core.no_late_join(L.gameMode)
+			and #self:seated(L) + #L.slots < Core.max_players(L.gameMode) then return self:late_join(L, c) end
+		return self:spectate(L, c)
 	end
-	if #L.players >= Core.max_players(L.gameMode) then
+	if #self:seated(L) >= Core.max_players(L.gameMode) then
 		return sendA(c, { action = "error", message = "Lobby is full or does not exist." })
 	end
 	L.players[#L.players + 1] = c
@@ -858,8 +947,8 @@ function Server:migration_reclaimed(L, c)
 	sendA(c, copy(copy({ gamemode = L.gameMode }, L.options), { action = "lobbyOptions" }))
 	if L.isInGame then
 		sendA(c, { action = "playerInfo", lives = c.lives })
-		for _, o in ipairs(L.players) do if o ~= c then sendA(c, self:enemy_info(o, true)) end end
-		for _, s in ipairs(L.slots) do sendA(c, self:enemy_info(s.old, true)) end
+		for _, o in ipairs(L.players) do if o ~= c and not o.spectator then sendA(c, self:enemy_info(o, true)) end end
+		for _, s in ipairs(L.slots) do if not s.old.spectator then sendA(c, self:enemy_info(s.old, true)) end end
 		if self:koth_active(L) and L.koth then self:koth_broadcast(L) end
 		self:teams_broadcast(L)
 		self:deathmatch_broadcast(L)
@@ -890,7 +979,7 @@ function Server:end_migration(L)
 		local sl = L.slots[i]
 		if sl.migration then
 			sl.migration = nil
-			if L.isInGame then missing[#missing + 1] = sl.old else table.remove(L.slots, i) end
+			if L.isInGame and not sl.old.spectator then missing[#missing + 1] = sl.old else table.remove(L.slots, i) end
 		elseif sl.oldHost then
 			sl.oldHost = nil
 			if not L.isInGame then
@@ -948,7 +1037,7 @@ function H.createLobby(S, c, a) S:new_lobby(c, a.gameMode) end
 function H.joinLobby(S, c, a)
 	local L = S.lobbies[a.code or ""]
 	if not L then return sendA(c, { action = "error", message = "Lobby does not exist." }) end
-	S:join(L, c)
+	S:join(L, c, a.spectate and true or false)
 end
 function H.rejoinLobby(S, c, a)
 	local L = S.lobbies[a.code or ""]
@@ -971,24 +1060,30 @@ function H.startGame(S, c)
 	if not L or L.players[1] ~= c then return end
 	if L.migration then return sendA(c, { action = "error", message = "Host migration in progress, try again in a moment." }) end
 	if L.isInGame then return sendA(c, { action = "error", message = "A match is still running." }) end
-	local why = Core.start_error(L.gameMode, #L.players, L.options)
+	local why = Core.start_error(L.gameMode, #S:seated(L), L.options)
 	if why then return sendA(c, { action = "error", message = why }) end
-	L.startPlayers = #L.players
+	S:promote_spectators(L)
+	L.startPlayers = #S:seated(L)
 	local lives = tonumber(L.options.starting_lives) or Core.STARTING_LIVES[L.gameMode] or 4
 	local seed = nil
 	if not L.options.different_seeds then seed = rand_str("ABCDEFGHIJKLMNPQRSTUVWXYZ123456789", 8) end
 	L.seed = seed
 	S:reset_players(L)
 	L.isInGame = true
-	S:broadcast(L, { action = "startGame", deck = "c_multiplayer_1", seed = seed, playerCount = #L.players })
-	for _, p in ipairs(L.players) do p.lives, p.eliminated = lives, false end
-	S:broadcast(L, { action = "playerInfo", lives = lives })
+	local seated = S:seated(L)
+	for _, p in ipairs(seated) do sendA(p, { action = "startGame", deck = "c_multiplayer_1", seed = seed, playerCount = #seated }) end
+	for _, p in ipairs(seated) do p.lives, p.eliminated = lives, false end
+	for _, p in ipairs(seated) do sendA(p, { action = "playerInfo", lives = lives }) end
+	for _, p in ipairs(S:spectators(L)) do
+		p.lives, p.eliminated = 0, true
+		sendA(p, { action = "spectateStart", code = L.code, gameMode = L.gameMode })
+	end
 	L.koth = nil
 	S:koth_broadcast(L)
 	S:teams_start(L, lives)
 	for i = 2, #L.players do L.players[i].isReadyLobby = false end
 	for _, p in ipairs(L.players) do
-		for _, o in ipairs(L.players) do if o ~= p then sendA(p, S:enemy_info(o, true)) end end
+		for _, o in ipairs(seated) do if o ~= p then sendA(p, S:enemy_info(o, true)) end end
 	end
 end
 function H.readyBlind(S, c)
@@ -1033,6 +1128,7 @@ function H.playHand(S, c, a)
 end
 function H.failPvPTimer(S, c)
 	local L = c.lobby
+	if c.eliminated then return end
 	S:lose_life_for(c, "timer")
 	if not L then return end
 	c.pvpDone, c.pvpTimerFailed = true, true
@@ -1065,12 +1161,13 @@ function H.lobbyOptions(S, c, a)
 end
 function H.failRound(S, c)
 	local L = c.lobby
-	if not L then return end
+	if not L or c.eliminated then return end
 	if L.options.death_on_round_loss then S:lose_life_for(c, "round") end
 	S:check_game_over(L)
 end
 function H.failTimer(S, c)
 	local L = c.lobby
+	if c.eliminated then return end
 	S:lose_life_for(c, "timer")
 	if L then S:check_game_over(L) end
 end
@@ -1081,6 +1178,19 @@ function H.setFurthestBlind(S, c, a) c.furthestBlind = tonumber(a.furthestBlind)
 function H.skip(S, c, a)
 	c.skips = tonumber(a.skips) or c.skips
 	if c.lobby then S:to_others(c, S:enemy_info(c, true)) end -- teammates see skips too
+end
+--- 0.6.8: the player's last known run state (sent at every checkpoint: shop / blind select).
+--- The host keeps it with the seat (also through host migration) and sends it back on rejoin.
+local RUN_FIELDS = { "ante", "round", "dollars", "jokers", "deck", "hands", "discards", "ckpt" }
+function H.runState(S, c, a)
+	if c.spectator or c.eliminated or not (c.lobby and c.lobby.isInGame) then return end
+	local st = {}
+	for _, f in ipairs(RUN_FIELDS) do
+		local v = tonumber(a[f])
+		if v and v == v and v > -1e9 and v < 1e12 then st[f] = math.floor(v) end
+	end
+	c.runState = st
+	if st.ante and st.ante >= 1 then c.ante = st.ante end
 end
 function H.syncClient(S, c, a) c.isCached = a.isCached and true or false end
 function H.resumeRestarted(S, c)
@@ -1109,6 +1219,9 @@ function H.tcgServerVersion() end
 --- Handle one action table from connection c.
 function Server:receive(c, a)
 	if type(a) ~= "table" or type(a.action) ~= "string" then return end
+	-- 0.6.8: spectators cannot affect the game; eliminated players only finish their end screen
+	if c.spectator and c.lobby and c.lobby.isInGame and not Core.SPECTATOR_OK[a.action] then return end
+	if c.eliminated and c.lobby and c.lobby.isInGame and RELAYS[a.action] and not Core.END_GAME_RELAYS[a.action] then return end
 	local h = H[a.action]
 	if h then
 		local ok, err = pcall(h, self, c, a)
@@ -1128,10 +1241,11 @@ function Server:tick()
 	local now = self.now()
 	for code, L in pairs(self.lobbies) do
 		if L.migration and now >= L.migration.untilT then self:end_migration(L) end
-		if L.isInGame and L.gameMode == "deathmatch" and not L.migration then
-			local grace = Core.deathmatch_grace(L.options)
+		if L.isInGame and not L.migration then
+			local grace = Core.rejoin_grace(L.options, L.gameMode)
 			for _, sl in ipairs(L.slots) do
-				if not sl.old.eliminated and sl.since and not sl.migration and now - sl.since >= grace then self:deathmatch_expire(L, sl) end
+				if L.isInGame and not sl.old.eliminated and not sl.old.spectator and sl.since and not sl.migration
+					and now - sl.since >= grace then self:expire_slot(L, sl) end
 			end
 		end
 		if #L.players == 0 and L.emptySince and now - L.emptySince > Core.EMPTY_LOBBY_TTL then

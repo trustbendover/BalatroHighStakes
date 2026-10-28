@@ -224,6 +224,7 @@ function MP.reset_lobby_config(persist_ruleset_and_gamemode)
 		hide_score_until_played = false,
 		enemy_location_disabled = false,
 		timer_display_threshold = 0,
+		rejoin_grace = 0, -- 0.6.8: seconds a dropped player's seat is held (0 = mode default: 3 min, Deathmatch 1 min)
 	}
 end
 MP.reset_lobby_config()
@@ -367,6 +368,10 @@ MP.load_mp_dir("objects/consumables")
 MP.load_mp_dir("objects/consumables/sandbox")
 MP.load_mp_dir("objects/boosters")
 MP.load_mp_dir("objects/challenges")
+
+-- 0.6.8: spectator mode + rejoin (need action_handlers and the lobby UI loaded first)
+if MP.SPECTATE and MP.SPECTATE.register then MP.SPECTATE.register() end
+if MP.REJOIN and MP.REJOIN.register then MP.REJOIN.register() end
 
 -- 3P fork: optional Steam peer-to-peer mode (.env: mode=steam). TCP stays the default/fallback.
 -- 0.6.8 compat guard: untested Balatro/Steamodded/Lovely -> warning on the main menu; blocked

@@ -8,7 +8,12 @@ end
 -- In multiplayer runs this can crash when SMODS serializes transient hand data
 local save_run_ref = save_run
 function save_run(...)
-	if G and G.F_NO_SAVING then return end
+	if G and G.F_NO_SAVING then
+		-- 0.6.8: in an MP run, keep a private rejoin checkpoint instead (never writes save.jkr;
+		-- only at shop / blind select, so no transient hand data; fully pcall'd)
+		if MP and MP.REJOIN and MP.REJOIN.on_save_run then pcall(MP.REJOIN.on_save_run, save_run_ref) end
+		return
+	end
 	return save_run_ref(...)
 end
 

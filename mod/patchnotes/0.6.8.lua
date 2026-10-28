@@ -3,9 +3,9 @@ return {
 	version = "0.6.8",
 	en = {
 		new = {
-			"{C:green}Host migration{}: the match goes on if the host leaves",
-			"{C:attention}Frozen host{}: replaced in about 10 sec",
-			"{C:chips}Patch notes{}: this pop-up!",
+			"{C:green}Host migration{}: goes on if the host leaves or freezes",
+			"{C:attention}Spectate{}: watch the match when you're out",
+			"{C:chips}Rejoin{}: crashed? Come back in 3 min, keep your run",
 			"{C:money}Safer updates{}: warns if Balatro/Steamodded changes",
 		},
 		known = {
@@ -14,9 +14,9 @@ return {
 	},
 	nl = {
 		new = {
-			"{C:green}Host-migratie{}: de match gaat door als de host weggaat",
-			"{C:attention}Bevroren host{}: vervangen in ongeveer 10 sec",
-			"{C:chips}Patch notes{}: deze pop-up!",
+			"{C:green}Host-migratie{}: gaat door als de host weggaat of vastloopt",
+			"{C:attention}Meekijken{}: kijk de match uit als je eruit ligt",
+			"{C:chips}Terugkeren{}: gecrasht? Kom binnen 3 min terug met je run",
 			"{C:money}Veiliger{}: waarschuwt als Balatro/Steamodded wijzigt",
 		},
 		known = {

@@ -94,6 +94,26 @@
   Steamodded version as tested without a code change. `tools/build_release.py` now reads the pins from
   `mod/compat.json`, checks the mod version and the dll hash, and adds `compat.json` to the release assets.
 - Credits tagline: "New modes, jokers & art, up to 8 players".
+- **Spectator mode.** Players who are out (Deathmatch, Attrition, KotH, Teams, ...) get a **Spectate** button on the
+  game-over screen, and anyone who joins a lobby whose match is already running (Deathmatch/Teams, a full lobby, or
+  `joinLobby` with `spectate`) watches instead of getting "no late join" (up to 8 spectators; Attrition etc. still
+  late-join a free seat). The panel shows the player you follow (lives, score, hands left, ante, where they are or
+  "disconnected"), a list of everyone left with who is ahead, and Prev / Next to switch; **Back to lobby** leaves.
+  In the lobby the start button becomes **Watch match** while the match runs. Spectators and eliminated players can't
+  affect the game: the host ignores their game actions (only end-of-game screens still work for players who are out),
+  they never count as alive for wins, PvP pairing or "everyone ready", and they get no win/lose (just "match over").
+  After the match spectators take a free seat for the next one. EN/NL texts follow the game language.
+- **Rejoin after a disconnect.** A player who crashes, closes Balatro or loses connection keeps their seat for a
+  **rejoin window** (lobby option "Rejoin Window": default 3 min, Deathmatch 1 min; 1-10 min) in every mode; others see
+  "X disconnected - waiting to rejoin 2:41" and "X rejoined" / "X did not return in time" (then eliminated as before).
+  Rejoin via Steam or the lobby code: your run is restored from a private local checkpoint (`mp3p_rejoin.jkr`, written
+  at every shop / blind select; `save.jkr` is never touched) with your deck, jokers, money and ante, if it matches the
+  lobby, seed and the host's last known checkpoint. Otherwise the run restarts at your ante (same seed) with the money
+  the host last saw. Lives always come from the host. The host only keeps a numeric summary per player (ante, money,
+  jokers, deck size, ...); run data from the network is never loaded. A rejoining player keeps their player id.
+  Works with host migration: the summary travels in the host snapshots and a crashed host rejoins as a guest.
+  Spectators can still become host (they get the same snapshots), but only after every seated player.
+- Steam lobby member limit raised from 8 to 16 (8 players + spectators / rejoining players).
 - Everyone must be on 0.6.8 (server version 0.6.8). TS server mode is unchanged.
 
 ## 0.6.7~3P - 2026-10-28 - "Balatro High Stakes"
