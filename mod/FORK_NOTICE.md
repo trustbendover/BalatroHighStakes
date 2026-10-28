@@ -46,3 +46,7 @@ tests/test_deathmatch_client.lua (new), tests/test_steam_p2p.lua.
 0.6.8 (in development): host migration for Steam P2P - networking/host_migration.lua and lib/host_migration_ui.lua (new),
 networking/steam_p2p.lua (router), networking/p2p_server.lua (snapshot/restore), networking/action_handlers.lua, core.lua,
 localization (en-us, nl), tests/test_host_migration*.lua (new), tests/test_steam_p2p.lua.
+0.6.8 (in development), also: patch notes pop-up (lib/patch_notes.lua, patchnotes/, assets/*/mp3p_logo.png - own art,
+tools/make_logo.py); credits tab rewritten for the fork (ui/smods_menu/credits_tab.lua, smods_menu.lua GitHub link) with
+the original authors credited in CREDITS.md (new); Multiplayer.json author/description. The original copyright and
+license notices are unchanged.

@@ -3,11 +3,9 @@
   "name": "Multiplayer",
   "display_name": "Balatro High Stakes",
   "author": [
-    "Virtualized",
-    "see credits",
-    "Balatro High Stakes fork: Trust Ben Dover"
+    "Trust Ben Dover"
   ],
-  "description": "Balatro High Stakes: unofficial 2-8 player fork of Balatro Multiplayer (GPL-3.0). Original: github.com/Balatro-Multiplayer/BalatroMultiplayer",
+  "description": "Balatro High Stakes: 2-8 player multiplayer for Balatro. Based on Balatro Multiplayer by the Balatro Multiplayer team (GPL-3.0), full credits in CREDITS.md.",
   "prefix": "mp",
   "main_file": "core.lua",
   "priority": 10000000,

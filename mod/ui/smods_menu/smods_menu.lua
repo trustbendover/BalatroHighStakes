@@ -9,7 +9,7 @@ function G.FUNCS.bmp_discord(e)
 end
 
 function G.FUNCS.bmp_github(e)
-	love.system.openURL("https://github.com/Balatro-Multiplayer/BalatroMultiplayer/")
+	love.system.openURL("https://github.com/" .. ((MP.BRAND and MP.BRAND.repo) or "trustbendover/BalatroMultiplayer3P"))
 end
 
 function G.FUNCS.change_blind_col(args) -- all we're doing is just saving + redefining the ui elements here

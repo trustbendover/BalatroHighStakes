@@ -70,6 +70,10 @@
   once per version; skipped versions are combined, newest first. "Got it" closes it; the **Patch notes** button on the
   main menu and in the mod settings reopens it. Notes live in `mod/patchnotes/<version>.lua`; the last version seen
   is kept in the mod config, so it survives updates.
+- **Credits screen** now shows Balatro High Stakes: the logo, "A mod by Trust Ben Dover", the Ko-fi and GitHub buttons,
+  and one small line "Based on Balatro Multiplayer by the Balatro Multiplayer team (GPL-3.0)" with an "Original mod"
+  link. The original authors are credited by name in the new `CREDITS.md` (plus FORK_NOTICE.md and LICENSE.md,
+  unchanged). The mods list shows Trust Ben Dover as author.
 - Everyone must be on 0.6.8 (server version 0.6.8). TS server mode is unchanged.
 
 ## 0.6.7~3P - 2026-10-28 - "Balatro High Stakes"
