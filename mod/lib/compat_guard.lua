@@ -314,7 +314,8 @@ end
 --- compat.json shipped with the mod, plus the cached remote one (if it applies to us)
 function CG.load_compat()
 	local base
-	local ok, raw = pcall(function() return NFS.read(MP.path .. "/compat.json") end)
+	-- compat.cfg: a .json file in the mod folder would be read by Steamodded as (invalid) mod metadata
+	local ok, raw = pcall(function() return NFS.read(MP.path .. "/compat.cfg") or NFS.read(MP.path .. "/compat.json") end)
 	if ok and raw then base = CG.json_decode(raw) end
 	if not CG.valid(base) then
 		warn("compat.json missing or invalid; using built-in defaults")

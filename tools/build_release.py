@@ -10,17 +10,17 @@ Produces in --out:
   SHA256SUMS-v<X>.txt
 Third-party pieces (Lovely 0.10.0, Steamodded 1.0.0~BETA-1620a) are downloaded from their
 official GitHub releases and checked against pinned SHA256 hashes.
-Repo slug, zip prefix and install folder come from mod/brand.json. The zip names keep the old
+Repo slug, zip prefix and install folder come from mod/brand.cfg. The zip names keep the old
 "BalatroMultiplayer3P-" prefix on purpose: 0.6.6/0.6.7 updaters build that name in their fallback path
 (see docs/REPO_RENAME_NL.md).
 """
 import argparse, hashlib, io, json, os, re, shutil, subprocess, sys, urllib.request, zipfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-# 0.6.8: the pins live in mod/compat.json (also read by the installer and the mod's startup guard)
-COMPAT_PATH = os.path.join(ROOT, "mod", "compat.json")
+# 0.6.8: the pins live in mod/compat.cfg (released as the compat.json asset; also read by the installer and the mod's startup guard)
+COMPAT_PATH = os.path.join(ROOT, "mod", "compat.cfg")
 COMPAT = json.load(open(COMPAT_PATH, encoding="utf-8"))
-BRAND = json.load(open(os.path.join(ROOT, "mod", "brand.json"), encoding="utf-8"))
+BRAND = json.load(open(os.path.join(ROOT, "mod", "brand.cfg"), encoding="utf-8"))
 PREFIX, FOLDER = BRAND["asset_prefix"], BRAND["folder"]
 VENDOR = {
     "lovely": (COMPAT["lovely"]["pin"]["url"], COMPAT["lovely"]["pin"]["sha256"]),
@@ -114,7 +114,7 @@ def main():
     src_zip = os.path.join(a.out, f"{PREFIX}-{tag}-source.zip")
 
     if COMPAT.get("mod_version") != ver.split("~")[0].split("-")[0]:
-        sys.exit(f"mod/compat.json mod_version {COMPAT.get('mod_version')} != mod version {ver}")
+        sys.exit(f"mod/compat.cfg mod_version {COMPAT.get('mod_version')} != mod version {ver}")
     lovely, smods = fetch("lovely", a.vendor_cache), fetch("smods", a.vendor_cache)
     want_dll = COMPAT["lovely"]["pin"].get("winmm_sha256")
     if want_dll and sha256(lovely.read("winmm.dll")) != want_dll:
@@ -147,6 +147,11 @@ def main():
         bad = [n for n in z.namelist() if f"/payload/{FOLDER}/tests/" in n]
         if bad:
             sys.exit(f"{inst_zip}: mod tests must not be shipped ({bad[0]})")
+        # Steamodded reads every file with ".json" in its name (any subfolder) as mod metadata and logs an error for each one that isn't
+        stray = [n for n in z.namelist() if f"/payload/{FOLDER}/" in n and ".json" in n.rsplit("/", 1)[-1].lower()
+                 and not n.endswith(f"/payload/{FOLDER}/Multiplayer.json")]
+        if stray:
+            sys.exit(f"{inst_zip}: only Multiplayer.json may be a .json file in the mod ({stray[0]})")
         if not any(n.endswith(f"/payload/{FOLDER}/core.lua") for n in z.namelist()):
             sys.exit(f"{inst_zip}: mod core.lua missing from the payload")
     # compat.json is also a release asset: the in-game update check reads it from the latest release

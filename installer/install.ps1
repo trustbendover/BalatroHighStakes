@@ -180,7 +180,10 @@ $envPlan = if ($null -ne $prevEnv) { Convert-EnvToSteam $prevEnv } else { @{ tex
 $envAction = if ($null -eq $prevEnv) { 'new (mode=steam)' } elseif ($envPlan.changed) { "switch to Steam (was $($envPlan.old))" } else { 'keep (already Steam)' }
 
 # 3. Pinned dependencies (compat.json): decide for Steamodded and Lovely first
-$Compat = Read-Compat (J $Payload "$OurModName\compat.json")
+# 0.6.8: compat.cfg (not .json: Steamodded reads every .json in a mod folder as mod metadata); .json = older payload
+$compatFile = J $Payload "$OurModName\compat.cfg"
+if (-not (Test-Path -LiteralPath $compatFile)) { $compatFile = J $Payload "$OurModName\compat.json" }
+$Compat = Read-Compat $compatFile
 $TestedSmods = if ($Compat) { [string]$Compat.steamodded.pin.version } else { '1.0.0~BETA-1620a' }
 $TestedLovely = if ($Compat) { [string]$Compat.lovely.pin.version } else { '0.10.0' }
 $LovelyPin = if ($Compat) { $Compat.lovely.pin } else { $null }

@@ -73,9 +73,9 @@ jobs:
 
       - name: Check repo name (0.6.8 rename, see docs/REPO_RENAME_NL.md)
         run: |
-          want=$(python3 -c "import json;print(json.load(open('mod/brand.json'))['repo'])")
+          want=$(python3 -c "import json;print(json.load(open('mod/brand.cfg'))['repo'])")
           if [ "${GITHUB_REPOSITORY}" != "$want" ]; then
-            echo "::warning::running in ${GITHUB_REPOSITORY}, mod/brand.json says $want - rename the repo first (docs/REPO_RENAME_NL.md)"
+            echo "::warning::running in ${GITHUB_REPOSITORY}, mod/brand.cfg says $want - rename the repo first (docs/REPO_RENAME_NL.md)"
           fi
 
       - name: Rules tests (TS reference + the in-game Lua host; the server itself is not shipped)
@@ -90,7 +90,7 @@ jobs:
         run: |
           python3 tools/build_release.py --out dist-release
           # old 0.6.6/0.6.7 updaters build this exact name in their fallback path: never change it
-          prefix=$(python3 -c "import json;print(json.load(open('mod/brand.json'))['asset_prefix'])")
+          prefix=$(python3 -c "import json;print(json.load(open('mod/brand.cfg'))['asset_prefix'])")
           ls dist-release/${prefix}-v*-Installer.zip dist-release/SHA256SUMS-v*.txt dist-release/compat.json
 
       - name: Publish GitHub Release
@@ -110,7 +110,7 @@ jobs:
       - name: Verify the old-client update path (old repo name -> redirect -> this release)
         if: startsWith(github.ref, 'refs/tags/')
         run: |
-          old=$(python3 -c "import json;print(json.load(open('mod/brand.json'))['repo_old'])")
+          old=$(python3 -c "import json;print(json.load(open('mod/brand.cfg'))['repo_old'])")
           sleep 10
           got=$(curl -fsSL -H "Accept: application/vnd.github+json" "https://api.github.com/repos/${old}/releases/latest" | python3 -c "import json,sys;print(json.load(sys.stdin).get('tag_name',''))" || true)
           if [ "$got" = "${GITHUB_REF_NAME}" ]; then echo "old name ${old} -> ${got}: OK"; else echo "::warning::old repo name ${old} gives '${got}', not ${GITHUB_REF_NAME} - 0.6.6/0.6.7 clients may not see this update"; fi

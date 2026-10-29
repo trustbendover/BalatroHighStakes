@@ -27,7 +27,7 @@ versies gebruiken:
   niemand. In het ergste geval ziet zo iemand gewoon geen update-knop; er gaat niets kapot.
 - Oude updaters zoeken een asset die eindigt op `Installer.zip`. In hun terugval bouwen ze precies
   `BalatroMultiplayer3P-<tag>-Installer.zip`. Daarom **blijven de zip-namen `BalatroMultiplayer3P-v…`**
-  (`asset_prefix` in `mod/brand.json`). We uploaden ze niet ook onder een tweede naam, want twee Installer-zips
+  (`asset_prefix` in `mod/brand.cfg`). We uploaden ze niet ook onder een tweede naam, want twee Installer-zips
   maken "de eerste" voor oude updaters onzeker.
 
 **Enige echte risico:** de doorverwijzing verdwijnt als er ooit een **nieuwe repo met de oude naam**
@@ -35,7 +35,7 @@ versies gebruiken:
 
 ## Wat 0.6.8 anders doet
 
-- `mod/brand.json` is de ene plek voor `repo` (nieuw), `repo_old`, `asset_prefix` en `folder`.
+- `mod/brand.cfg` is de ene plek voor `repo` (nieuw), `repo_old`, `asset_prefix` en `folder`.
   `MP.BRAND` in `mod/core.lua` is een kopie; `tests/test_brand.lua` controleert dat ze gelijk zijn.
 - In-game check, compat.json-download en `update.ps1` proberen eerst de nieuwe naam en dan de oude
   (bij 404, timeout of andere fout). Vóór de hernoeming werkt dus alles via de oude naam.

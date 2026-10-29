@@ -56,7 +56,7 @@ deze download.
 
 ## Installer en updater: vaste (geteste) versies
 
-- De installer leest `payload\BalatroMultiplayer3P\compat.json`.
+- De installer leest `payload\BalatroMultiplayer3P\compat.cfg`.
 - **Niets geïnstalleerd of een oudere versie:** hij installeert de geteste Steamodded
   1.0.0~BETA-1620a en Lovely 0.10.0. Die zitten in de zip, gecontroleerd met SHA256 bij het
   bouwen.

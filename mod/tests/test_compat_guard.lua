@@ -34,6 +34,13 @@ ok(CG.cmp("0.10.0", "0.9.0") == 1 and CG.cmp("0.10.0", "0.10") == 1 and CG.cmp("
 
 -- compat.json (real file, tiny JSON reader since luajit has no json module here)
 local compat = CG.load_compat()
+ok(not io.open("compat.json") and io.open("compat.cfg"), "pins live in compat.cfg (a .json in the mod folder is read by Steamodded as mod metadata)")
+do -- an older install still has compat.json: read as fallback
+	local real = NFS.read
+	NFS.read = function(p) if p:find("compat%.cfg$") then return nil end if p:find("compat%.json$") then return real("compat.cfg") end return real(p) end
+	ok(CG.valid(CG.load_compat()), "fallback: reads compat.json when compat.cfg is missing")
+	NFS.read = real
+end
 ok(CG.valid(compat) and compat.balatro.tested[1] == "1.0.1o" and compat.steamodded.tested[1] == "1.0.0~BETA-1620a" and compat.lovely.tested[1] == "0.10.0", "loads the shipped compat.json")
 ok(compat.steamodded.pin.sha256:match("^%x+$") and #compat.steamodded.pin.sha256 == 64 and #compat.lovely.pin.sha256 == 64, "pins carry SHA256 hashes")
 local ver_line = io.open("Multiplayer.json"):read("*a"):match('"version"%s*:%s*"([^"~]+)')
@@ -174,7 +181,14 @@ do
 	pending[3].cb(404, nil)
 	local last = pending[#pending]
 	ok(last.url == U.COMPAT_RAW_URLS[2] and U.compat_state == "fetching", "compat.json: new repo name 404 -> old name")
+	ok(U.COMPAT_RAW_URLS[1]:find("/main/mod/compat%.cfg$") and U.COMPAT_RAW_URLS[3]:find("/main/mod/compat%.json$") and #U.COMPAT_RAW_URLS == 4,
+		"compat from main: compat.cfg (new and old repo name), then the old compat.json name")
 	last.cb(404, nil)
+	for _ = 1, 2 do
+		last = pending[#pending]
+		ok(U.compat_state == "fetching", "compat from main: next url " .. last.url:match("[^/]+/[^/]+$"))
+		last.cb(404, nil)
+	end
 	ok(U.compat_state == "failed", "download failure is silent")
 	pending = {}; U.state = "idle"; U.compat_state = nil
 	U.check(); pending[1].cb(200, rel); pending[2].cb(200, "<html>garbage")

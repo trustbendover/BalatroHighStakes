@@ -22,7 +22,9 @@ end
 U.API_URLS = urls("https://api.github.com/repos/%s/releases/latest")
 U.RAW_URLS = urls("https://raw.githubusercontent.com/%s/main/version.json")
 -- 0.6.8: tested versions (compat.json) from the latest release; raw main as fallback
-U.COMPAT_RAW_URLS = urls("https://raw.githubusercontent.com/%s/main/mod/compat.json")
+-- (mod/compat.cfg since 0.6.8: Steamodded reads every .json in a mod folder as mod metadata; .json = older main)
+U.COMPAT_RAW_URLS = urls("https://raw.githubusercontent.com/%s/main/mod/compat.cfg")
+for _, u in ipairs(urls("https://raw.githubusercontent.com/%s/main/mod/compat.json")) do U.COMPAT_RAW_URLS[#U.COMPAT_RAW_URLS + 1] = u end
 U.API_URL, U.RAW_URL, U.COMPAT_RAW_URL = U.API_URLS[1], U.RAW_URLS[1], U.COMPAT_RAW_URLS[1]
 U.RELEASES_URL = "https://github.com/" .. U.REPO .. "/releases/latest"
 U.TIMEOUT = 15

@@ -14,7 +14,7 @@ NFS = {
  write=function() return true end, append=function() return true end, mount=function() return true end, smodsAddRedirect=function() end,
 }
 love={filesystem={read=function(p) if p=="version.jkr" then return "1.0.1o-FULL\n" end end, getInfo=function() end, getDirectoryItems=function() return {} end}}
-function sendDebugMessage() end function sendInfoMessage() end function sendWarnMessage(m) end function sendErrorMessage(m) print("ERR",m) end function sendTraceMessage() end
+function sendDebugMessage() end function sendInfoMessage() end function sendWarnMessage(m, l) print("WARN", m) end function sendErrorMessage(m, l) print("ERR", m) end function sendTraceMessage() end
 function boot_print_stage() end
 package.preload["lovely"]=function() return {version="0.10.0", mod_dir=MODS} end
 package.preload["SMODS.preflight.sharedUtil"]=function() return dofile(SM.."/src/preflight/sharedUtil.lua") end

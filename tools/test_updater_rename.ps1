@@ -30,7 +30,7 @@ try {
     # 4. nothing answers -> error exit, no crash
     Reset; $r = Run @(); Ok ($r.code -eq 1) 'offline -> exit 1'
     # 5. brand.json next to the mod sets the slugs
-    Reset; W (Join-Path $root 'mod\brand.json') '{ "repo": "someone/NewName", "repo_old": "someone/OldName", "asset_prefix": "BalatroMultiplayer3P" }'
+    Reset; W (Join-Path $root 'mod\brand.cfg') '{ "repo": "someone/NewName", "repo_old": "someone/OldName", "asset_prefix": "BalatroMultiplayer3P" }'
     W (Join-Path $root 'api\repos\someone\OldName\releases\latest') (Rel 'v0.7.0')
     $r = Run @(); Ok ($r.code -eq 10 -and $r.out -match 'Latest:\s+v0\.7\.0' -and $r.out -match 'someone/NewName') 'repo names come from brand.json'
     # 6. -Repo still overrides (old 0.6.6/0.6.7 command lines)

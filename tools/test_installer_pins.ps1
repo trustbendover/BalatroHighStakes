@@ -45,7 +45,7 @@ function Reset-Sandbox([string]$smodsVer, [string]$lovelyVer) {
     if (Test-Path -LiteralPath $root) { Remove-Item -LiteralPath $root -Recurse -Force }
     foreach ($f in 'install.ps1', 'pins.ps1', 'settings.ps1') { W (Join-Path $inst $f) ([IO.File]::ReadAllText((Join-Path $Repo "installer\$f"))) }
     W (Join-Path $payload 'BalatroMultiplayer3P\Multiplayer.json') '{ "id": "Multiplayer", "version": "0.6.8~3P" }'
-    W (Join-Path $payload 'BalatroMultiplayer3P\compat.json') ([IO.File]::ReadAllText((Join-Path $Repo 'mod\compat.json')))
+    W (Join-Path $payload 'BalatroMultiplayer3P\compat.cfg') ([IO.File]::ReadAllText((Join-Path $Repo 'mod\compat.cfg')))
     W (Join-Path $payload 'smods\version.lua') 'return "1.0.0~BETA-1620a-STEAMODDED"'
     W (Join-Path $payload 'winmm.dll') "fake dll lovely-injectorversion0.10.0mod_dir"
     W (Join-Path $game 'Balatro.exe') 'fake'
@@ -87,7 +87,7 @@ try {
     Ok ($r.code -eq 0) 'sandbox install (keep) exits 0'
     Ok ((Get-SmodsVersion (Join-Path $mods 'smods-mine')) -eq '1.0.0~BETA-1801a' -and -not (Test-Path (Join-Path $mods 'smods'))) 'kept Steamodded untouched, bundled one not added'
     Ok (([IO.File]::ReadAllText((Join-Path $game 'winmm.dll'))) -match '0\.11\.0') 'kept Lovely untouched'
-    Ok (Test-Path (Join-Path $mods 'BalatroMultiplayer3P\compat.json')) 'mod installed with compat.json'
+    Ok (Test-Path (Join-Path $mods 'BalatroMultiplayer3P\compat.cfg')) 'mod installed with compat.cfg'
     $man = Get-Content -LiteralPath (Join-Path $root 'data\MP3P-install.json') -Raw | ConvertFrom-Json
     Ok ($man.deps.steamodded.action -eq 'keep' -and $man.deps.lovely.action -eq 'keep' -and -not (@($man.installedPaths) -contains (Join-Path $game 'winmm.dll'))) 'manifest records keep; kept files are not ours to uninstall'
 

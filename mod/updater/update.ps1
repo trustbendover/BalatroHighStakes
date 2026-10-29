@@ -41,9 +41,11 @@ function Is-Newer([string]$a, [string]$b) {
 }
 
 $Here = Split-Path -Parent $MyInvocation.MyCommand.Path
-# 0.6.8: repo slug + zip prefix in one place (mod/brand.json); built-in defaults if it is missing.
+# 0.6.8: repo slug + zip prefix in one place (mod/brand.cfg); built-in defaults if it is missing.
 $Brand = @{ repo = 'trustbendover/BalatroHighStakes'; repo_old = 'trustbendover/BalatroMultiplayer3P'; asset_prefix = 'BalatroMultiplayer3P' }
-foreach ($bj in (Join-Path (Split-Path -Parent $Here) 'brand.json'), (Join-Path $Here 'payload\BalatroMultiplayer3P\brand.json'), (Join-Path $Here 'brand.json')) {
+# brand.cfg since 0.6.8 (Steamodded reads every .json in a mod folder as mod metadata); brand.json = older copies
+$brandDirs = (Split-Path -Parent $Here), (Join-Path $Here 'payload\BalatroMultiplayer3P'), $Here
+foreach ($bj in @(foreach ($d in $brandDirs) { Join-Path $d 'brand.cfg'; Join-Path $d 'brand.json' })) {
     if (Test-Path -LiteralPath $bj) {
         try { $b = Get-Content -LiteralPath $bj -Raw | ConvertFrom-Json; foreach ($k in 'repo', 'repo_old', 'asset_prefix') { if ($b.$k) { $Brand[$k] = [string]$b.$k } } } catch {}
         break

@@ -49,6 +49,12 @@
 
 ## 0.6.8~3P (in development - not released yet) - host migration
 
+- **Clean log: no "Found invalid metadata JSON file ... compat.json / brand.json" errors.** Steamodded reads every
+  file with `.json` anywhere in its name (in any subfolder) as mod metadata. The two data files are now
+  `compat.cfg` and `brand.cfg` (still plain JSON inside). The mod, installer and updater read the old names as a fallback; the release asset stays
+  `compat.json`, and the in-game check tries `mod/compat.cfg` and then `mod/compat.json` on GitHub main.
+  The build now fails if any other `.json` ends up in the mod folder.
+
 - **Warning for the official Balatro Multiplayer mods.** The official mod (id `Multiplayer`, the same id as ours)
   and its 1.0 platform (`MultiplayerPvP` with the same `mp` prefix, `MultiplayerAPI`, `MultiplayerSPDRN`) clash
   with High Stakes. `Install.bat` now lists them and offers to move them to the backup folder (default yes; never
