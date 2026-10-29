@@ -1,0 +1,2 @@
+Balatro High Stakes DEV build marker. This folder is never shipped in a release zip
+(tools/build_release.py refuses). Dev code only runs with this file present AND HS_DEV_LOCAL=1.

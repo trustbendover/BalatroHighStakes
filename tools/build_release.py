@@ -29,7 +29,10 @@ VENDOR = {
 MOD_EXCLUDE = re.compile(r"(^|/)(\.git|\.github|\.env|node_modules|dist|logs?)(/|$)|\.log$")
 # the Installer payload also leaves out the mod's tests/ (Steamodded scans every *.json in the mod folder and
 # logged "Found invalid metadata JSON file ... tests/koth_vectors.json" errors); the source zip keeps them
-PAYLOAD_EXCLUDE = re.compile(MOD_EXCLUDE.pattern + r"|^tests/")
+PAYLOAD_EXCLUDE = re.compile(MOD_EXCLUDE.pattern + r"|^tests/|^dev/")
+# DEV ONLY local test mode (mod/dev/, tools/dev_*, its tests): never in a release zip. --dev builds a separate,
+# clearly named DEV zip instead.
+DEV_PATHS = re.compile(r"(^|/)mod/dev/|(^|/)payload/[^/]+/dev/|(^|/)tools/dev_|(^|/)mod/tests/test_dev_|DEV_BUILD")
 FORBIDDEN = [b"playit.gg/claim", b".ply.gg", b"joinmc.link", b"virtualized.dev"]  # + upstream server address (Steam only)
 # extra private words (e.g. local account names) can be passed without committing them:
 FORBIDDEN += [w.strip().lower().encode() for w in os.environ.get("RELEASE_FORBIDDEN", "").split(",") if w.strip()]
@@ -105,7 +108,10 @@ def main():
     ap.add_argument("--out", default=os.path.join(ROOT, "dist-release"))
     ap.add_argument("--vendor-cache", default=os.path.join(ROOT, ".vendor"))
     ap.add_argument("--version")
+    ap.add_argument("--dev", action="store_true", help="build the separate DEV local-test zip (never a release)")
     a = ap.parse_args()
+    if a.dev:
+        return build_dev(a)
     ver = a.version or json.load(open(os.path.join(ROOT, "mod", "Multiplayer.json")))["version"]
     tag = "v" + ver.split("~")[0]
     os.makedirs(a.out, exist_ok=True)
@@ -138,6 +144,8 @@ def main():
     src_name = f"{PREFIX}-{tag}-source"
     with zipfile.ZipFile(src_zip, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
         for f in tracked_files():
+            if DEV_PATHS.search(f):
+                continue
             if os.path.isfile(os.path.join(ROOT, f)):
                 z.write(os.path.join(ROOT, f), f"{src_name}/{f}")
 
@@ -154,6 +162,11 @@ def main():
             sys.exit(f"{inst_zip}: only Multiplayer.json may be a .json file in the mod ({stray[0]})")
         if not any(n.endswith(f"/payload/{FOLDER}/core.lua") for n in z.namelist()):
             sys.exit(f"{inst_zip}: mod core.lua missing from the payload")
+    for p in (inst_zip, src_zip):
+        with zipfile.ZipFile(p) as z:
+            dev = [n for n in z.namelist() if DEV_PATHS.search(n)]
+            if dev:
+                sys.exit(f"{p}: DEV local-test files must never be in a release zip ({dev[0]})")
     # compat.json is also a release asset: the in-game update check reads it from the latest release
     compat_out = os.path.join(a.out, "compat.json")
     shutil.copyfile(COMPAT_PATH, compat_out)
@@ -165,6 +178,32 @@ def main():
     if os.environ.get("GITHUB_OUTPUT"):
         with open(os.environ["GITHUB_OUTPUT"], "a") as fh:
             fh.write(f"tag={tag}\nversion={ver}\n")
+
+
+def build_dev(a):
+    """DEV ONLY: mod with mod/dev/ + pinned Steamodded + launcher, for tools/dev_local_match.ps1. Not a release."""
+    ver = a.version or json.load(open(os.path.join(ROOT, "mod", "Multiplayer.json")))["version"]
+    if not os.path.isfile(os.path.join(ROOT, "mod", "dev", "DEV_BUILD")):
+        sys.exit("mod/dev/DEV_BUILD missing")
+    os.makedirs(a.out, exist_ok=True)
+    name = f"BalatroHighStakes-DEV-LOCALTEST-{ver}"
+    out = os.path.join(a.out, name + ".zip")
+    smods = fetch("smods", a.vendor_cache)
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
+        add_tree(z, os.path.join(ROOT, "mod"), f"{name}/Mods/{FOLDER}", re.compile(MOD_EXCLUDE.pattern + r"|^tests/"))
+        prefix = smods.namelist()[0].split("/")[0] + "/"
+        for n in smods.namelist():
+            if n.endswith("/") or not n.startswith(prefix):
+                continue
+            z.writestr(f"{name}/Mods/smods/" + n[len(prefix):], smods.read(n))
+        z.write(os.path.join(ROOT, "tools", "dev_local_match.ps1"), f"{name}/dev_local_match.ps1")
+        z.write(os.path.join(ROOT, "tools", "DEV_LOCALTEST_README.txt"), f"{name}/README.txt")
+        z.writestr(f"{name}/THIS_IS_A_DEV_BUILD_NOT_A_RELEASE.txt", "Local test build. Never install into your real Mods folder.\n")
+    check_clean(out)
+    with zipfile.ZipFile(out) as z:
+        if not any(n.endswith(f"/Mods/{FOLDER}/dev/DEV_BUILD") for n in z.namelist()):
+            sys.exit("DEV zip lacks dev/DEV_BUILD")
+    print(f"{sha256(open(out, 'rb').read())}  {os.path.basename(out)}")
 
 
 if __name__ == "__main__":

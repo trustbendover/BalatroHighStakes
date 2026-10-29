@@ -398,6 +398,13 @@ if MP.ENV.server_url ~= nil or MP.ENV.server_port ~= nil then
 end
 MP.ENV.mode = "steam"
 
+-- DEV ONLY: local test transport for several instances on one PC (tools/dev_local_match.ps1). mod/dev/ is never
+-- shipped in a release zip (tools/build_release.py refuses), and even then it needs dev/DEV_BUILD + HS_DEV_LOCAL=1.
+MP.DEV = nil
+if os.getenv("HS_DEV_LOCAL") == "1" and NFS.getInfo(MP.path .. "/dev/DEV_BUILD") then
+	MP.DEV = MP.load_mp_file("dev/dev_local.lua")
+end
+
 MP.STEAM_P2P = nil
 do
 	local function create_router()
@@ -407,7 +414,8 @@ do
 		Core.KOTH = MP.load_mp_file("networking/koth_rules.lua") -- King of the Hill gamemode rules
 		Core.TEAMS = MP.load_mp_file("networking/teams_rules.lua") -- Teams gamemode rules
 		Core.PVP = MP.load_mp_file("networking/pvp_rules.lua") -- free-for-all life loss (2-8 players)
-		local backend, berr = P2P.new_ffi_backend()
+		local backend, berr
+		if MP.DEV and MP.DEV.new_backend then backend, berr = MP.DEV.new_backend() else backend, berr = P2P.new_ffi_backend() end
 		if not backend then error(berr) end
 		local json = require("json")
 		local ui = love.thread.getChannel("networkToUi")
