@@ -42,4 +42,10 @@ for _, f in ipairs({ "dev/dev_local.lua", "dev/autoplay.lua", "dev/scenarios.lua
 end
 local C2 = dofile("dev/capture.lua")
 ok(C2.file_name("dev3", 7, "pvp ante/2") == "dev3_007_pvp_ante_2.png", "screenshot names are safe file names")
+-- match over: never play on, screenshot the stats once, then back to the lobby
+ok(A.over_decide({ over = false }) == "play", "running match: play")
+ok(A.over_decide({ over = true, stats_open = false, over_for = 5 }) == "idle", "run over, no stats yet: idle (no plays)")
+ok(A.over_decide({ over = true, stats_open = true, stats_open_for = 3, over_for = 6 }) == "shot", "stats screen up: screenshot")
+ok(A.over_decide({ over = true, stats_open = true, stats_open_for = 3, stats_shot = true, match_done = true, over_for = 25 }) == "lobby", "then back to the lobby")
+ok(A.over_decide({ over = true, over_for = 99, match_done = false }) == "idle", "eliminated mid-match: stays (spectates) until the match is decided")
 print("PASS: dev autoplay")

@@ -128,6 +128,34 @@ local function buy_cheap()
 	end
 end
 
+A.STATS_SHOT_DELAY = 2.5 -- after the match-stats overlay opens (let it animate in)
+A.LOBBY_AFTER = 20       -- seconds after the match end before the bot goes back to the lobby
+--- pure: what to do once this player's run is over. -> "play" | "idle" | "shot" | "lobby"
+function A.over_decide(s)
+	if not s.over then return "play" end
+	if s.stats_open and not s.stats_shot and s.stats_open_for >= A.STATS_SHOT_DELAY then return "shot" end
+	if s.match_done and s.over_for >= A.LOBBY_AFTER and not s.went_lobby then return "lobby" end
+	return "idle"
+end
+function A.match_over_tick(D, t)
+	local MS = MP.MATCH_STATS
+	local in_run = G.STAGE == G.STAGES.RUN and MP.LOBBY and MP.LOBBY.code
+	local over = in_run and MP.GAME and (MP.GAME.won or G.STATE == G.STATES.GAME_OVER or (MP.GAME.lives or 1) <= 0) or false
+	if not over then A.over_t, A.stats_t, A.stats_shot, A.went_lobby = nil, nil, nil, nil; return false end
+	A.over_t = A.over_t or t
+	local stats_open = MS and MS.last and G.OVERLAY_MENU and not MS.show_at and true or false
+	if stats_open then A.stats_t = A.stats_t or t else A.stats_t = nil end
+	local act = A.over_decide({ over = true, stats_open = stats_open, stats_open_for = A.stats_t and (t - A.stats_t) or 0,
+		stats_shot = A.stats_shot, match_done = (MP.GAME.won or (MS and MS.last)) and true or false,
+		over_for = t - A.over_t, went_lobby = A.went_lobby })
+	if act == "shot" then A.stats_shot = true; if D.shot then D.shot("match_stats") end
+	elseif act == "lobby" then
+		A.went_lobby = true; D.log("autoplay: match over -> back to lobby")
+		if G.FUNCS.mp_return_to_lobby then pcall(G.FUNCS.mp_return_to_lobby) end
+	elseif not A.idle_logged then A.idle_logged = true; D.log("autoplay: run over, bot idle (no more plays)") end
+	return true
+end
+
 function A.tick(D, dt, t)
 	D.t = t
 	D_log = D.log or D_log
@@ -136,6 +164,7 @@ function A.tick(D, dt, t)
 	-- the patch-notes pop-up / other overlays on the main menu would block the bot: close them
 	if G.OVERLAY_MENU and G.STAGE == G.STAGES.MAIN_MENU and not (MP.LOBBY and MP.LOBBY.code) then G.FUNCS.exit_overlay_menu(); return end
 	if G.STATE ~= G.STATES.SHOP then A.shop_bought = false end
+	if A.match_over_tick(D, t) then return end
 	local found = A.buttons()
 	local act = A.decide(A.snapshot(D, found))
 	if not act then return end

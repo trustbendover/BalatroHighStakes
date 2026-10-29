@@ -104,7 +104,7 @@ Write-Host "started $Players instance(s); captures -> $cap"
 if ($RecordSeconds -gt 0) {
     if (-not (Test-Path $Ffmpeg)) { Write-Warning "ffmpeg not found at $Ffmpeg - no video" } else {
         # same tiling as mod/dev/dev_local.lua D.layout: only the game windows, never the rest of the desktop
-        if ($Players -le 2) { $vx = 0; $vy = 270; $vw = 1920; $vh = 540 } else { $vx = 0; $vy = 270; $vw = 1920; $vh = 540 }
+        if ($Players -le 2) { $vx = 0; $vy = 270; $vw = 1920; $vh = 540 } elseif ($Players -le 4) { $vx = 0; $vy = 270; $vw = 480 * $Players; $vh = 270 } else { $vx = 0; $vy = 270; $vw = 1920; $vh = 540 }
         $fa = "-nostdin -hide_banner -loglevel warning -y -f gdigrab -framerate 15 -offset_x $vx -offset_y $vy -video_size ${vw}x$vh -i desktop -t $RecordSeconds " +
               "-c:v libx264 -preset veryfast -crf 28 -pix_fmt yuv420p -g 30 -movflags +frag_keyframe+empty_moov `"$cap\match.mp4`""
         $rp = Start-Process $Ffmpeg -ArgumentList $fa -WindowStyle Hidden -PassThru -RedirectStandardError "$cap\ffmpeg.log"

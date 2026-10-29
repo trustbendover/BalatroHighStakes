@@ -10,10 +10,19 @@ local S = { step = 0, shots = {} }
 
 local function ante() return G.GAME and G.GAME.round_resets and G.GAME.round_resets.ante or 0 end
 local function once(D, key, label) if not S.shots[key] then S.shots[key] = true; D.shot(label or key) end end
+-- blind-select texts ("Choose your next Blind") pop in letter by letter: shoot a bit later
+S.pending = {}
+local function later(D, key, label, t, delay)
+	if S.shots[key] or S.pending[key] then return end
+	S.pending[key] = { at = t + (delay or 2.5), label = label }
+end
+local function flush(D, t)
+	for k, p in pairs(S.pending) do if t >= p.at then S.pending[k] = nil; once(D, k, p.label) end end
+end
 
 function S.setup(D)
 	if D.scenario == "ready_gating" and D.role == "guest" then D.ready_after = 25 end
-	D.on_action = function(act) if act == "mp_return_to_lobby" then D.shot("match_end_stats") end end
+	D.on_action = function() end
 end
 
 function S.tick(D, dt, t)
@@ -64,8 +73,12 @@ function S.tick(D, dt, t)
 		S.step = math.max(S.step, 4)
 		once(D, "run_start", "run_start")
 		local a = ante()
-		if a >= 2 then once(D, "ante2", "ante2") end
-		if MP.GAME and MP.GAME.pvp_reached then once(D, "pvp_" .. a, "pvp_ante" .. a) end
+		if a >= 2 then later(D, "ante2", "ante2", t) end
+		if MP.GAME and MP.GAME.pvp_reached then later(D, "pvp_" .. a, "pvp_ante" .. a, t) end
+		-- host migration: this instance became host (or the host changed) during the run
+		local h = MP.LOBBY and MP.LOBBY.is_host and true or false
+		if S.was_host ~= nil and S.was_host ~= h then later(D, "migrated_" .. tostring(h), h and "now_host" or "after_host_migration", t, 4) end
+		S.was_host = h
 		if a >= 2 and not S.quit_at then
 			if (D.scenario == "host_leave" and D.role == "host") or (D.scenario == "guest_rejoin" and D.name == "dev2") then
 				S.quit_at = t + 3
@@ -75,7 +88,8 @@ function S.tick(D, dt, t)
 		if S.quit_at and t > S.quit_at then S.quit_at = math.huge; love.event.quit() end
 	end
 	if MP.SPECTATE and MP.SPECTATE.watching and MP.SPECTATE.watching() then once(D, "spectating") end
-	if G.STATE == G.STATES.GAME_OVER then once(D, "game_over") end
+	if G.STATE == G.STATES.GAME_OVER then later(D, "game_over", "game_over", t, 2) end
+	flush(D, t)
 end
 
 return S

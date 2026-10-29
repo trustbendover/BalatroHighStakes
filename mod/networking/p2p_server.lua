@@ -189,6 +189,9 @@ end
 
 function Server:lose_life(c, cause)
 	cause = cause or "round"
+	-- 0.6.8: once the match is decided (or for a player already out) no life is lost any more
+	if c.eliminated or c.spectator or (c.lobby and not c.lobby.isInGame) then return end
+	if (c.lives or 0) <= 0 then return end
 	if cause == "timer" then
 		if c.timerLivesBlocker then return end
 		c.timerLivesBlocker = true
@@ -196,7 +199,7 @@ function Server:lose_life(c, cause)
 		if c.roundLivesBlocker then return end
 		c.roundLivesBlocker = true
 	end
-	c.lives = c.lives - 1
+	c.lives = math.max(0, c.lives - 1)
 	local b = c.lobby and self.book_entry and self:book_entry(c.lobby, c)
 	if b then b.livesLost = (b.livesLost or 0) + 1 end
 	sendA(c, { action = "playerInfo", lives = c.lives })
@@ -351,13 +354,16 @@ function Server:check_game_over_inner(L)
 		for _, p in ipairs(dying) do if s_eq(p.score, best) then spared[p] = true end end
 	end
 	for _, p in ipairs(dying) do
-		p.eliminated = true
-		if not spared[p] then sendA(p, { action = "loseGame" }) end
-		for _, o in ipairs(L.players) do
-			if o ~= p then sendA(o, { action = "playerEliminated", playerId = p.id, username = p.username }) end
+		-- a player spared by the final-score tie rule wins: not eliminated, not in the elimination order
+		if not spared[p] then
+			p.eliminated = true
+			sendA(p, { action = "loseGame" })
+			for _, o in ipairs(L.players) do
+				if o ~= p then sendA(o, { action = "playerEliminated", playerId = p.id, username = p.username }) end
+			end
+			L.elimOrder = L.elimOrder or {}
+			L.elimOrder[#L.elimOrder + 1] = p.id
 		end
-		L.elimOrder = L.elimOrder or {}
-		L.elimOrder[#L.elimOrder + 1] = p.id
 	end
 	if next(spared) then
 		for p in pairs(spared) do sendA(p, { action = "winGame", reason = "final_score" }); L.winnerId = L.winnerId or p.id end
