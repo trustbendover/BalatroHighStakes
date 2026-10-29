@@ -254,6 +254,11 @@ function LP.fit(s, scale, w)
 end
 
 -- ---------------------------------------------------------------- actions (game)
+--- One info line in the Lovely log per preset action (no names or settings, just what happened)
+function LP.log(msg)
+	if sendInfoMessage then pcall(sendInfoMessage, "Lobby presets: " .. msg, "MULTIPLAYER") end
+end
+
 LP.status = nil
 LP.confirm_delete = nil
 
@@ -275,6 +280,7 @@ function LP.apply(preset, label)
 	local before_decks = MP.LOBBY.config.different_decks
 	local changed, notes = LP.apply_to(MP.LOBBY.config, preset, ctx())
 	MP.ACTIONS.lobby_options()
+	LP.log(string.format("loaded %s (%d settings changed%s)", tostring(preset.log_id or "preset"), #changed, notes.mode_differs and ", mode kept" or ""))
 	if G.FUNCS.copy_host_deck and not MP.LOBBY.config.different_decks then pcall(G.FUNCS.copy_host_deck) end
 	local msg = string.format(L("k_preset_loaded_fmt", "Loaded: %s"), label or "?")
 	if notes.mode_differs then msg = msg .. " - " .. string.format(L("k_preset_mode_kept_fmt", "mode stays %s"), LP.mode_name(MP.LOBBY.config.gamemode)) end
@@ -361,10 +367,11 @@ if G and G.FUNCS then
 	LP.FUNCS = {}
 	LP.FUNCS.builtin = function(i)
 		local b = LP.BUILTIN[i]
-		if b and LP.apply({ options = b.options }, L(b.label, b.id)) then LP.reopen() end
+		if b and LP.apply({ options = b.options, log_id = "built-in " .. b.id }, L(b.label, b.id)) then LP.reopen() end
 	end
 	LP.FUNCS.load = function(i)
 		local p = i and LP.get_slots()[i]
+		if p then p.log_id = "slot " .. i end
 		if p and LP.apply(p, p.name or LP.auto_name(p)) then LP.reopen() end
 	end
 	LP.FUNCS.save = function(i)
@@ -373,7 +380,9 @@ if G and G.FUNCS then
 		if not p then return end
 		LP.get_slots()[i] = p
 		LP.confirm_delete = nil
-		LP.status = LP.save() and { text = string.format(L("k_preset_saved_fmt", "Saved in slot %d"), i), colour = "GREEN" }
+		local saved = LP.save()
+		LP.log(saved and ("saved slot " .. i) or ("saving slot " .. i .. " FAILED"))
+		LP.status = saved and { text = string.format(L("k_preset_saved_fmt", "Saved in slot %d"), i), colour = "GREEN" }
 			or { text = L("k_preset_save_failed", "Could not save"), colour = "RED" }
 		LP.refresh()
 	end
@@ -382,10 +391,11 @@ if G and G.FUNCS then
 		if LP.confirm_delete ~= i then
 			LP.confirm_delete = i
 			LP.status = { text = L("k_preset_delete_confirm", "Click again to delete"), colour = "RED" }
+			LP.log("delete slot " .. i .. " asked (waiting for Sure?)")
 		else
 			LP.get_slots()[i] = nil
 			LP.confirm_delete = nil
-			LP.save()
+			LP.log((LP.save() and "deleted slot " or "deleting slot FAILED ") .. i)
 			LP.status = { text = string.format(L("k_preset_deleted_fmt", "Slot %d deleted"), i), colour = "UI" }
 		end
 		LP.refresh()

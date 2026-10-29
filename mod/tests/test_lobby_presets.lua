@@ -63,7 +63,9 @@ MP.LOBBY.is_host = true; MP.LOBBY.config.forced_config = true
 ok(not LP.apply({ options = { starting_lives = 2 } }, "x"), "forced ruleset: presets do not override")
 MP.LOBBY.config.forced_config = nil
 
--- 5. save / delete with confirm (game functions)
+-- 5. save / delete with confirm (game functions), each logged once
+local logged = {}
+_G.sendInfoMessage = function(m) logged[#logged + 1] = m end
 G.OVERLAY_MENU = nil
 G.FUNCS.mp3p_preset_save_2()
 ok(LP.slots[2] and LP.parse(files["2/hs_lobby_presets.cfg"])[2].options.starting_lives == 7, "Save stores the current lobby in the slot and on disk")
@@ -71,6 +73,10 @@ G.FUNCS.mp3p_preset_delete_2()
 ok(LP.slots[2] and LP.confirm_delete == 2, "first Delete click only asks to confirm")
 G.FUNCS.mp3p_preset_delete_2()
 ok(LP.slots[2] == nil and LP.parse(files["2/hs_lobby_presets.cfg"])[2] == nil, "second click deletes")
+G.UIDEF = { create_UIBox_lobby_options = function() return {} end }; G.FUNCS.overlay_menu = function() end
+LP.slots[1] = LP.capture(base()); G.FUNCS.mp3p_preset_load_1()
+ok(logged[1] == "Lobby presets: saved slot 2" and logged[2]:find("delete slot 2 asked", 1, true) and logged[3] == "Lobby presets: deleted slot 2"
+	and logged[4]:find("loaded slot 1", 1, true), "save / delete-ask / delete / load each write one log line")
 
 -- 6. layout: EN + NL, every slot filled with the longest auto-name, confirm state; no overflow, no cut labels
 local function long_slot() return { options = { starting_lives = 16, timer_base_seconds = 240 }, gamemode = "gamemode_mp_showdown" } end
