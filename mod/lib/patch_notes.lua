@@ -355,21 +355,40 @@ if G and G.FUNCS then
 	end
 end
 
---- Small "Patch notes" button on the main menu, in the bottom-right corner.
---- Not under the version text (top right): that stack (game, Steamodded, our version, connection status) has a
---- varying number and width of lines, so anything placed under it can overlap. The bottom-right corner is empty
---- on the vanilla main menu and sits clear of the centred button row at every aspect ratio.
-PN.MENU_BUTTON_POS = { align = "bri", offset = { x = -0.25, y = -0.25 } }
+--- Small "Patch notes" button on the main menu, right-aligned directly under the top-right text stack.
+--- That stack is several separate UIBoxes at fixed offsets (vanilla G.VERSION y=0, Steamodded MODDED_VERSION y=0.3,
+--- our version y=0.6, connection status y=0.9, plus whatever other mods add). So the button's y is computed at
+--- runtime from the real boxes: the lowest bottom edge (offset.y + rendered height) of every "tri" box on
+--- G.ROOM_ATTACH, plus a small gap. More lines, longer or Dutch text, or another resolution just move it down.
+--- (Bottom right is taken by Steamodded's MODS button, Discord/X and the language button; top left by the updater.)
+PN.MENU_BUTTON_GAP = 0.1
+PN.MENU_STACK_FALLBACK = 1.2 -- 4 lines x 0.3, if no box can be measured
+
+function PN.menu_stack_bottom(boxes, root, self_box)
+	local bottom
+	for _, b in ipairs(boxes or {}) do
+		local al, role = b ~= self_box and b.alignment, b.role
+		if al and al.type == "tri" and role and role.major == root then
+			local y = ((al.offset and al.offset.y) or 0) + ((b.T and b.T.h) or 0)
+			if not bottom or y > bottom then bottom = y end
+		end
+	end
+	return bottom or PN.MENU_STACK_FALLBACK
+end
+
 function PN.add_menu_button()
 	pcall(function()
 		if G.MP3P_PATCHNOTES_UI then G.MP3P_PATCHNOTES_UI:remove(); G.MP3P_PATCHNOTES_UI = nil end
+		if not (G.STAGES and G.STAGE == G.STAGES.MAIN_MENU and G.ROOM_ATTACH) then return end
 		local T = PN.TEXT[PN.lang()] or PN.TEXT.en
+		local y = PN.menu_stack_bottom(G.I and G.I.UIBOX, G.ROOM_ATTACH) + PN.MENU_BUTTON_GAP
 		G.MP3P_PATCHNOTES_UI = UIBox({
 			definition = { n = G.UIT.ROOT, config = { align = "cm", colour = G.C.CLEAR }, nodes = {
 				UIBox_button({ label = { T.button }, button = "mp3p_patchnotes_open", colour = G.C.BLUE, minw = 2.6, minh = 0.5, scale = 0.38 }),
 			} },
-			config = { align = PN.MENU_BUTTON_POS.align, bond = "Weak", offset = PN.MENU_BUTTON_POS.offset, major = G.ROOM_ATTACH },
+			config = { align = "tri", bond = "Weak", offset = { x = 0, y = y }, major = G.ROOM_ATTACH },
 		})
+		PN.menu_button_y = y
 	end)
 end
 

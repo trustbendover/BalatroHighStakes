@@ -632,6 +632,8 @@ end
 function MP.UI.update_connection_status()
 	if G.HUD_connection_status then G.HUD_connection_status:remove() end
 	if G.STAGE == G.STAGES.MAIN_MENU then G.HUD_connection_status = G.UIDEF.get_connection_status_ui() end
+	-- the Patch notes button sits under the status line: measure the stack again now the status box exists
+	if G.STAGE == G.STAGES.MAIN_MENU and MP.PATCH_NOTES and MP.PATCH_NOTES.add_menu_button then MP.PATCH_NOTES.add_menu_button() end
 end
 
 local gameMainMenuRef = Game.main_menu

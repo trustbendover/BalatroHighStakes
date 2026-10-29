@@ -182,15 +182,22 @@ G.FUNCS.mp3p_patchnotes_close()
 -- the Patch notes button reopens it any time
 G.FUNCS.mp3p_patchnotes_open()
 ok(G.OVERLAY_MENU and PN.view and PN.view.versions[1] == "0.6.8", "Patch notes button reopens the current notes")
--- the menu button stays clear of the top-right version/status stack (any number of lines): bottom-right corner
-ok(PN.MENU_BUTTON_POS.align == "bri" and PN.MENU_BUTTON_POS.offset.y < 0, "Patch notes button sits in the bottom-right corner, not under the version text")
+-- the menu button goes directly under the top-right text stack, measured from the real boxes
 do
+	local root, other = {}, {}
+	local function box(y, h, al, major) return { alignment = { type = al or "tri", offset = { x = 0, y = y } }, role = { major = major or root }, T = { h = h } } end
+	local vanilla = { box(0, 0.3), box(0.3, 0.3), box(0.6, 0.3), box(0.9, 0.3) } -- G.VERSION, Steamodded, ours, status
+	ok(math.abs(PN.menu_stack_bottom(vanilla, root) - 1.2) < 1e-9, "stack of 4 lines: button starts under line 4 (y 1.2)")
+	local more = { box(0, 0.3), box(0.3, 0.3), box(0.6, 0.3), box(0.9, 0.3), box(1.2, 0.3), box(1.5, 0.45) }
+	ok(math.abs(PN.menu_stack_bottom(more, root) - 1.95) < 1e-9, "extra mod lines / taller text: button moves down with them")
+	local mixed = { box(0, 0.3), box(0.9, 0.3), box(5, 1, "bri"), box(4, 1, "tli"), box(7, 1, "tri", other) }
+	ok(math.abs(PN.menu_stack_bottom(mixed, root) - 1.2) < 1e-9, "MODS/Discord/X/language (bottom right), updater (top left), other parents: ignored")
+	local selfb = box(1.3, 0.5)
+	ok(math.abs(PN.menu_stack_bottom({ box(0.9, 0.3), selfb }, root, selfb) - 1.2) < 1e-9, "the button itself is not counted")
+	ok(PN.menu_stack_bottom({}, root) == PN.MENU_STACK_FALLBACK, "nothing measurable: safe fallback under 4 lines")
 	local src = io.open("lib/patch_notes.lua"):read("*a")
 	local body = src:match("function PN.add_menu_button%(%)(.-)\nend")
-	ok(body and body:find("PN.MENU_BUTTON_POS", 1, true) and not body:find('"tri"', 1, true), "add_menu_button uses MENU_BUTTON_POS (no top-right anchor)")
-	for _, f in ipairs({ "ui/main_menu/version_display.lua", "ui/lobby/lobby.lua", "lib/updater.lua" }) do
-		local s = io.open(f):read("*a")
-		ok(not s:find('align = "bri"', 1, true), f .. ": nothing else on the main menu uses the bottom-right corner")
-	end
+	ok(body and body:find("menu_stack_bottom", 1, true) and not body:find('"bri"', 1, true), "add_menu_button measures the stack (no bottom-right anchor)")
+	ok(io.open("ui/lobby/lobby.lua"):read("*a"):find("PATCH_NOTES.add_menu_button", 1, true), "status line rebuild re-places the button")
 end
 print("PASS: patch notes")
