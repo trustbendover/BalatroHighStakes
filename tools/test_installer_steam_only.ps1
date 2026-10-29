@@ -19,7 +19,7 @@ $r = Convert-EnvToSteam "MODE = Steam`n"
 Ok (-not $r.changed) 'mode=Steam (any case/spaces): unchanged'
 $tcp = "# Written by the MP3P installer`r`nserver_url=example.playit.gg`r`nserver_port=1234`r`nupdate_check=false`r`n"
 $r = Convert-EnvToSteam $tcp
-Ok ($r.changed -and $r.old -eq 'server mode (server example.playit.gg:1234)') "no mode line (old TCP default) -> changed, old: $($r.old)"
+Ok ($r.changed -and $r.old -eq 'server address: example.playit.gg:1234') "no mode line (old TCP default) -> changed, old: $($r.old)"
 Ok ($r.text -match '(?m)^mode=steam\r$' -and $r.text -match '(?m)^update_check=false\r$') 'mode=steam added, other settings kept, CRLF kept'
 Ok ($r.text -notmatch '(?m)^\s*server_url\s*=' -and $r.text -match '(?m)^# old setting .*server_url=example\.playit\.gg') 'server_url commented out (kept as a note)'
 $r = Convert-EnvToSteam "mode=tcp`ncustom_line=1`n"
@@ -42,7 +42,7 @@ function W([string]$path, [string]$text) {
     New-Item -ItemType Directory -Path (Split-Path -Parent $path) -Force | Out-Null
     [IO.File]::WriteAllText($path, $text, (New-Object Text.UTF8Encoding($false)))
 }
-function Reset-Sandbox([string]$oldEnv) {
+function Reset-Sandbox($oldEnv) {  # untyped: [string] would turn $null into ""
     if (Test-Path -LiteralPath $root) { Remove-Item -LiteralPath $root -Recurse -Force }
     foreach ($f in 'install.ps1', 'pins.ps1', 'settings.ps1') { W (Join-Path $inst $f) ([IO.File]::ReadAllText((Join-Path $Repo "installer\$f"))) }
     W (Join-Path $payload 'BalatroMultiplayer3P\Multiplayer.json') '{ "id": "Multiplayer", "version": "0.6.8~3P" }'
@@ -80,7 +80,7 @@ try {
     Reset-Sandbox $old
     $before = Snapshot
     $r = Run-Installer @('-DryRun')
-    Ok ($r.code -eq 0 -and $r.out -match 'SETTINGS \.env action=switch to Steam \(was server mode' -and (Snapshot) -eq $before) 'dry run: says it would switch, changes nothing'
+    Ok ($r.code -eq 0 -and $r.out -match 'SETTINGS \.env action=switch to Steam \(was server address: example\.playit\.gg:1234\)' -and (Snapshot) -eq $before) 'dry run: says it would switch, changes nothing'
     $r = Run-Installer @()
     $e = [IO.File]::ReadAllText($envPath)
     $b = Backups
@@ -97,7 +97,7 @@ try {
     Reset-Sandbox "mode=tcp`nserver_url=old.example.invalid`n"
     $r = Run-Installer @('-Mode', 'tcp', '-HostAddress', 'example.invalid', '-Port', '9999')
     $e = [IO.File]::ReadAllText($envPath)
-    Ok ($r.code -eq 0 -and $r.out -match 'ignored' -and $e -match '(?m)^mode=steam' -and $e -notmatch 'example\.invalid') 'old -Mode/-HostAddress args: ignored, still Steam'
+    Ok ($r.code -eq 0 -and $r.out -match 'ignored' -and $e -match '(?m)^mode=steam' -and $e -notmatch '(?m)^server_url' -and $e -notmatch '9999') 'old -Mode/-HostAddress args: ignored, still Steam'
 
     # a Steam install stays byte-identical (no note, no backup)
     $st = "# Written by the MP3P installer`r`nmode=steam`r`n# TCP fallback: remove the mode line and set server_url / server_port`r`nserver_url=127.0.0.1`r`nserver_port=8788`r`n"

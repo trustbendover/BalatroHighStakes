@@ -23,8 +23,8 @@ function Convert-EnvToSteam([string]$text) {
         elseif ($l -match '^\s*server_port\s*=\s*(.*?)\s*$') { $port = $Matches[1] }
     }
     if ($mode -and $mode.ToLower() -eq 'steam') { return @{ text = $text; changed = $false; old = 'Steam' } }
-    $old = if ($mode) { "mode=$mode" } else { 'server mode' }
-    if ($url) { $old += " (server $url$(if ($port) { ":$port" }))" }
+    $old = if ($mode) { "mode=$mode" } else { 'server address' }
+    if ($url) { $old += ": $url$(if ($port) { ":$port" })" }
     $out = New-Object System.Collections.Generic.List[string]
     foreach ($l in $lines) {
         if ($l -match '^\s*(mode|server_url|server_port)\s*=') { $out.Add($script:SteamOnlyNote + $l.Trim()) } else { $out.Add($l) }
