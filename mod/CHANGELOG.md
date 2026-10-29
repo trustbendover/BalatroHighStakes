@@ -49,6 +49,12 @@
 
 ## 0.6.8 (in development - not released yet) - host migration
 
+- **Lobby presets** (Lobby Options > Presets). Four built-in presets (Classic, Quick Duel, Party 8, Relaxed) and
+  four own slots: Save/Overwrite stores the current lobby settings (lives, timer, PvP ante, countdown, rejoin window,
+  all toggles, seed, deck/sleeve/stake/challenge), Load applies them with one click, Delete asks "Sure?" first.
+  Only the host can load; it goes through the normal lobby options sync. Mode and ruleset are never switched (they
+  are fixed when the lobby is made); a note says when a preset was saved with another mode. Stored per save profile
+  in `hs_lobby_presets.cfg` (not in save.jkr); unknown, invalid or out-of-range values are ignored or clamped.
 - **Patch notes button** now sits right under the version/status text in the top right of the main menu. Its
   position is measured from the real text lines, so it can no longer cover the connection status line, however many
   lines there are.

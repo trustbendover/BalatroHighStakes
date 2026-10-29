@@ -125,7 +125,7 @@ function G.UIDEF.create_UIBox_lobby_options()
 						tabs = {
 							{
 								label = localize("k_lobby_general"),
-								chosen = true,
+								chosen = not (MP.PRESETS and MP.PRESETS.open_on_presets),
 								tab_definition_function = function()
 									return MP.UI.create_lobby_options_tab()
 								end,
@@ -148,6 +148,13 @@ function G.UIDEF.create_UIBox_lobby_options()
 									return MP.UI.create_advanced_options_tab()
 								end,
 							},
+							MP.UI.create_lobby_presets_tab and {
+								label = localize("k_lobby_presets"),
+								chosen = MP.PRESETS and MP.PRESETS.open_on_presets or nil,
+								tab_definition_function = function()
+									return MP.UI.create_lobby_presets_tab()
+								end,
+							} or nil,
 						},
 					}),
 				},
