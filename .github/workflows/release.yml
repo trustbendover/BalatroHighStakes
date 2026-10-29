@@ -62,6 +62,7 @@ jobs:
           luajit tests/test_credits.lua
           luajit tests/test_compat_guard.lua
           luajit tests/test_brand.lua
+          luajit tests/test_ui_fit.lua
 
       - name: Check repo name (0.6.8 rename, see docs/REPO_RENAME_NL.md)
         run: |

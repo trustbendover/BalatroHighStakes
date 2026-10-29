@@ -9,6 +9,13 @@ local SP = MP.SPECTATE
 
 SP.MAX_ROWS = 8
 SP.REFRESH = 0.5
+-- 0.6.8 layout: fixed widths (UI units) so the panel never grows or jumps when a row changes.
+-- Rows are columns: marker | "1. name" | lives | score | status. Texts are fitted in SP.lines.
+SP.ROW_SCALE = 0.35
+SP.COL = { mark = 0.3, name = 3.4, lives = 1.45, score = 1.8, status = 2.1 }
+SP.BOX_W = 9.5 -- black list box (columns + padding)
+SP.CELL_PAD = 0.02
+SP.TEXT_W = 9.2 -- follow / detail / where lines
 SP.state = SP.state or { active = false, follow = nil, joined = false, match = false }
 SP.view = SP.view or {}
 
@@ -24,6 +31,20 @@ SP.L = L
 
 local function clean(n) return (tostring(n or "?"):gsub("~.*$", "")) end
 
+-- identity fallback if lib/fit.lua is missing (never crash the panel)
+local NOFIT = { width = function(s, sc) return #tostring(s or "") * 0.44 * (sc or 1) end,
+	ellipsize = function(s) return tostring(s or "") end, number = function(s) return tostring(s or "") end,
+	join = function(p) return table.concat(p, "   ") end }
+local function fit() return MP.FIT or NOFIT end
+local function F_colour(dst, src) if MP.FIT then MP.FIT.set_colour(dst, src) end end
+
+-- "[A] " in Teams mode (same tag as the lobby), else ""
+local function team_tag(id)
+	local ok, letter = pcall(function() return MP.TEAMS and MP.TEAMS.is_active() and MP.TEAMS.team_of(id) end)
+	return (ok and letter) and ("[" .. tostring(letter) .. "] ") or ""
+end
+SP.team_tag = team_tag
+
 local function num(s)
 	if type(s) == "number" then return s end
 	return tonumber(s) or tonumber(tostring(s or ""):match("^[%d%.eE%+%-]+")) or 0
@@ -37,6 +58,7 @@ function SP.rows(enemies, names)
 			list[#list + 1] = {
 				id = e.id or id,
 				name = clean((names and names[e.id or id]) or e.username),
+				team = team_tag(e.id or id),
 				lives = tonumber(e.lives) or 0,
 				score = e.raw_score or "0",
 				hands = tonumber(e.hands) or 0,
@@ -78,8 +100,10 @@ function SP.step(rows, cur, dir)
 end
 
 --- Pure: the text lines of the panel for `rows` while following `follow`.
+--- v.rows[i] = the whole row as one string (logs/tests); v.cells[i] = the fitted column texts.
 function SP.lines(rows, follow)
-	local v = { rows = {} }
+	local v = { rows = {}, cells = {} }
+	local F, C, S = fit(), SP.COL, SP.ROW_SCALE
 	local f = nil
 	for _, r in ipairs(rows or {}) do if r.id == follow then f = r end end
 	local lead = SP.leader(rows)
@@ -87,24 +111,38 @@ function SP.lines(rows, follow)
 		v.follow = L("k_sp_nobody", "Nobody left to watch")
 		v.detail, v.where = "", ""
 	else
-		v.follow = L("k_sp_following", "Following: #1#", { f.name })
-		local bits = { L("k_sp_lives", "Lives: #1#", { f.lives }), L("k_sp_score", "Score: #1#", { f.score }),
+		local label = L("k_sp_following", "Following: #1#", { "" })
+		local room = SP.TEXT_W - F.width(label, 0.5)
+		v.follow = L("k_sp_following", "Following: #1#", { F.ellipsize((f.team or "") .. f.name, 0.5, room) })
+		local score = F.number(f.score, 0.4, 2.4)
+		local bits = { L("k_sp_lives", "Lives: #1#", { f.lives }), L("k_sp_score", "Score: #1#", { score }),
 			L("k_sp_hands", "Hands left: #1#", { f.hands }) }
 		if f.ante then bits[#bits + 1] = L("k_sp_ante", "Ante #1#", { f.ante }) end
-		v.detail = table.concat(bits, "   ")
+		v.detail = F.join(bits, 0.4, SP.TEXT_W)
 		local where = f.out and L("k_sp_out", "out") or f.away and L("k_sp_away", "disconnected")
 			or (f.location and tostring(f.location)) or ""
-		v.where = where ~= "" and L("k_sp_where", "Now: #1#", { where }) or ""
+		v.where = where ~= "" and F.ellipsize(L("k_sp_where", "Now: #1#", { where }), 0.4, SP.TEXT_W) or ""
 	end
 	for i = 1, SP.MAX_ROWS do
 		local r = rows and rows[i]
 		if r then
-			local tag = r.out and (" - " .. L("k_sp_out", "out")) or r.away and (" - " .. L("k_sp_away", "disconnected"))
-				or (lead and lead.id == r.id and #rows > 1) and (" - " .. L("k_sp_ahead", "ahead")) or ""
-			v.rows[i] = string.format("%s%d. %s   %s / %s%s", r.id == follow and "> " or "", i, r.name,
-				L("k_sp_lives", "Lives: #1#", { r.lives }), r.score, tag)
+			local kind = r.out and "out" or r.away and "away" or (lead and lead.id == r.id and #rows > 1) and "ahead" or ""
+			local status = kind == "out" and L("k_sp_out", "out") or kind == "away" and L("k_sp_away", "disconnected")
+				or kind == "ahead" and L("k_sp_ahead", "ahead") or ""
+			local cell = {
+				mark = r.id == follow and ">" or "",
+				name = F.ellipsize(string.format("%d. %s%s", i, r.team or "", r.name), S, C.name - 2 * SP.CELL_PAD),
+				lives = F.ellipsize(L("k_sp_lives", "Lives: #1#", { r.lives }), S, C.lives - 2 * SP.CELL_PAD),
+				score = F.number(r.score, S, C.score - 2 * SP.CELL_PAD),
+				status = F.ellipsize(status, S, C.status - 2 * SP.CELL_PAD),
+				kind = kind, following = r.id == follow,
+			}
+			v.cells[i] = cell
+			v.rows[i] = string.format("%s%s   %s / %s%s", cell.mark ~= "" and "> " or "", cell.name, cell.lives, cell.score,
+				status ~= "" and (" - " .. status) or "")
 		else
 			v.rows[i] = ""
+			v.cells[i] = { mark = "", name = "", lives = "", score = "", status = "", kind = "" }
 		end
 	end
 	return v
@@ -124,7 +162,18 @@ function SP.refresh()
 	local v = SP.lines(rows, SP.state.follow)
 	SP.view.title = L("k_sp_title", "Spectating")
 	SP.view.follow, SP.view.detail, SP.view.where = v.follow, v.detail, v.where
-	for i = 1, SP.MAX_ROWS do SP.view["row" .. i] = v.rows[i] end
+	SP.colours = SP.colours or {}
+	for i = 1, SP.MAX_ROWS do
+		local c = v.cells[i]
+		SP.view["row" .. i] = v.rows[i]
+		for _, k in ipairs({ "mark", "name", "lives", "score", "status" }) do SP.view["r" .. i .. "_" .. k] = c[k] end
+		SP.colours[i] = SP.colours[i] or { name = { 1, 1, 1, 1 }, status = { 1, 1, 1, 1 } }
+		pcall(function()
+			local grey = G.C.UI.TEXT_INACTIVE
+			F_colour(SP.colours[i].name, c.kind == "out" and grey or c.following and G.C.GOLD or G.C.UI.TEXT_LIGHT)
+			F_colour(SP.colours[i].status, c.kind == "ahead" and G.C.GREEN or c.kind == "away" and G.C.ORANGE or grey)
+		end)
+	end
 	return rows
 end
 
@@ -134,18 +183,44 @@ local function text(ref, scale, colour)
 	} }
 end
 
+local function cell(i, key, w, align, colour)
+	return { n = G.UIT.C, config = { align = align or "cl", minw = w, maxw = w, padding = SP.CELL_PAD }, nodes = {
+		{ n = G.UIT.T, config = { ref_table = SP.view, ref_value = "r" .. i .. "_" .. key, scale = SP.ROW_SCALE,
+			colour = colour or G.C.UI.TEXT_LIGHT, shadow = true } },
+	} }
+end
+
+--- one list row: fixed-width columns, so long names / scores / statuses never widen the box
+function SP.row_node(i)
+	local C, col = SP.COL, SP.colours and SP.colours[i] or {}
+	return { n = G.UIT.R, config = { align = "cl", padding = 0.01, minh = 0.42 }, nodes = {
+		cell(i, "mark", C.mark, "cm", G.C.GOLD),
+		cell(i, "name", C.name, "cl", col.name),
+		cell(i, "lives", C.lives, "cl"),
+		cell(i, "score", C.score, "cr"),
+		{ n = G.UIT.C, config = { minw = 0.15 } },
+		cell(i, "status", C.status, "cl", col.status),
+	} }
+end
+
+local function line(ref, scale, colour)
+	return { n = G.UIT.R, config = { align = "cm", padding = 0.03, minw = SP.TEXT_W, maxw = SP.TEXT_W }, nodes = {
+		{ n = G.UIT.T, config = { ref_table = SP.view, ref_value = ref, scale = scale, colour = colour or G.C.UI.TEXT_LIGHT, shadow = true } },
+	} }
+end
+
 function SP.ui()
 	SP.refresh()
 	local rows = {}
-	for i = 1, SP.MAX_ROWS do rows[#rows + 1] = text("row" .. i, 0.35) end
+	for i = 1, SP.MAX_ROWS do rows[#rows + 1] = SP.row_node(i) end
 	return create_UIBox_generic_options({
 		no_back = true,
 		contents = {
 			text("title", 0.6, G.C.GOLD),
-			text("follow", 0.5),
-			text("detail", 0.4),
-			text("where", 0.4, G.C.UI.TEXT_INACTIVE),
-			{ n = G.UIT.R, config = { align = "cm", padding = 0.08, r = 0.1, colour = G.C.BLACK, minw = 7 }, nodes = rows },
+			line("follow", 0.5),
+			line("detail", 0.4),
+			line("where", 0.4, G.C.UI.TEXT_INACTIVE),
+			{ n = G.UIT.R, config = { align = "cm", padding = 0.08, r = 0.1, colour = G.C.BLACK, minw = SP.BOX_W, maxw = SP.BOX_W }, nodes = rows },
 			{ n = G.UIT.R, config = { align = "cm", padding = 0.1 }, nodes = {
 				UIBox_button({ button = "mp_sp_prev", label = { L("b_sp_prev", "< Prev") }, minw = 2.2, minh = 0.6, scale = 0.4, col = true }),
 				{ n = G.UIT.C, config = { minw = 0.2 } },

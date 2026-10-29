@@ -425,5 +425,37 @@ do
 		{ team = "B", place = 2, dealt = 10, pvpWon = 0, livesLost = 2, members = { "m3" } } } })
 	ok(#MS.tab_list(tv) == 3 and MS.tab_list(tv)[3].label == "Teams" and tv.team_panels[1].members == "Mock1, Mock2", "Teams tab with team panels")
 	ok(#find_all(MS.teams_tab(tv), function(n) return n.config and n.config.minw == MS.PANEL_W end) == 2, "a panel per team")
+
+	-- worst case widths (Balatro T nodes have no maxw: texts are fitted up front): 32-char names, huge numbers, EN + NL
+	dofile("lib/fit.lua")
+	local UM = dofile("tests/ui_measure.lua")
+	local long = ("W"):rep(32)
+	local wbook = {}
+	for i = 1, 8 do wbook["m" .. i] = { id = "m" .. i, name = long .. i, dealt = 1.234e15 * (9 - i), best = "123456789012345", bestHand = "Flush Five",
+		livesLost = i - 1, pvpWon = 8 - i, pvps = 8, money = 123456 * i, ante = 38, seen = 150, jokers = 150, lineup = { "j_joker" } } end
+	local wrows, _, waw = Core.match_table(wbook, out, order, false)
+	for _, lang in ipairs({ "en-us", "nl" }) do
+		_G.localize = UM.localizer("localization/" .. lang .. ".lua")
+		local wv = MS.view({ winnerId = "m1", rows = wrows, awards = waw, teams = {
+			{ team = "A", place = 1, dealt = 9e15, pvpWon = 30, livesLost = 1, members = { "m1", "m2", "m3", "m4" } },
+			{ team = "B", place = 2, dealt = 8e15, pvpWon = 2, livesLost = 2, members = { "m5", "m6", "m7", "m8" } } } }, "m3")
+		for page = 1, 2 do
+			MS.page = page
+			for _, p in ipairs(find_all(MS.players_tab(wv), function(n) return n.config and n.config.minw == MS.PANEL_W end)) do
+				local w, issues = UM.measure(p)
+				assert(#issues == 0 and w <= MS.PANEL_W + 0.2, lang .. " player panel " .. string.format("%.2f", w) .. " " .. tostring(issues[1]))
+			end
+		end
+		ok(true, lang .. ": 8 players with 32-char names and huge numbers fit their panels (" .. MS.PANEL_W .. ")")
+		for _, p in ipairs(find_all(MS.teams_tab(wv), function(n) return n.config and n.config.minw == MS.PANEL_W end)) do
+			local w, issues = UM.measure(p)
+			assert(#issues == 0 and w <= MS.PANEL_W + 0.2, lang .. " team panel " .. string.format("%.2f", w) .. " " .. tostring(issues[1]))
+		end
+		ok(true, lang .. ": team panels with 4 long member names fit")
+		local _, aissues = UM.measure(MS.awards_tab(wv))
+		ok(#aissues == 0, lang .. ": award cards fit" .. (aissues[1] and (" - " .. aissues[1]) or ""))
+	end
+	MS.page = 1
+	_G.localize = function(k) if k == "b_back" then return "Back" end return "ERROR" end
 end
 print("PASS: match stats")

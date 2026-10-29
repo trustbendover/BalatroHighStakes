@@ -1311,6 +1311,7 @@ return {
 			k_sp_winner = "#1# won the match",
 			k_sp_over = "The match is over",
 			k_rj_waiting = "#1# disconnected - waiting to rejoin #2#",
+			k_rj_more = "+#1# more",
 			k_rj_rejoined = "#1# rejoined",
 			k_rj_expired = "#1# did not return in time",
 			k_rj_restored = "Rejoined! Your run is restored (ante #1#)",

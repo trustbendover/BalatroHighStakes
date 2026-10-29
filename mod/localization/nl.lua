@@ -294,6 +294,7 @@ return {
 			k_sp_winner = "#1# heeft de match gewonnen",
 			k_sp_over = "De match is voorbij",
 			k_rj_waiting = "#1# verbinding weg - wacht op terugkeer #2#",
+			k_rj_more = "+#1# meer",
 			k_rj_rejoined = "#1# is terug",
 			k_rj_expired = "#1# kwam niet op tijd terug",
 			k_rj_restored = "Terug! Je run is hersteld (ante #1#)",

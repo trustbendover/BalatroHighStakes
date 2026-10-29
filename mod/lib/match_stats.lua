@@ -275,7 +275,18 @@ function MS.page_of(list, page, per)
 end
 
 -- building blocks in the style of the game-over "round scores" rows
+-- G.UIT.T has no maxw in Balatro (only containers / DynaText): fit the text here instead.
+-- Shrink to at most 70 % of the scale, then shorten with "..".
 local function T(text, scale, col, maxw)
+	text = tostring(text or "")
+	if maxw and MP.FIT then
+		local sc = MP.FIT.scale(text, scale, maxw)
+		if sc < scale * 0.7 then
+			sc = scale * 0.7
+			text = MP.FIT.ellipsize(text, sc, maxw)
+		end
+		scale = sc
+	end
 	return { n = G.UIT.T, config = { text = text, scale = scale, colour = col or G.C.UI.TEXT_LIGHT, shadow = true, maxw = maxw } }
 end
 local function dyn(text, scale, col, extra)
@@ -291,8 +302,10 @@ local PANEL = function() return darken and darken(G.C.JOKER_GREY, 0.1) or G.C.L_
 local function stat_box(s, w)
 	local box_col = s.winner and colour(s.award_colour or s.colour) or G.C.BLACK
 	local val_col = s.winner and G.C.WHITE or colour(s.colour)
-	local inner = { T(s.value, 0.36, val_col, (w or 1.35) - 0.1) }
-	if s.sub then inner[#inner + 1] = T(" " .. s.sub, 0.3, s.winner and G.C.WHITE or G.C.UI.TEXT_LIGHT, (w or 1.35) * 0.55) end
+	-- box padding 0.04 around / between the texts: value (+ hand type) gets the rest of the width
+	local room = (w or 1.35) - (s.sub and 0.12 or 0.08)
+	local inner = { T(s.value, 0.36, val_col, s.sub and room * 0.42 or room) }
+	if s.sub then inner[#inner + 1] = T(" " .. s.sub, 0.3, s.winner and G.C.WHITE or G.C.UI.TEXT_LIGHT, room * 0.58) end
 	return { n = G.UIT.C, config = { align = "cm", padding = 0.03 }, nodes = {
 		{ n = G.UIT.R, config = { align = "cm" }, nodes = { T(s.label, 0.28, G.C.UI.TEXT_LIGHT, w or 1.35) } },
 		{ n = G.UIT.R, config = { align = "cm", minw = w or 1.35, maxw = w or 1.35, minh = 0.45, r = 0.1, colour = box_col, emboss = 0.05, padding = 0.04 },
@@ -394,8 +407,8 @@ function MS.teams_tab(v)
 			{ n = G.UIT.C, config = { align = "cm", minw = 0.75, minh = 1.05, r = 0.1, colour = colour(TEAM_COLOURS[(i - 1) % 4 + 1]), emboss = 0.05 }, nodes = {
 				T(t.team, 0.6, G.C.WHITE) } },
 			{ n = G.UIT.C, config = { align = "cl", padding = 0.06, minw = 3.6, maxw = 3.6 }, nodes = {
-				{ n = G.UIT.R, config = { align = "cl" }, nodes = { T(L("k_ms_team", "Team #1#", { t.team }), 0.42, t.winner and G.C.GOLD or G.C.WHITE) } },
-				{ n = G.UIT.R, config = { align = "cl" }, nodes = { T(t.members, 0.3, G.C.UI.TEXT_INACTIVE) } },
+				{ n = G.UIT.R, config = { align = "cl" }, nodes = { T(L("k_ms_team", "Team #1#", { t.team }), 0.42, t.winner and G.C.GOLD or G.C.WHITE, 3.4) } },
+				{ n = G.UIT.R, config = { align = "cl" }, nodes = { T(t.members, 0.3, G.C.UI.TEXT_INACTIVE, 3.4) } },
 			} },
 			{ n = G.UIT.C, config = { align = "cm" }, nodes = boxes },
 		} }

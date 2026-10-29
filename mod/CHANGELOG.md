@@ -49,6 +49,12 @@
 
 ## 0.6.8~3P (in development - not released yet) - host migration
 
+- **Panels keep a fixed width.** The spectator list is now columns (name | lives | score | status) in a fixed box,
+  long names get "..", huge scores become compact (1.23e14), and the status has its own colour. The rejoin bar shows
+  the first player by name and the rest as "+N more". The blind HUD line (team totals + opponents) is re-fitted when
+  its text changes, and the match stats texts are fitted up front (Balatro text nodes ignore maxw). Worst-case
+  layout tests: 8 players, 32-character names, team tags, EN + NL (`tests/test_ui_fit.lua`).
+
 - **New GitHub name: `trustbendover/BalatroHighStakes`** (renamed on release day). The in-game update check,
   `Update.bat`, the compat.json download and the GitHub button try the new name first and the old
   `BalatroMultiplayer3P` name second (GitHub also redirects the old name). Repo names and the zip prefix live in

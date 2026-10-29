@@ -110,6 +110,16 @@ function MP.THREEP.refresh_hud()
 		if st.kingId and st.kingId == st.you then MP.GAME.enemy.hud_title = "[K] " .. MP.GAME.enemy.hud_title end
 	end
 	MP.GAME.enemy.opponents_text = MP.GAME.enemy.hud_title
+	-- 0.6.8: the blind-name DynaText applies its maxw only when it is set up; scores, "???" -> numbers,
+	-- "(away)" and team totals change the line later, so re-fit it whenever the text changes.
+	if MP.GAME.enemy.hud_title ~= MP.THREEP.last_hud_title then
+		MP.THREEP.last_hud_title = MP.GAME.enemy.hud_title
+		pcall(function()
+			local el = G.HUD_blind and G.HUD_blind:get_UIE_by_ID("HUD_blind_name")
+			local obj = el and el.config and el.config.object
+			if obj and obj.config and obj.config.mp_maxw and MP.FIT then MP.FIT.refit_dynatext(obj) end
+		end)
+	end
 end
 
 --- Lobby seat table by role ("host" | "guest" | "third" | "seat1".."seat8"); never nil.

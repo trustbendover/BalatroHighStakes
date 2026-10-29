@@ -52,14 +52,32 @@ function RJ.usable(meta, p, t)
 end
 
 --- Pure: the status bar text for the players we are waiting for.
+-- 0.6.8: the bar has a fixed maximum width: at most RJ.BAR_NAMED players by name (names shortened
+-- with ".."), the rest as "+N", and the whole line fitted to RJ.BAR_W at RJ.BAR_SCALE.
+RJ.BAR_SCALE, RJ.BAR_W, RJ.BAR_NAMED, RJ.BAR_NAME_W = 0.35, 11, 2, 2.4
 function RJ.bar_text(away, t)
+	local list = {}
+	for _, a in pairs(away or {}) do list[#list + 1] = a end
+	table.sort(list, function(x, y)
+		if (x.end_time or 0) ~= (y.end_time or 0) then return (x.end_time or 0) < (y.end_time or 0) end
+		return tostring(x.name) < tostring(y.name)
+	end)
+	local F = MP.FIT
 	local parts = {}
-	for _, a in pairs(away or {}) do
+	for i, a in ipairs(list) do
+		if i > RJ.BAR_NAMED then break end
 		local left = a.end_time and RJ.countdown(a.end_time - t) or ""
-		parts[#parts + 1] = L("k_rj_waiting", "#1# disconnected - waiting to rejoin #2#", { a.name, left })
+		local name = F and F.ellipsize(a.name, RJ.BAR_SCALE, RJ.BAR_NAME_W) or tostring(a.name)
+		parts[#parts + 1] = L("k_rj_waiting", "#1# disconnected - waiting to rejoin #2#", { name, left })
 	end
-	table.sort(parts)
-	return table.concat(parts, "  |  ")
+	if #list > RJ.BAR_NAMED then parts[#parts + 1] = L("k_rj_more", "+#1# more", { #list - RJ.BAR_NAMED }) end
+	local line = table.concat(parts, "  |  ")
+	if F and F.width(line, RJ.BAR_SCALE) > RJ.BAR_W then
+		-- two long waiting texts do not fit: keep the first one + "+N"
+		line = parts[1] .. ((#list > 1) and ("  |  " .. L("k_rj_more", "+#1# more", { #list - 1 })) or "")
+		line = F.ellipsize(line, RJ.BAR_SCALE, RJ.BAR_W)
+	end
+	return line
 end
 
 ---------------------------------------------------------------------------------------------
@@ -199,8 +217,8 @@ function RJ.show_bar()
 		if want and not RJ.bar_box and G.ROOM_ATTACH then
 			RJ.bar_box = UIBox({
 				definition = { n = G.UIT.ROOT, config = { align = "cm", colour = G.C.CLEAR }, nodes = {
-					{ n = G.UIT.R, config = { align = "cm", padding = 0.08, r = 0.1, colour = G.C.BLACK, emboss = 0.05 }, nodes = {
-						{ n = G.UIT.T, config = { ref_table = RJ.view, ref_value = "bar", scale = 0.35, colour = G.C.ORANGE, shadow = true } },
+					{ n = G.UIT.R, config = { align = "cm", padding = 0.08, r = 0.1, colour = G.C.BLACK, emboss = 0.05, maxw = RJ.BAR_W + 0.3 }, nodes = {
+						{ n = G.UIT.T, config = { ref_table = RJ.view, ref_value = "bar", scale = RJ.BAR_SCALE, colour = G.C.ORANGE, shadow = true } },
 					} },
 				} },
 				config = { align = "tm", offset = { x = 0, y = 0.15 }, major = G.ROOM_ATTACH, bond = "Weak" },
