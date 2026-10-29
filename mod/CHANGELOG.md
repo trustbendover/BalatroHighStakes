@@ -49,6 +49,13 @@
 
 ## 0.6.8~3P (in development - not released yet) - host migration
 
+- **Warning for the official Balatro Multiplayer mods.** The official mod (id `Multiplayer`, the same id as ours)
+  and its 1.0 platform (`MultiplayerPvP` with the same `mp` prefix, `MultiplayerAPI`, `MultiplayerSPDRN`) clash
+  with High Stakes. `Install.bat` now lists them and offers to move them to the backup folder (default yes; never
+  deleted, `Uninstall.bat` puts them back; `-NoPrompt` moves them, `-KeepOtherMultiplayer` keeps them, `-DryRun`
+  only prints `CLASH ...` lines). In the game, the startup check shows a "Heads up: another Multiplayer mod" pop-up
+  with Play anyway / Disable multiplayer for now when one of them is loaded.
+
 - **Fix: no more "Found invalid metadata JSON file ... tests/koth_vectors.json" errors in the log.** The Installer
   zip no longer ships the mod's `tests/` folder (Steamodded scanned its JSON files as mod metadata). Harmless, but
   it looked like a broken install.

@@ -26,6 +26,9 @@ CG.TEXT = {
 		tested = "TESTED", untested = "UNTESTED", unknown = "UNKNOWN", blocked = "BLOCKED",
 		tested_with = "tested", play = "Play anyway", disable = "Disable multiplayer for now", ok = "OK",
 		safe_note = "Multiplayer is off (safe mode)", user_note = "Multiplayer is off for now",
+		clash = "CLASH", clash_title = "Heads up: another Multiplayer mod",
+		clash_body = "These mods clash with Balatro High Stakes (same id/prefix).",
+		clash_body2 = "Move them out of the Mods folder (Install.bat can do it).",
 	},
 	nl = {
 		title = "Let op: niet-geteste versies",
@@ -38,9 +41,15 @@ CG.TEXT = {
 		tested = "GETEST", untested = "NIET GETEST", unknown = "ONBEKEND", blocked = "GEBLOKKEERD",
 		tested_with = "getest", play = "Toch spelen", disable = "Multiplayer nu uitzetten", ok = "OK",
 		safe_note = "Multiplayer staat uit (veilige modus)", user_note = "Multiplayer staat nu uit",
+		clash = "BOTSING", clash_title = "Let op: nog een Multiplayer-mod",
+		clash_body = "Deze mods botsen met Balatro High Stakes (zelfde id/prefix).",
+		clash_body2 = "Haal ze uit de Mods-map (Install.bat kan dat doen).",
 	},
 }
-CG.STATE_COLOUR = { tested = "GREEN", untested = "FILTER", unknown = "FILTER", blocked = "RED" }
+-- 0.6.8: the official Balatro Multiplayer (legacy id "Multiplayer", 1.0 platform: MultiplayerPvP with the
+-- same "mp" prefix, MultiplayerAPI, MultiplayerSPDRN) clashes with this fork
+CG.CLASH_IDS = { Multiplayer = true, MultiplayerPvP = true, MultiplayerAPI = true, MultiplayerSPDRN = true }
+CG.STATE_COLOUR = { tested = "GREEN", untested = "FILTER", unknown = "FILTER", blocked = "RED", clash = "RED" }
 
 ----------------------------------------------------------------------------- pure logic (tested)
 --- Strip build tags the games/loaders add: "1.0.1o-FULL" -> "1.0.1o", "...-STEAMODDED" -> "...", "v0.10.0" -> "0.10.0"
@@ -136,9 +145,23 @@ function CG.state(component, version, compat)
 	return "untested"
 end
 
---- versions: { balatro=, steamodded=, lovely= }; load_errors: { {file=, err=} }
---- -> { status = "ok"|"untested"|"blocked", items = {...}, failed = {files}, signature = "..." }
-function CG.check(versions, compat, load_errors)
+--- Pure: other Multiplayer mods that loaded next to us. mods = SMODS.Mods, own = our entry.
+--- -> sorted list of { id=, name=, folder= } (mods that did not load or are disabled are ignored)
+function CG.find_clashes(mods, own)
+	local out = {}
+	for id, m in pairs(mods or {}) do
+		if CG.CLASH_IDS[id] and type(m) == "table" and m ~= own and m.can_load ~= false and not m.disabled then
+			local folder = type(m.path) == "string" and m.path:gsub("[/\\]+$", ""):match("([^/\\]+)$") or nil
+			out[#out + 1] = { id = id, name = m.name or id, folder = folder }
+		end
+	end
+	table.sort(out, function(a, b) return a.id < b.id end)
+	return out
+end
+
+--- versions: { balatro=, steamodded=, lovely= }; load_errors: { {file=, err=} }; clashes: CG.find_clashes()
+--- -> { status = "ok"|"untested"|"blocked", items = {...}, failed = {files}, clash = bool, signature = "..." }
+function CG.check(versions, compat, load_errors, clashes)
 	local r = { status = "ok", items = {}, failed = {} }
 	local sig = {}
 	for _, k in ipairs(CG.COMPONENTS) do
@@ -157,6 +180,12 @@ function CG.check(versions, compat, load_errors)
 		end
 	end
 	if #r.failed > 0 then r.status = "blocked" end
+	for _, c in ipairs(clashes or {}) do
+		r.items[#r.items + 1] = { component = "clash", label = tostring(c.name), version = c.folder or c.id, state = "clash" }
+		sig[#sig + 1] = "clash=" .. tostring(c.id)
+		r.clash = true
+		if r.status == "ok" then r.status = "untested" end -- warn with Play anyway / Disable multiplayer
+	end
 	r.signature = table.concat(sig, ";")
 	return r
 end
@@ -259,6 +288,13 @@ function CG.mod_version()
 end
 
 --- Running versions, read defensively
+function CG.clashes()
+	local ok, list = pcall(CG.find_clashes, SMODS and SMODS.Mods, SMODS and SMODS.Mods and SMODS.Mods["Multiplayer"])
+	if not ok then return {} end
+	for _, c in ipairs(list) do warn("another Multiplayer mod is loaded: " .. c.id .. " in folder " .. tostring(c.folder) .. " - it clashes with Balatro High Stakes") end
+	return list
+end
+
 function CG.versions()
 	local v = {}
 	v.balatro = CG.norm((G and G.VERSION) or rawget(_G, "VERSION"))
@@ -335,7 +371,7 @@ end
 function CG.startup()
 	local ok, err = pcall(function()
 		CG.load_compat()
-		CG.result = CG.check(CG.versions(), CG.compat, MP.LOAD_ERRORS)
+		CG.result = CG.check(CG.versions(), CG.compat, MP.LOAD_ERRORS, CG.clashes())
 		local c = config()
 		CG.action = CG.decide(CG.result, c and c.compat_ack)
 		local parts = {}
@@ -366,7 +402,7 @@ function CG.apply_remote(raw)
 	CG.compat = merged
 	if CG.result and not MP.SAFE_MODE then
 		local before = CG.action
-		CG.result = CG.check(CG.versions(), CG.compat, MP.LOAD_ERRORS)
+		CG.result = CG.check(CG.versions(), CG.compat, MP.LOAD_ERRORS, CG.clashes())
 		CG.action = CG.decide(CG.result, c and c.compat_ack)
 		if before == "warn" and CG.action == "ok" then
 			CG.pending = false
@@ -410,12 +446,13 @@ function CG.definition(view)
 	local rows = {}
 	for _, it in ipairs(view.result.items) do rows[#rows + 1] = item_row(it, T) end
 	local failed = (view.result.failed and #view.result.failed > 0) or (MP.HOOK_ERRORS and #MP.HOOK_ERRORS > 0)
-	local body = view.safe and (failed and T.failed_body or T.blocked_body) or T.body
-	local body2 = view.safe and T.blocked_body2 or T.body2
+	local clash = view.result.clash and not view.safe
+	local body = view.safe and (failed and T.failed_body or T.blocked_body) or (clash and T.clash_body) or T.body
+	local body2 = view.safe and T.blocked_body2 or (clash and T.clash_body2) or T.body2
 	local logo = (MP.PATCH_NOTES and MP.PATCH_NOTES.logo_node) and MP.PATCH_NOTES.logo_node() or nil
 	local contents = {
 		logo,
-		{ n = G.UIT.R, config = { align = "cm", padding = 0.04 }, nodes = { T_node(view.safe and T.blocked_title or T.title, 0.6, view.safe and colour("RED") or colour("FILTER")) } },
+		{ n = G.UIT.R, config = { align = "cm", padding = 0.04 }, nodes = { T_node(view.safe and T.blocked_title or (clash and T.clash_title) or T.title, 0.6, view.safe and colour("RED") or colour("FILTER")) } },
 		{ n = G.UIT.R, config = { align = "cl", padding = 0.2, r = 0.1, colour = G.C.BLACK, minw = 11, emboss = 0.05 }, nodes = {
 			{ n = G.UIT.C, config = { align = "cl" }, nodes = rows },
 		} },
@@ -444,7 +481,7 @@ end
 
 function CG.open()
 	if not CG.result then
-		local ok, r = pcall(CG.check, CG.versions(), CG.compat or CG.load_compat(), MP.LOAD_ERRORS)
+		local ok, r = pcall(CG.check, CG.versions(), CG.compat or CG.load_compat(), MP.LOAD_ERRORS, CG.clashes())
 		if not ok then return false end
 		CG.result = r
 	end

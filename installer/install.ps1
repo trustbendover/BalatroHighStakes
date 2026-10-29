@@ -12,6 +12,7 @@ param(
     [string]$SteamRoots = "",   # test hook: ';'-separated Steam install dirs
     [ValidateSet('', 'ask', 'tested', 'keep')]
     [string]$DepsPolicy = "",   # newer Steamodded/Lovely already installed: ask (default) | tested | keep (default with -NoPrompt)
+    [switch]$KeepOtherMultiplayer, # keep the official Balatro Multiplayer mods in Mods (not recommended, they clash)
     [switch]$DryRun             # only print what would happen (pins) and change nothing
 )
 $ErrorActionPreference = 'Stop'
@@ -220,6 +221,40 @@ Say "PIN lovely installed=$shownLovely tested=$TestedLovely action=$($lovelyDec.
 if ($smodsDec.action -eq 'keep') { Say "  Keeping your Steamodded $smodsBest (tested: $TestedSmods). The game will warn you if it is untested." Yellow }
 if ($lovelyDec.action -eq 'keep') { Say "  Keeping your Lovely $shownLovely (tested: $TestedLovely). The game will warn you if it is untested." Yellow }
 Say "SETTINGS .env action=$envAction" DarkGray
+
+# Other Multiplayer mods: the official Balatro Multiplayer (legacy id "Multiplayer", 1.0 platform: MultiplayerPvP
+# with the same "mp" prefix, MultiplayerAPI, MultiplayerSPDRN) clashes with High Stakes. They are moved to the
+# backup folder (never deleted; Uninstall.bat puts them back), or kept if the player says so.
+$ClashIds = @('Multiplayer', 'MultiplayerPvP', 'MultiplayerAPI', 'MultiplayerSPDRN')
+$clashes = @()
+foreach ($f in Get-ChildItem -LiteralPath $ModsRoot -Directory -ErrorAction SilentlyContinue) {
+    if ($f.Name -eq $OurModName) { continue }
+    $info = Get-ModId $f.FullName
+    if (-not $info) {  # zip extracted into a second folder of the same name: look one level deeper
+        foreach ($sub in Get-ChildItem -LiteralPath $f.FullName -Directory -ErrorAction SilentlyContinue) { $info = Get-ModId $sub.FullName; if ($info) { break } }
+    }
+    $ours = ($info -and $info.id -eq 'Multiplayer' -and (("$($info.version)" -match '3P') -or ($prevInstalled -contains $f.FullName)))
+    if ($ours) { continue }  # an older High Stakes copy in another folder: replaced below as before
+    if ($info -and $ClashIds -contains $info.id) { $clashes += [pscustomobject]@{ folder = $f.FullName; name = $f.Name; id = $info.id; version = $info.version } }
+}
+$clashAction = 'none'
+if ($clashes.Count -gt 0) {
+    Say ""
+    Say "WARNING: other Balatro Multiplayer mods are installed. They clash with Balatro High Stakes" Yellow
+    Say "(same mod id or the same 'mp' prefix), so the game may not start or multiplayer may break:" Yellow
+    foreach ($c in $clashes) { Say "  - $($c.name)  (mod id $($c.id)$(if ($c.version) { ", version $($c.version)" }))" Yellow }
+    if ($KeepOtherMultiplayer) { $clashAction = 'keep' }
+    elseif ($NoPrompt -or $DryRun) { $clashAction = 'move' }
+    else {
+        $a = Ask "Move them to the backup folder now? Nothing is deleted; Uninstall.bat puts them back. (Y/n)" "y"
+        $clashAction = if ($a -match '^[nN]') { 'keep' } else { 'move' }
+    }
+    foreach ($c in $clashes) { Say "CLASH $($c.id) folder=$($c.name) action=$(if ($DryRun) { "$clashAction (dry run)" } else { $clashAction })" DarkGray }
+    if ($clashAction -eq 'keep') {
+        Say "  Kept them. If the game crashes or multiplayer acts strange, run Install.bat again and choose Y." Yellow
+        if (@($clashes | Where-Object { $_.id -eq 'Multiplayer' }).Count -gt 0) { Say "  NOTE: a second mod with id 'Multiplayer' stops BOTH from loading in Steamodded." Red }
+    }
+}
 if ($DryRun) {
     Say "DRY RUN: nothing was changed." Cyan
     Finish 0
@@ -229,8 +264,18 @@ $manifest.deps = [ordered]@{
     lovely = [ordered]@{ found = $shownLovely; tested = $TestedLovely; action = $lovelyDec.action }
 }
 
+# Other Balatro Multiplayer mods -> backup (decided above)
+if ($clashAction -eq 'move') {
+    foreach ($c in $clashes) {
+        Say "  Moving $($c.name) ($($c.id)) to the backup folder" Yellow
+        Backup-Item $c.folder 'mods'
+    }
+}
+$clashFolders = @($clashes | ForEach-Object { $_.folder })
+
 # Remove old Multiplayer / Steamodded copies (backed up)
 foreach ($f in Get-ChildItem -LiteralPath $ModsRoot -Directory -ErrorAction SilentlyContinue) {
+    if ($clashFolders -contains $f.FullName) { continue }  # handled above (moved or kept)
     $info = Get-ModId $f.FullName
     if (-not $info) { continue }
     if ($info.id -eq 'Steamodded' -and $smodsDec.action -eq 'keep') { continue }

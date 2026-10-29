@@ -19,6 +19,9 @@ jobs:
       - name: Steam-only installer test (no mode prompt, old server .env -> mode=steam with backup)
         shell: powershell
         run: powershell -NoProfile -ExecutionPolicy Bypass -File tools\test_installer_steam_only.ps1
+      - name: Installer clash test (official Balatro Multiplayer mods -> backup, never deleted)
+        shell: powershell
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File tools\test_installer_clash.ps1
       - name: Updater repo-rename fallback test (new name first, old name second)
         shell: powershell
         run: powershell -NoProfile -ExecutionPolicy Bypass -File tools\test_updater_rename.ps1

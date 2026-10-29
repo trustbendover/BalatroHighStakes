@@ -56,6 +56,10 @@ TROUBLESHOOTING
 - "Steam multiplayer not ready" in the main menu: start Balatro from Steam (Steam must be running),
   then press Reconnect.
 - Logs: %APPDATA%\Balatro\Mods\lovely\log\ (newest file). Look for "Steam P2P" lines.
+- Official Balatro Multiplayer installed too (folders with mod id Multiplayer, MultiplayerPvP,
+  MultiplayerAPI)? They clash with High Stakes (same id / same "mp" prefix). Install.bat lists them and
+  moves them to the backup folder if you say Y (nothing is deleted). Uninstall.bat puts them back.
+  The game also warns at startup ("Heads up: another Multiplayer mod").
 - Uninstall: Uninstall.bat restores what the installer backed up.
 
 CREDITS / LICENSE: see CREDITS.txt, LICENSE.txt (GPL-3.0), payload\LOVELY_LICENSE.txt (MIT).

@@ -32,6 +32,16 @@ Voorheen "Balatro Multiplayer 3P".*
   draait dezelfde scenario's tegen de Lua-host in het spel). Hij zit niet in de Installer-zip en wordt niet gehost;
   Docker/compose/standalone-buildbestanden zijn verwijderd.
 
+## Botsing met de officiele Multiplayer (0.6.8)
+- De officiele Balatro Multiplayer (mod-id `Multiplayer`, hetzelfde als de onze) en het 1.0-platform
+  (`MultiplayerPvP` met dezelfde prefix `mp`, `MultiplayerAPI`, `MultiplayerSPDRN`) botsen met High Stakes.
+- `Install.bat` zoekt ze in `%APPDATA%\Balatro\Mods` (ook een map dieper), toont ze en verplaatst ze na "Y"
+  (standaard) naar `MP3P-backup-*` - nooit verwijderen; `Uninstall.bat` zet ze terug. `-NoPrompt` verplaatst,
+  `-KeepOtherMultiplayer` laat ze staan, `-DryRun` print alleen `CLASH ...`-regels. Een oudere High
+  Stakes-kopie (versie `~3P`) in een andere map telt niet als botsing en wordt zoals vroeger vervangen.
+- In het spel: de startcheck (`compat_guard.lua`) ziet zo'n mod in `SMODS.Mods` en toont "Let op: nog een
+  Multiplayer-mod" met Toch spelen / Multiplayer nu uit. Tests: `test_compat_guard.lua`, `tools\test_installer_clash.ps1`.
+
 ## Spelersaantallen
 | Modus | Spelers | Standaard levens | Bijzonderheden |
 | --- | --- | --- | --- |

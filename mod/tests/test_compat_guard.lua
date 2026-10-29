@@ -184,4 +184,38 @@ do
 	ok(#pending == 1 and U.compat_state == nil, ".env compat_check=false turns the download off")
 	MP.ENV = {}
 end
+-- 0.6.8: clash with the official Balatro Multiplayer (legacy Multiplayer / 1.0 MultiplayerPvP + MultiplayerAPI)
+do
+	local own = { name = "Balatro High Stakes", path = "C:/x/Mods/BalatroMultiplayer3P/" }
+	local mods = { Multiplayer = own, Lovely = { version = "0.10.0" },
+		MultiplayerPvP = { name = "Multiplayer PvP", path = "C:/x/Mods/BalatroMultiplayerPvP/" },
+		MultiplayerAPI = { name = "Multiplayer API", path = "C:\\x\\Mods\\MPAPI\\" },
+		MultiplayerSPDRN = { name = "Speedrun", path = "C:/x/Mods/SPD/", can_load = false },
+		SomeOtherMod = { name = "Other", path = "C:/x/Mods/Other/" } }
+	local cl = CG.find_clashes(mods, own)
+	ok(#cl == 2 and cl[1].id == "MultiplayerAPI" and cl[1].folder == "MPAPI" and cl[2].id == "MultiplayerPvP" and cl[2].folder == "BalatroMultiplayerPvP",
+		"clash: MultiplayerAPI + MultiplayerPvP found (folder names only), our own mod, unrelated and not-loaded mods ignored")
+	ok(#CG.find_clashes({ Multiplayer = own }, own) == 0 and #CG.find_clashes(nil, nil) == 0, "clash: nothing else installed -> no clash")
+	mods.MultiplayerPvP.disabled = true
+	ok(#CG.find_clashes(mods, own) == 1, "clash: a mod disabled in the Mods menu does not count")
+	local r2 = CG.check(tested, compat, {}, cl)
+	ok(r2.status == "untested" and r2.clash and CG.decide(r2, nil) == "warn" and r2.signature:find("clash=MultiplayerPvP", 1, true), "clash -> warning (not safe mode), remembered per combination")
+	ok(CG.decide(r2, r2.signature) == "ok", "clash: Play anyway is remembered for the same mods")
+	ok(CG.decide(CG.check(tested, compat, {}, {}), r2.signature) == "ok" and CG.check(tested, compat, {}).signature ~= r2.signature, "no clash -> no warning, different signature")
+	for _, lang in ipairs({ "en", "nl" }) do
+		local T = CG.TEXT[lang]
+		ok(T.clash and T.clash_title and T.clash_body and T.clash_body2 and #T.clash_body <= 62 and #T.clash_body2 <= 62, lang .. ": clash texts exist and are short")
+		local def = CG.definition({ result = r2, lang = lang, safe = false })
+		local s = {}
+		local function walk(n) if type(n) ~= "table" then return end if n.text then s[#s + 1] = n.text end for _, v in pairs(n) do walk(v) end end
+		walk(def)
+		local all = table.concat(s, "|")
+		ok(all:find(T.clash_title, 1, true) and all:find(T.clash_body, 1, true) and all:find(T.clash, 1, true) and all:find("BalatroMultiplayerPvP", 1, true), lang .. ": clash pop-up shows the title, the text and the folder")
+	end
+	SMODS.Mods.MultiplayerPvP = { name = "Multiplayer PvP", path = "/m/BalatroMultiplayerPvP/" }
+	logs = {}
+	local live = CG.clashes()
+	ok(#live == 1 and live[1].id == "MultiplayerPvP" and table.concat(logs, "\n"):find("another Multiplayer mod is loaded: MultiplayerPvP", 1, true), "CG.clashes() reads SMODS.Mods and logs a warning")
+	SMODS.Mods.MultiplayerPvP = nil
+end
 print("all compat guard tests passed")

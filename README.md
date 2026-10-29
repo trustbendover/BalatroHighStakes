@@ -25,6 +25,12 @@ and the mod id is still `Multiplayer`, so updating keeps your settings. The repo
 `trustbendover/BalatroMultiplayer3P`; old links redirect here, and the release zips keep the
 `BalatroMultiplayer3P-` prefix so older installs (0.6.6/0.6.7) keep updating. `Uninstall.bat` restores your backup.
 
+**Don't install it next to the official Balatro Multiplayer.** The official mod (and its 1.0 `MultiplayerPvP` /
+`MultiplayerAPI` mods) uses the same mod id or the same `mp` prefix, so the two clash. `Install.bat` finds them
+in `%APPDATA%\Balatro\Mods` and offers to move them to the backup folder (nothing is deleted; `Uninstall.bat`
+puts them back). If one is still loaded, the game shows a warning at startup. Want to play official
+Multiplayer again? Run `Uninstall.bat`.
+
 ## Updates
 
 From 0.6.6 on the mod checks GitHub in the background after the main menu loads. When a newer release
