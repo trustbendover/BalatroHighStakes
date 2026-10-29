@@ -59,6 +59,15 @@ CLK = CLK + 1
 local got = newhost.b.receive()
 local n = 0 for _, m in ipairs(got) do if m.peer == ps[g].name then n = n + 1 end end
 ok(n == 2, "new session is picked up, messages read in order from seq 1")
+-- the other direction (the real guest_rejoin bug): the host has sent the old process hundreds of
+-- messages; the restarted guest must still get the host's NEXT message (not wait for seq 1)
+for _ = 1, 5 do newhost.b.send(ps[g].name, '{"action":"x"}') end
+fresh.receive(); CLK = CLK + 1
+ok(newhost.b.send(ps[g].name, '{"action":"hello"}'), "host sends to the restarted guest")
+CLK = CLK + 1
+local got2 = fresh.receive()
+local seen = false for _, m in ipairs(got2) do if m.data:find("hello", 1, true) then seen = true end end
+ok(seen, "restarted receiver gets the host's messages (stream keyed by receiver session)")
 -- Windows replace (remove+rename) or an AV scan can hide a state file for a moment: not a departure
 do
 	local lid = "Lgrace"; local a = FB.new({ dir = DIR, me = "dev1", peers = PEERS, now = now, session = "ga" })

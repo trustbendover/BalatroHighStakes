@@ -159,10 +159,17 @@ function M.new(o)
 	function B.join_events() return {} end
 	function B.accept() end
 	function B.close() end
+	-- the receiver's session is part of the file name: a restarted receiver (new session) gets a fresh
+	-- stream from seq 1 instead of waiting for numbers the sender used for its previous process
+	local tx = {}
 	function B.send(peer, data)
 		local to = safe(peer)
-		msgseq[to] = (msgseq[to] or 0) + 1 -- contiguous per (sender session, receiver)
-		local name = table.concat({ to, me, session, string.format("%09d", msgseq[to]) }, "__") .. ".msg"
+		local s = raw_read(P("peers/", to))
+		local rs = s and s:match("^(%S+)") or "none"
+		local t = tx[to]
+		if not t or t.rs ~= rs then t = { rs = rs, seq = 0 }; tx[to] = t end
+		t.seq = t.seq + 1 -- contiguous per (sender session, receiver session)
+		local name = table.concat({ to, me, session, rs, string.format("%09d", t.seq) }, "__") .. ".msg"
 		local tmp = P("tmp/", name)
 		if not fs.write(tmp, data) then return false end
 		return fs.rename(tmp, P("inbox/", name)) and true or false
@@ -185,7 +192,7 @@ function M.new(o)
 					-- in order; skip at most a few missing numbers (a failed write) so one lost file cannot stall the peer
 					local n, miss = r.next or 1, 0
 					while miss <= 2 do
-						local f = P("inbox/", me, "__", sp, "__", sess, "__", string.format("%09d", n), ".msg")
+						local f = P("inbox/", me, "__", sp, "__", sess, "__", session, "__", string.format("%09d", n), ".msg")
 						local d = fs.read(f)
 						if d then
 							fs.remove(f)
