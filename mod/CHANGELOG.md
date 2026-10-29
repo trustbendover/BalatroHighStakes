@@ -49,6 +49,8 @@
 
 ## 0.6.8 (in development - not released yet) - host migration
 
+- **Patch notes button moved** to the bottom-right corner of the main menu. It used to sit under the version text
+  (top right) and could cover the connection status line.
 - **Version without "~3P".** The mod version is now plain `0.6.8` (main menu, mod list, lobby). Players still on
   `0.6.7~3P` are still seen as older by the update check and get the normal version-mismatch message in a lobby
   (only X.Y.Z is compared). The installer recognises older and newer High Stakes copies by the `~3P` or by the

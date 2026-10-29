@@ -355,7 +355,11 @@ if G and G.FUNCS then
 	end
 end
 
---- Small "Patch notes" button on the main menu (under the version text, top right)
+--- Small "Patch notes" button on the main menu, in the bottom-right corner.
+--- Not under the version text (top right): that stack (game, Steamodded, our version, connection status) has a
+--- varying number and width of lines, so anything placed under it can overlap. The bottom-right corner is empty
+--- on the vanilla main menu and sits clear of the centred button row at every aspect ratio.
+PN.MENU_BUTTON_POS = { align = "bri", offset = { x = -0.25, y = -0.25 } }
 function PN.add_menu_button()
 	pcall(function()
 		if G.MP3P_PATCHNOTES_UI then G.MP3P_PATCHNOTES_UI:remove(); G.MP3P_PATCHNOTES_UI = nil end
@@ -364,7 +368,7 @@ function PN.add_menu_button()
 			definition = { n = G.UIT.ROOT, config = { align = "cm", colour = G.C.CLEAR }, nodes = {
 				UIBox_button({ label = { T.button }, button = "mp3p_patchnotes_open", colour = G.C.BLUE, minw = 2.6, minh = 0.5, scale = 0.38 }),
 			} },
-			config = { align = "tri", bond = "Weak", offset = { x = -0.1, y = 1.0 }, major = G.ROOM_ATTACH },
+			config = { align = PN.MENU_BUTTON_POS.align, bond = "Weak", offset = PN.MENU_BUTTON_POS.offset, major = G.ROOM_ATTACH },
 		})
 	end)
 end

@@ -182,4 +182,15 @@ G.FUNCS.mp3p_patchnotes_close()
 -- the Patch notes button reopens it any time
 G.FUNCS.mp3p_patchnotes_open()
 ok(G.OVERLAY_MENU and PN.view and PN.view.versions[1] == "0.6.8", "Patch notes button reopens the current notes")
+-- the menu button stays clear of the top-right version/status stack (any number of lines): bottom-right corner
+ok(PN.MENU_BUTTON_POS.align == "bri" and PN.MENU_BUTTON_POS.offset.y < 0, "Patch notes button sits in the bottom-right corner, not under the version text")
+do
+	local src = io.open("lib/patch_notes.lua"):read("*a")
+	local body = src:match("function PN.add_menu_button%(%)(.-)\nend")
+	ok(body and body:find("PN.MENU_BUTTON_POS", 1, true) and not body:find('"tri"', 1, true), "add_menu_button uses MENU_BUTTON_POS (no top-right anchor)")
+	for _, f in ipairs({ "ui/main_menu/version_display.lua", "ui/lobby/lobby.lua", "lib/updater.lua" }) do
+		local s = io.open(f):read("*a")
+		ok(not s:find('align = "bri"', 1, true), f .. ": nothing else on the main menu uses the bottom-right corner")
+	end
+end
 print("PASS: patch notes")
