@@ -10,7 +10,9 @@ function MP.UI.start_wait_text()
 		head = type(head) == "table" and head[1] or "WAITING FOR"
 		return { head, localize({ type = "variable", key = n == 1 and "k_wait_ready_btn_one" or "k_wait_ready_btn", vars = { n } }) }
 	end
-	return MP.LOBBY.guest and MP.LOBBY.guest.username and localize("b_wait_for_guest_ready") or localize("b_wait_for_players")
+	-- too few (or a wrong number of) players for the mode, e.g. alone in the lobby: same style, no count.
+	-- ("NEED N MORE" was left out: Duel can also have too many, Teams needs an even count.)
+	return localize("b_wait_for_players")
 end
 
 local function get_warnings()
@@ -19,6 +21,10 @@ local function get_warnings()
 	if MP.LOBBY.is_host and not MP.LOBBY.ready_to_start and (MP.LOBBY.unready_count or 0) > 0 then
 		local n = MP.LOBBY.unready_count
 		table.insert(warnings, { localize({ type = "variable", key = n == 1 and "k_wait_ready_one" or "k_wait_ready", vars = { n } }), G.C.UI.TEXT_LIGHT, 0.3 })
+	end
+	-- 0.6.8: alone in the lobby (the mode's own player-count message covers 2+ players)
+	if MP.LOBBY.is_host and not MP.LOBBY.ready_to_start and MP.LOBBY.player_list and #MP.LOBBY.player_list < 2 then
+		table.insert(warnings, { localize("k_wait_join"), G.C.UI.TEXT_LIGHT, 0.3 })
 	end
 
 	-- Player count vs. mode (1v1 Duel: exactly 2, Teams: 4/6/8, others 2-8)

@@ -52,7 +52,9 @@
 - **Start waits for Ready.** The host's Start button stays greyed out ("WAITING FOR / 2 PLAYERS") with a line
   "Waiting for 2 players to ready up" until every guest has pressed Ready; the host now also refuses a start
   request while a guest is not ready (old or modified clients). Spectators and players returning to the lobby
-  count as ready; after a host migration the new host waits for the others the same way.
+  count as ready; after a host migration the new host waits for the others the same way. With too few (or a wrong
+  number of) players for the mode the button says "WAITING FOR / PLAYERS"; alone in the lobby the line under it
+  says "Waiting for players to join", with 2+ players the mode's own player-count message is shown.
 - **Lobby presets** (Lobby Options > Presets). Four built-in presets (Classic, Quick Duel, Party 8, Relaxed) and
   four own slots: Save/Overwrite stores the current lobby settings (lives, timer, PvP ante, countdown, rejoin window,
   all toggles, seed, deck/sleeve/stake/challenge), Load applies them with one click, Delete asks "Sure?" first.

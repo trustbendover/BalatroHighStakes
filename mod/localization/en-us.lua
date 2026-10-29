@@ -1476,6 +1476,7 @@ return {
 			k_lobby_modifiers = "Modifiers",
 			k_lobby_advanced = "Advanced",
 			k_lobby_presets = "Presets",
+			k_wait_join = "Waiting for players to join",
 			k_preset_builtin = "Built-in presets",
 			k_preset_mine = "My presets (saved on this PC)",
 			k_preset_classic = "Classic",

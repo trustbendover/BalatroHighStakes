@@ -414,6 +414,7 @@ return {
 			-- Didn't translate the k_messages
 			k_lobby_options = "Lobby Opties",
 			k_lobby_presets = "Presets",
+			k_wait_join = "Wachten tot er spelers joinen",
 			k_preset_builtin = "Ingebouwde presets",
 			k_preset_mine = "Mijn presets (op deze pc)",
 			k_preset_classic = "Klassiek",

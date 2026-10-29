@@ -32,8 +32,13 @@ for _, lang in ipairs({ "en-us", "nl" }) do
 		ok(s ~= "ERROR" and MP.FIT.width(s, 0.3) < 6, lang .. " hint fits the lobby status area: " .. s)
 	end
 	MP.MODES.start_problem = function() return "Need 4/6/8" end; MP.LOBBY.unready_count = 2
-	-- (nl has no b_wait_for_guest_ready of its own; in the game Steamodded falls back to English)
-	local old = MP.UI.start_wait_text()
-	ok(old ~= nil and not (type(old) == "table" and old[2] and old[2]:find("2", 1, true)), lang .. ": a player-count problem keeps the old text, no count")
+	local w = MP.UI.start_wait_text()
+	ok(w == dict.b_wait_for_players, lang .. ": wrong player count for the mode -> " .. table.concat(w, " / "))
+	MP.MODES.start_problem = function() return nil end; MP.LOBBY.player_list = { 1 }; MP.LOBBY.unready_count = 0
+	w = MP.UI.start_wait_text()
+	ok(w == dict.b_wait_for_players and (lang == "nl" and w[2] == "SPELERS" or w[2] == "PLAYERS"), lang .. ": alone in the lobby -> " .. table.concat(w, " / "))
+	ok(MP.FIT.width(w[2], 0.9) <= MP.FIT.width(w[1], 0.9), lang .. ": second line not wider than the first")
+	local j = localize("k_wait_join")
+	ok(j ~= "ERROR" and MP.FIT.width(j, 0.3) < 6, lang .. " status line fits: " .. j)
 end
 print("PASS: start waits for ready")
