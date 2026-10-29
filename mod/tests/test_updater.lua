@@ -17,6 +17,7 @@ local U = dofile("lib/updater.lua")
 local function ok(c, m) assert(c, m); print("ok: " .. m) end
 
 ok(U.is_newer("v0.6.7", "0.6.6~3P") and not U.is_newer("v0.6.6", "0.6.6~3P") and not U.is_newer("0.6.5", "0.6.6~3P"), "version compare")
+ok(U.is_newer("v0.6.8", "0.6.7~3P") and not U.is_newer("v0.6.7", "0.6.8") and not U.is_newer("0.6.7~3P", "0.6.8") and not U.is_newer("v0.6.8", "0.6.8"), "0.6.8 without ~3P: 0.6.7~3P is older, same version is not an update")
 ok(U.is_newer("v0.7", "0.6.9~3P") and U.is_newer("0.6.10", "0.6.9") and not U.is_newer("garbage", "0.6.6"), "version compare edge cases")
 ok(U.parse_release('{"tag_name":"v0.6.7","draft":false,"prerelease":false,"assets":[{"name":"BalatroMultiplayer3P-v0.6.7-Installer.zip"}]}') == "v0.6.7", "parse release")
 ok(U.parse_release('{"tag_name":"v0.6.7","assets":[]}') == nil, "release without installer ignored")

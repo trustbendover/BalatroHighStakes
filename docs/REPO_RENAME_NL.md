@@ -52,7 +52,7 @@ versies gebruiken:
 
 1. **Vooraf:** de vrienden-test van 0.6.7 is klaar en de fixes zitten in `feature/host-migration`.
    Merge die branch naar `main`.
-2. Zet `version.json` op `"version": "0.6.8~3P", "tag": "v0.6.8"`. Loop ook de rest van
+2. Zet `version.json` op `"version": "0.6.8", "tag": "v0.6.8"`. Loop ook de rest van
    `docs/RELEASING.md` stap 1 na, en commit.
 3. **Hernoem op GitHub:** repo → *Settings* → *General* → *Repository name* → `BalatroHighStakes` → *Rename*.
    Maak daarna **geen** nieuwe repo met de oude naam.
@@ -76,7 +76,7 @@ versies gebruiken:
      `powershell -NoProfile -ExecutionPolicy Bypass -File "%APPDATA%\Balatro\Mods\BalatroMultiplayer3P\updater\update.ps1" -CheckOnly`
      Verwacht: `UPDATE AVAILABLE: v0.6.8`.
    - [ ] Start Balatro (0.6.7). Linksboven moet **"Update available: v0.6.8"** staan. Klik erop, sluit Balatro,
-     wacht op "Updated to v0.6.8" en start opnieuw. In het hoofdmenu staat dan `0.6.8~3P`.
+     wacht op "Updated to v0.6.8" en start opnieuw. In het hoofdmenu staat dan `0.6.8`.
    - [ ] Open `https://raw.githubusercontent.com/trustbendover/BalatroMultiplayer3P/main/version.json`
      (de terugval van de oude versies). Hij moet `0.6.8` tonen.
    - [ ] Klik in 0.6.8 op de GitHub-knop: die opent `trustbendover/BalatroHighStakes`.

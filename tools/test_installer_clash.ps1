@@ -21,7 +21,7 @@ function W([string]$path, [string]$text) {
 function Reset-Sandbox($oldEnv) {  # untyped: [string] would turn $null into ""
     if (Test-Path -LiteralPath $root) { Remove-Item -LiteralPath $root -Recurse -Force }
     foreach ($f in 'install.ps1', 'pins.ps1', 'settings.ps1') { W (Join-Path $inst $f) ([IO.File]::ReadAllText((Join-Path $Repo "installer\$f"))) }
-    W (Join-Path $payload 'BalatroMultiplayer3P\Multiplayer.json') '{ "id": "Multiplayer", "version": "0.6.8~3P" }'
+    W (Join-Path $payload 'BalatroMultiplayer3P\Multiplayer.json') '{ "id": "Multiplayer", "version": "0.6.8", "author": ["Trust Ben Dover"] }'
     W (Join-Path $payload 'BalatroMultiplayer3P\compat.cfg') ([IO.File]::ReadAllText((Join-Path $Repo 'mod\compat.cfg')))
     W (Join-Path $payload 'smods\version.lua') 'return "1.0.0~BETA-1620a-STEAMODDED"'
     W (Join-Path $payload 'winmm.dll') "fake dll lovely-injectorversion0.10.0mod_dir"
@@ -87,6 +87,12 @@ try {
     W (Join-Path $mods 'Multiplayer3P-old\Multiplayer.json') '{ "id": "Multiplayer", "version": "0.6.5~3P" }'
     $r = Run-Installer @()
     Ok ($r.code -eq 0 -and $r.out -notmatch 'CLASH ' -and -not (Has 'Multiplayer3P-old') -and $r.out -match 'replacing it') 'old High Stakes copy: no clash warning, replaced (backed up)'
+
+    # a 0.6.8+ High Stakes copy (plain version, no "~3P") in another folder: recognised by the author
+    Reset-Sandbox $null
+    W (Join-Path $mods 'HighStakes-copy\Multiplayer.json') '{ "id": "Multiplayer", "version": "0.6.8", "author": ["Trust Ben Dover"], "display_name": "Balatro High Stakes" }'
+    $r = Run-Installer @()
+    Ok ($r.code -eq 0 -and $r.out -notmatch 'CLASH ' -and -not (Has 'HighStakes-copy') -and $r.out -match 'replacing it') 'High Stakes 0.6.8 copy (no ~3P): no clash warning, replaced (backed up)'
 
     # no other mods: no warning at all
     Reset-Sandbox $null

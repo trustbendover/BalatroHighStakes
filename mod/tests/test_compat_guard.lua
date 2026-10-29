@@ -8,7 +8,7 @@ function sendWarnMessage(m) logs[#logs + 1] = "WARN " .. m end
 NFS = { read = function(p) local f = io.open(p, "rb"); if not f then return nil end local s = f:read("*a"); f:close(); return s end }
 local function fresh_smods(cfg)
 	SMODS = { version = "1.0.0~BETA-1620a-STEAMODDED",
-		Mods = { Multiplayer = { version = "0.6.8~3P", config = cfg or {} }, Lovely = { version = "0.10.0" } },
+		Mods = { Multiplayer = { version = "0.6.8", config = cfg or {} }, Lovely = { version = "0.10.0" } },
 		save_mod_config = function() saved = saved + 1 end }
 end
 fresh_smods()

@@ -108,6 +108,12 @@ function Get-ModId($folder) {
     return $null
 }
 
+function Test-OurMod($folder) {  # Balatro High Stakes (any version): author Trust Ben Dover in Multiplayer.json
+    $j = Join-Path $folder 'Multiplayer.json'
+    if (-not (Test-Path -LiteralPath $j)) { return $false }
+    try { $o = Get-Content -LiteralPath $j -Raw | ConvertFrom-Json; return (@($o.author) -contains 'Trust Ben Dover') -or ("$($o.display_name)" -match 'High Stakes') } catch { return $false }
+}
+
 # =================== MAIN ===================
 Say "=== Balatro High Stakes installer (formerly Balatro Multiplayer 3P) ===" Cyan
 Say "This installs: Lovely (mod loader), Steamodded, and the Balatro High Stakes mod (2-8 player Multiplayer)."
@@ -236,7 +242,8 @@ foreach ($f in Get-ChildItem -LiteralPath $ModsRoot -Directory -ErrorAction Sile
     if (-not $info) {  # zip extracted into a second folder of the same name: look one level deeper
         foreach ($sub in Get-ChildItem -LiteralPath $f.FullName -Directory -ErrorAction SilentlyContinue) { $info = Get-ModId $sub.FullName; if ($info) { break } }
     }
-    $ours = ($info -and $info.id -eq 'Multiplayer' -and (("$($info.version)" -match '3P') -or ($prevInstalled -contains $f.FullName)))
+    # ours: older copies carry "~3P" in the version; since 0.6.8 the version is plain (0.6.8), so also look at the author
+    $ours = ($info -and $info.id -eq 'Multiplayer' -and (("$($info.version)" -match '3P') -or ($prevInstalled -contains $f.FullName) -or (Test-OurMod $f.FullName)))
     if ($ours) { continue }  # an older High Stakes copy in another folder: replaced below as before
     if ($info -and $ClashIds -contains $info.id) { $clashes += [pscustomobject]@{ folder = $f.FullName; name = $f.Name; id = $info.id; version = $info.version } }
 }

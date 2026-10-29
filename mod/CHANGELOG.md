@@ -47,7 +47,12 @@
 - **Ouija** — Destroys 3 cards instead of converting all cards to a single suit and reducing hand size.
 - **Judgment** — Now draws from its own queue (vanilla behavior) on Orange Stake and above. Still uses the shop queue on lower stakes.
 
-## 0.6.8~3P (in development - not released yet) - host migration
+## 0.6.8 (in development - not released yet) - host migration
+
+- **Version without "~3P".** The mod version is now plain `0.6.8` (main menu, mod list, lobby). Players still on
+  `0.6.7~3P` are still seen as older by the update check and get the normal version-mismatch message in a lobby
+  (only X.Y.Z is compared). The installer recognises older and newer High Stakes copies by the `~3P` or by the
+  author in `Multiplayer.json`.
 
 - **Clean log: no "Found invalid metadata JSON file ... compat.json / brand.json" errors.** Steamodded reads every
   file with `.json` anywhere in its name (in any subfolder) as mod metadata. The two data files are now

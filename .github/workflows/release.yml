@@ -68,6 +68,7 @@ jobs:
           luajit tests/test_credits.lua
           luajit tests/test_compat_guard.lua
           luajit tests/test_brand.lua
+          luajit tests/test_version_string.lua
           luajit tests/test_ui_fit.lua
           luajit tests/test_steam_only.lua
 
@@ -102,7 +103,7 @@ jobs:
           if [ -f "release-notes/${tag}.md" ]; then
             cp "release-notes/${tag}.md" notes.md
           else
-            awk -v v="## ${tag#v}~3P" 'index($0,v)==1{f=1;next} /^## /{if(f)exit} f' mod/CHANGELOG.md > notes.md
+            awk -v v="## ${tag#v}" 'index($0,v" ")==1||index($0,v"~")==1{f=1;next} /^## /{if(f)exit} f' mod/CHANGELOG.md > notes.md
             printf '\n**Install:** download the Installer zip, unzip it, run `Install.bat`. Already on 0.6.6+? Use the in-game "Update available" button or `Update.bat`.\n\nSupport: https://ko-fi.com/trustbendover\n' >> notes.md
           fi
           gh release create "$tag" dist-release/* --title "Balatro High Stakes ${tag#v}" --notes-file notes.md --latest
