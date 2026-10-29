@@ -58,11 +58,38 @@ function D.shot(label) if D.CAP then D.CAP.shot(label) end end
 D.AP = MP.load_mp_file("dev/autoplay.lua")
 D.SC = MP.load_mp_file("dev/scenarios.lua")
 
+-- fresh test profiles: never show the first-run tutorial (Jimbo blocks the bots)
+local function no_tutorial()
+	if G.SETTINGS then G.SETTINGS.tutorial_complete = true; G.SETTINGS.tutorial_progress = nil end
+	if G.OVERLAY_TUTORIAL then pcall(function() G.FUNCS.skip_tutorial_section() end)
+		if G.OVERLAY_TUTORIAL then pcall(function() G.OVERLAY_TUTORIAL:remove() end); G.OVERLAY_TUTORIAL = nil end end
+end
+D.no_tutorial = no_tutorial
+
+-- tile windows on the primary display so a region capture shows only the game
+D.index = tonumber(D.name:match("(%d+)$") or "1") or 1
+function D.layout(n, i)
+	if n <= 2 then return 960, 540, (i - 1) * 960, 270 end
+	local c = (i - 1) % 4; local r = math.floor((i - 1) / 4)
+	return 480, 270, c * 480, 270 + r * 270
+end
+local placed = false
+local function place()
+	if placed or not love.window then return end
+	placed = true
+	local w, h, x, y = D.layout(D.players or 2, D.index)
+	love.window.updateMode(w, h, { fullscreen = false, resizable = true, display = 1 })
+	love.window.setPosition(x, y, 1)
+	log(string.format("window %dx%d at %d,%d", w, h, x, y))
+end
+
 local t = 0
 local upd = Game.update
 function Game:update(dt)
 	local r = upd(self, dt)
 	t = t + (dt or 0)
+	pcall(place)
+	pcall(no_tutorial)
 	pcall(function()
 		if D.speed and G.SETTINGS and D.autoplay then G.SETTINGS.GAMESPEED = D.speed end
 		if D.SC then D.SC.tick(D, dt, t) end

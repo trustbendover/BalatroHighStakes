@@ -21,6 +21,8 @@ param(
     [int]$ShotEvery = 0,          # extra screenshot every N seconds per instance (0 = only scenario points + F9)
     [int]$RestartAfter = 20,      # guest_rejoin: seconds before dev2 is started again
     [int]$Speed = 4,
+    [string]$Ffmpeg = (Join-Path $env:USERPROFILE 'GrokBot\Tools\ffmpeg\bin\ffmpeg.exe'),
+    [int]$RecordSeconds = 0,      # >0: record the tiled game windows (primary display region only) to captures\<run>\match.mp4
     [switch]$Stop,
     [switch]$Status
 )
@@ -42,6 +44,10 @@ if ($Stop) {
     foreach ($o in $ours) { Write-Host "closing $($o.name) (pid $($o.proc.Id))"; $null = $o.proc.CloseMainWindow() }
     Start-Sleep 3
     foreach ($o in @(Get-Ours)) { Write-Host "stopping $($o.name)"; Stop-Process -Id $o.proc.Id }
+    $rf = Join-Path $Root 'recording.json'
+    if (Test-Path $rf) { $r = Get-Content $rf -Raw | ConvertFrom-Json; $rp = Get-Process -Id $r.pid -ErrorAction SilentlyContinue
+        if ($rp -and $rp.StartTime.ToString('o') -eq $r.start) { Stop-Process -Id $r.pid; Write-Host "recording stopped (fragmented mp4 stays playable)" }
+        Remove-Item $rf }
     Remove-Item $pidFile -ErrorAction SilentlyContinue
     Write-Host "stopped $($ours.Count) instance(s)"; return
 }
@@ -94,6 +100,18 @@ for ($i = 1; $i -le $Players; $i++) {
     Start-Sleep -Seconds 2
 }
 Write-Host "started $Players instance(s); captures -> $cap"
+
+if ($RecordSeconds -gt 0) {
+    if (-not (Test-Path $Ffmpeg)) { Write-Warning "ffmpeg not found at $Ffmpeg - no video" } else {
+        # same tiling as mod/dev/dev_local.lua D.layout: only the game windows, never the rest of the desktop
+        if ($Players -le 2) { $vx = 0; $vy = 270; $vw = 1920; $vh = 540 } else { $vx = 0; $vy = 270; $vw = 1920; $vh = 540 }
+        $fa = "-hide_banner -loglevel error -y -f gdigrab -framerate 15 -offset_x $vx -offset_y $vy -video_size ${vw}x$vh -i desktop -t $RecordSeconds " +
+              "-c:v libx264 -preset veryfast -crf 28 -pix_fmt yuv420p -movflags +frag_keyframe+empty_moov `"$cap\match.mp4`""
+        $rp = Start-Process $Ffmpeg -ArgumentList $fa -WindowStyle Hidden -PassThru
+        @{ pid = $rp.Id; start = $rp.StartTime.ToString('o') } | ConvertTo-Json | Set-Content (Join-Path $Root 'recording.json')
+        Write-Host "recording ${vw}x$vh for max $RecordSeconds s -> $cap\match.mp4"
+    }
+}
 
 # check that every instance really uses its own Mods folder (Lovely writes its log there)
 Start-Sleep -Seconds 15
