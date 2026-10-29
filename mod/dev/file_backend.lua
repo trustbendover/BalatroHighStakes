@@ -15,6 +15,7 @@
 local M = {}
 M.STALE = 15      -- seconds without heartbeat -> a member/peer counts as gone (Steam drops crashed members too)
 M.BEAT = 2
+M.GRACE = 6       -- a state file briefly missing/unreadable (Windows replace = remove+rename, AV scans) keeps its last value this long
 
 local function safe(s) return (tostring(s):gsub("[^%w_%-]", "_")) end
 
@@ -45,12 +46,22 @@ function M.new(o)
 	local my_lobbies = {}
 	for _, d in ipairs({ "", "/peers", "/inbox", "/lobby", "/tmp" }) do if not fs.exists(dir .. d .. "/.keep") then fs.mkdir(dir .. d); fs.write(dir .. d .. "/.keep", "") end end
 	local function P(...) return dir .. "/" .. table.concat({ ... }) end
+	-- state reads (peers/, lobby/) bridge the gap while a writer replaces the file; inbox reads stay raw
+	local raw_read, cache = fs.read, {}
+	local function sread(p)
+		local s = raw_read(p)
+		if s and s ~= "" then cache[p] = { s, now() }; return s end
+		local c = cache[p]
+		if c and now() - c[2] <= M.GRACE then return c[1] end
+		return s
+	end
 	local function atomic(path, s)
 		seq = seq + 1
 		local tmp = P("tmp/", me, "_", session, "_", seq, ".tmp")
 		if not fs.write(tmp, s) then return false end
+		if fs.rename(tmp, path) then return true end -- POSIX: atomic replace
 		fs.remove(path)
-		if fs.rename(tmp, path) then return true end
+		if fs.rename(tmp, path) or fs.rename(tmp, path) then return true end
 		fs.remove(tmp); return false
 	end
 	local function alive_stamp(s)
@@ -85,7 +96,7 @@ function M.new(o)
 	end
 	function B.find_lobby(code, cb)
 		defer(function()
-			local id = fs.read(P("lobby/code__", safe(code)))
+			local id = sread(P("lobby/code__", safe(code)))
 			if id and B.owner(id) then return cb(id) end
 			cb(nil)
 		end)
@@ -96,7 +107,7 @@ function M.new(o)
 			if #B.members(id) >= (o.max_members or 16) then return cb(false, "EChatRoomEnterResponse=4") end
 			local order = 1
 			for _, p in ipairs(o.peers) do
-				local s = fs.read(P("lobby/", id, "__m__", safe(p)))
+				local s = sread(P("lobby/", id, "__m__", safe(p)))
 				local n = s and tonumber(s:match("^(%S+)"))
 				if n and n >= order then order = n + 1 end
 			end
@@ -107,23 +118,23 @@ function M.new(o)
 	end
 	function B.leave_lobby(id)
 		my_lobbies[id] = nil
-		fs.remove(P("lobby/", id, "__m__", me))
+		fs.remove(P("lobby/", id, "__m__", me)); fs.write(P("lobby/", id, "__m__", me), "0 0") -- explicit "gone" beats the read grace
 	end
 	function B.set_data(id, k, v)
 		atomic(P("lobby/", id, "__d__", safe(k)), tostring(v))
 		if k == "mp3p_code" and v and v ~= "" then atomic(P("lobby/code__", safe(v)), id) end
 	end
-	function B.get_data(id, k) return fs.read(P("lobby/", id, "__d__", safe(k))) or "" end
+	function B.get_data(id, k) return sread(P("lobby/", id, "__d__", safe(k))) or "" end
 	function B.set_joinable() return true end
 	function B.set_member_data(id, k, v) atomic(P("lobby/", id, "__md__", me, "__", safe(k)), tostring(v)) end
-	function B.get_member_data(id, peer, k) return fs.read(P("lobby/", id, "__md__", safe(peer), "__", safe(k))) or "" end
+	function B.get_member_data(id, peer, k) return sread(P("lobby/", id, "__md__", safe(peer), "__", safe(k))) or "" end
 	function B.set_owner(id, peer) return atomic(P("lobby/", id, "__owner"), safe(peer)) end
 	--- live members, in join order
 	function B.members(id)
 		local list = {}
 		for _, p in ipairs(o.peers) do
 			local sp = safe(p)
-			local s = sp == me and my_lobbies[id] and (my_lobbies[id] .. " " .. now()) or fs.read(P("lobby/", id, "__m__", sp))
+			local s = sp == me and my_lobbies[id] and (my_lobbies[id] .. " " .. now()) or sread(P("lobby/", id, "__m__", sp))
 			if s and alive_stamp(s) then list[#list + 1] = { id = sp, order = tonumber(s:match("^(%S+)")) or 99 } end
 		end
 		table.sort(list, function(a, b) return a.order < b.order end)
@@ -133,7 +144,7 @@ function M.new(o)
 	end
 	--- like Steam: when the owner is gone, the longest-standing remaining member becomes owner
 	function B.owner(id)
-		local o_ = fs.read(P("lobby/", id, "__owner"))
+		local o_ = sread(P("lobby/", id, "__owner"))
 		if not o_ then return nil end
 		local mem = B.members(id)
 		for _, m in ipairs(mem) do if m == o_ then return o_ end end
@@ -166,7 +177,7 @@ function M.new(o)
 		for _, p in ipairs(o.peers) do
 			local sp = safe(p)
 			if sp ~= me then
-				local s = fs.read(P("peers/", sp))
+				local s = sread(P("peers/", sp))
 				local sess = s and s:match("^(%S+)")
 				if sess then
 					local r = rx[sp]

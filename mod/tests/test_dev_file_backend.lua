@@ -59,5 +59,18 @@ CLK = CLK + 1
 local got = newhost.b.receive()
 local n = 0 for _, m in ipairs(got) do if m.peer == ps[g].name then n = n + 1 end end
 ok(n == 2, "new session is picked up, messages read in order from seq 1")
+-- Windows replace (remove+rename) or an AV scan can hide a state file for a moment: not a departure
+do
+	local lid = "Lgrace"; local a = FB.new({ dir = DIR, me = "dev1", peers = PEERS, now = now, session = "ga" })
+	local b = FB.new({ dir = DIR, me = "dev2", peers = PEERS, now = now, session = "gb" })
+	local done; a.create_lobby(function(id) lid = id end); a.poll()
+	b.join_lobby(lid, function(x) done = x end); b.poll()
+	ok(done and #a.members(lid) == 2 and a.owner(lid) == "dev1", "grace: both members listed")
+	os.remove(DIR .. "/lobby/" .. lid .. "__m__dev2"); os.remove(DIR .. "/lobby/" .. lid .. "__owner")
+	ok(#a.members(lid) == 2 and a.owner(lid) == "dev1", "grace: a briefly missing member/owner file is bridged")
+	T = T + 7
+	ok(#a.members(lid) == 1, "grace: a file that stays missing counts as gone")
+	b.leave_lobby(lid); ok(#a.members(lid) == 1, "grace: explicit leave")
+end
 os.execute('rm -rf "' .. DIR .. '"')
 print("PASS: dev file backend")
