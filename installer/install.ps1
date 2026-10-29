@@ -2,12 +2,12 @@
 param(
     [string]$GameDir = "",
     [string]$ModsRoot = "",
-    [string]$HostAddress = "",
-    [string]$Mode = "",          # "steam" (peer-to-peer, no server) or "tcp" (server address)
-    [int]$Port = 0,
+    [string]$HostAddress = "",   # ignored since 0.6.8 (Steam only); kept so older updaters/scripts still work
+    [string]$Mode = "",          # ignored since 0.6.8: always "steam" (peer-to-peer, no server)
+    [int]$Port = 0,              # ignored since 0.6.8
     [switch]$NoPrompt,          # for automated tests: never ask anything
     [switch]$SkipProcessCheck,
-    [switch]$SkipConnectionTest,
+    [switch]$SkipConnectionTest, # no-op since 0.6.8 (there is no server to test); kept for older updaters
     [switch]$NoPause,
     [string]$SteamRoots = "",   # test hook: ';'-separated Steam install dirs
     [ValidateSet('', 'ask', 'tested', 'keep')]
@@ -20,6 +20,7 @@ $Here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Payload = Join-Path $Here 'payload'
 $OurModName = 'BalatroMultiplayer3P'
 . (Join-Path $Here 'pins.ps1')
+. (Join-Path $Here 'settings.ps1')
 
 function Say($msg, $color = 'White') { Write-Host $msg -ForegroundColor $color }
 function Finish($code) {
@@ -170,6 +171,12 @@ function Backup-Item($path, $kind) {
 $prevEnvPath = Join-Path (Join-Path $ModsRoot $OurModName) '.env'
 $prevEnv = $null
 if (Test-Path -LiteralPath $prevEnvPath) { $prevEnv = [System.IO.File]::ReadAllText($prevEnvPath) }
+# 0.6.8: Steam peer-to-peer only. An old server/address setting is switched to Steam (backup kept).
+if (($Mode -and $Mode.ToLower() -ne 'steam') -or $HostAddress -or $Port) {
+    Say "Note: -Mode/-HostAddress/-Port are ignored - Balatro High Stakes plays over Steam only." Yellow
+}
+$envPlan = if ($null -ne $prevEnv) { Convert-EnvToSteam $prevEnv } else { @{ text = (New-SteamEnv); changed = $true; old = $null } }
+$envAction = if ($null -eq $prevEnv) { 'new (mode=steam)' } elseif ($envPlan.changed) { "switch to Steam (was $($envPlan.old))" } else { 'keep (already Steam)' }
 
 # 3. Pinned dependencies (compat.json): decide for Steamodded and Lovely first
 $Compat = Read-Compat (J $Payload "$OurModName\compat.json")
@@ -212,6 +219,7 @@ Say "PIN steamodded installed=$shownSmods tested=$TestedSmods action=$($smodsDec
 Say "PIN lovely installed=$shownLovely tested=$TestedLovely action=$($lovelyDec.action) ($($lovelyDec.why))" DarkGray
 if ($smodsDec.action -eq 'keep') { Say "  Keeping your Steamodded $smodsBest (tested: $TestedSmods). The game will warn you if it is untested." Yellow }
 if ($lovelyDec.action -eq 'keep') { Say "  Keeping your Lovely $shownLovely (tested: $TestedLovely). The game will warn you if it is untested." Yellow }
+Say "SETTINGS .env action=$envAction" DarkGray
 if ($DryRun) {
     Say "DRY RUN: nothing was changed." Cyan
     Finish 0
@@ -271,73 +279,29 @@ $ModDir = Join-Path $ModsRoot $OurModName
 $manifest.installedPaths += $ModDir
 Say "  High Stakes -> $ModDir" Green
 
-# 5. Connection mode
+# 5. Settings (.env): Steam peer-to-peer only
 Say ""
-if (-not $Mode -and -not $HostAddress -and $prevEnv) {
-    $prevMode = if ($prevEnv -match '(?m)^\s*mode\s*=\s*steam') { 'Steam' } else { 'server address' }
-    if ((Ask "Keep your current settings ($prevMode)? (Y/n)" "y") -notmatch '^[nN]') {
-        [System.IO.File]::WriteAllText((Join-Path $ModDir '.env'), $prevEnv, (New-Object System.Text.UTF8Encoding($false)))
-        Say "  Kept your existing settings ($prevMode)" Green
-        $Mode = 'keep'
-        if ($prevMode -eq 'Steam') { $SkipConnectionTest = $true } else {
-            if ($prevEnv -match '(?m)^\s*server_url\s*=\s*(\S+)') { $HostAddress = $Matches[1] }
-            if ($prevEnv -match '(?m)^\s*server_port\s*=\s*(\d+)') { $Port = [int]$Matches[1] }
-        }
-    }
-}
-if (-not $Mode) {
-    if ($HostAddress) { $Mode = 'tcp' }
-    else {
-        Say "How do you want to play?" Cyan
-        Say "  1 = via Steam (recommended: no server, no Tailscale - the host's Balatro is the server)"
-        Say "  2 = via a server address (Tailscale / playit.gg / public IP)"
-        $Mode = if ((Ask "Choice [1]" "1") -match '^2') { 'tcp' } else { 'steam' }
-    }
-}
-$Mode = $Mode.ToLower()
-if ($Mode -eq 'keep') {
-    # settings restored above
-} elseif ($Mode -eq 'steam') {
-    $envText = "# Written by the MP3P installer`r`nmode=steam`r`n# TCP fallback: remove the mode line and set server_url / server_port`r`nserver_url=127.0.0.1`r`nserver_port=8788`r`n"
-    [System.IO.File]::WriteAllText((Join-Path $ModDir '.env'), $envText, (New-Object System.Text.UTF8Encoding($false)))
+$utf8 = New-Object System.Text.UTF8Encoding($false)
+$envOut = Join-Path $ModDir '.env'
+if ($null -eq $prevEnv) {
+    [System.IO.File]::WriteAllText($envOut, $envPlan.text, $utf8)
     Say "  Saved: Steam peer-to-peer mode" Green
-    $SkipConnectionTest = $true
+} elseif (-not $envPlan.changed) {
+    [System.IO.File]::WriteAllText($envOut, $prevEnv, $utf8)
+    Say "  Kept your existing settings (Steam)" Green
 } else {
+    New-Item -ItemType Directory -Path $BackupDir -Force | Out-Null
+    $envBackup = Join-Path $BackupDir 'settings__.env'
+    [System.IO.File]::WriteAllText($envBackup, $prevEnv, $utf8)
+    [System.IO.File]::WriteAllText($envOut, $envPlan.text, $utf8)
+    Say "  Kept your other settings and switched the connection to Steam." Green
     Say ""
-    Say "Now enter the address of the friend who hosts the server" Cyan
-    Say "(their Tailscale IP like 100.x.y.z, a public IP, or a playit.gg address)."
-    while ([string]::IsNullOrWhiteSpace($HostAddress)) {
-        if ($NoPrompt) { Say "ERROR: no host address given." Red; Finish 1 }
-        $HostAddress = Ask "Host address" ""
-    }
-    $HostAddress = ($HostAddress.Trim() -replace '^\w+://', '').TrimEnd('/')
-    if ($HostAddress -match '^([^:]+):(\d+)$') { $HostAddress = $Matches[1]; if (-not $Port) { $Port = [int]$Matches[2] } }
-    if (-not $Port) { $Port = [int](Ask "Port [8788]" "8788") }
-    $envText = "# Written by the MP3P installer`r`nserver_url=$HostAddress`r`nserver_port=$Port`r`n"
-    [System.IO.File]::WriteAllText((Join-Path $ModDir '.env'), $envText, (New-Object System.Text.UTF8Encoding($false)))
-    Say "  Saved server address: ${HostAddress}:$Port" Green
+    Say "  NOTE: Balatro High Stakes now plays over Steam only - no server, no address, no playit/Tailscale." Yellow
+    Say "  Your old connection setting ($($envPlan.old)) no longer works and was switched to Steam." Yellow
+    Say "  How to play: the host clicks Play -> Create Lobby, friends join with the lobby code (or a Steam invite)." Yellow
+    Say "  Your old settings file was saved here: $envBackup" Yellow
 }
 $manifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $ManifestPath -Encoding UTF8
-
-# 6. Connection test
-$connOk = $null
-$doTest = -not $SkipConnectionTest
-if ($doTest -and -not $NoPrompt) { $doTest = ((Ask "Test the connection to the server now? (Y/n)" "y") -notmatch '^[nN]') }
-if ($doTest) {
-    Say "Testing ${HostAddress}:$Port ..."
-    try {
-        $client = New-Object System.Net.Sockets.TcpClient
-        $iar = $client.BeginConnect($HostAddress, $Port, $null, $null)
-        $connOk = $iar.AsyncWaitHandle.WaitOne(5000) -and $client.Connected
-        $client.Close()
-    } catch { $connOk = $false }
-    if ($connOk) { Say "  Connection OK - the server is reachable!" Green }
-    else {
-        Say "  Could not reach the server." Yellow
-        Say "  That's fine if the host hasn't started it yet. Otherwise check: is the server running," Yellow
-        Say "  are you both on Tailscale / is port $Port forwarded, and does the host's firewall allow it?" Yellow
-    }
-}
 
 # 7. Summary
 Say ""

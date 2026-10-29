@@ -49,6 +49,15 @@
 
 ## 0.6.8~3P (in development - not released yet) - host migration
 
+- **Steam only.** Balatro High Stakes now plays over Steam peer-to-peer only: no server, no IP address, no
+  playit.gg / Tailscale. The installer no longer asks how you play and always writes `mode=steam`. An existing
+  install with a server address (or no `mode=steam`) is switched to Steam once by the 0.6.8 installer/updater:
+  other `.env` settings stay, the old `.env` is saved as `MP3P-backup-*\settings__.env`, and it tells you so.
+  In the mod the TCP client (`networking/socket.lua`, `server_url`/`server_port`) is gone; another `mode` in
+  `.env` is ignored with a log line. Without Steam the menu says "Steam multiplayer not ready" and Reconnect
+  retries Steam. `server/` stays only as the reference implementation and test harness (not shipped, not hosted;
+  Docker/compose/standalone build files removed).
+
 - **Fix: `update_check=false` / `compat_check=false` in `.env` are honoured again.** The `.env` reader turns
   `false` into a boolean, so the opt-out was ignored since 0.6.6. Also: the spectator panel, match stats and rejoin
   bar can no longer crash the game if a panel fails to build (warning in the log instead), and a failed rejoin

@@ -646,6 +646,8 @@ function G.FUNCS.copy_to_clipboard(e)
 end
 
 function G.FUNCS.reconnect(e)
+	-- 0.6.8: Steam P2P only - (re)start the Steam connection if it gave up earlier
+	if not MP.STEAM_P2P and MP.START_P2P then MP.START_P2P() end
 	MP.ACTIONS.connect()
 	G.FUNCS.exit_overlay_menu()
 end

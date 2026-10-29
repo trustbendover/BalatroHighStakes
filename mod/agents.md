@@ -2,7 +2,7 @@
 
 > This is an `agents.md` — a repo-level orientation doc written for coding agents (Claude Code, Cursor, etc.) but perfectly readable by humans too. It's the "what is this project and how does it fit together" briefing you'd give a new contributor on day one.
 >
-> **The mod**: head-to-head (and co-op, solo endurance) Balatro. Two players, same seed, same shops, same packs — but at boss blinds you play against the opponent's live chip score. Built as a Steamodded mod with Lovely patches on top of vanilla Balatro. Server is a thin TCP relay; both clients simulate the game locally and only sync opponent scores.
+> **The mod**: head-to-head (and co-op, solo endurance) Balatro. Two players, same seed, same shops, same packs — but at boss blinds you play against the opponent's live chip score. Built as a Steamodded mod with Lovely patches on top of vanilla Balatro. (Balatro High Stakes fork: Steam peer-to-peer only since 0.6.8 - the host's game runs the lobby/PvP logic in `networking/p2p_server.lua`; there is no TCP server.) Both clients simulate the game locally and only sync opponent scores.
 
 ## Stack
 
@@ -35,9 +35,9 @@ Three layers of hooks, from deepest to highest-level:
 
 ## Networking
 
-TCP socket via `love.socket` running on a separate LÖVE thread (`love.thread.newThread`). Communication via `love.thread.getChannel` — two channels: `uiToNetwork` (client→server) and `networkToUi` (server→client). JSON-encoded messages. Server at configurable URL (default: `balatro.virtualized.dev:8788`).
+Steam peer-to-peer only (fork, 0.6.8): `networking/steam_p2p.lua` is the router (Steam lobby + P2P messages), the host runs `networking/p2p_server.lua` in-process. The upstream TCP client (`networking/socket.lua`, `server_url`/`server_port`) was removed. Inbound messages arrive as JSON on the `networkToUi` channel.
 
-`Client.send()` pushes JSON to the outbound channel. `MP.ACTIONS.*` functions in `networking/action_handlers.lua` handle inbound server messages.
+`Client.send()` hands the message table to `MP.STEAM_P2P.send` (nothing is sent without Steam). `MP.ACTIONS.*` functions in `networking/action_handlers.lua` handle inbound server messages.
 
 ## Gameplay Loop
 

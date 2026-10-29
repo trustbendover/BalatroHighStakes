@@ -5,7 +5,7 @@ an unofficial fork by **Trust Ben Dover** (formerly "Balatro Multiplayer 3P"). M
 **Attrition** and **Showdown** (2-8 players; with 6+ players the bottom two lose a life), **King of the Hill**
 (crown, bounty, crown shield), **Teams** (2v2, 3v3, 4v4, 2v2v2, 2v2v2v2 with shared team lives) and **Deathmatch**
 (everyone against everyone to the last one standing; leaving or a long disconnect eliminates you), plus seven
-special multiplayer jokers. Works over **Steam** (no server, no port forwarding) or with your own server.
+special multiplayer jokers. Plays over **Steam only** (peer-to-peer: no server, no IP address, no port forwarding).
 
 > Unofficial fork. Not affiliated with, endorsed by or supported by LocalThunk, Playstack or the
 > Balatro Multiplayer team. You need your own copy of Balatro (Windows, Steam).
@@ -17,7 +17,7 @@ special multiplayer jokers. Works over **Steam** (no server, no port forwarding)
 2. Close Balatro, **unzip** the whole zip, and double-click **`Install.bat`**.
    (SmartScreen: "More info" → "Run anyway". It's a plain PowerShell script you can read first.)
 3. The installer finds Balatro, installs Lovely 0.10.0, Steamodded 1.0.0~BETA-1620a and this mod,
-   and backs up anything it replaces. Choose **1 = via Steam** (recommended).
+   and backs up anything it replaces. It always sets up Steam mode (nothing to choose).
 4. Start Balatro from Steam. The version (`0.6.x~3P`) shows in the main menu.
 
 Everyone in a match needs the same version. The install folder is still called `BalatroMultiplayer3P`
@@ -44,20 +44,22 @@ Turn the check off with `update_check=false` in the mod's `.env`.
 - **Rejoin:** crashed or disconnected? Join again with the same code and name — you keep your seat, lives and ante.
 - **Late join:** another player (up to 8) can join a running match at the lowest ante/lives (not in 1v1 Duel, Teams or Deathmatch).
 
-Server mode (TCP) is still available: see [`server/`](server/) and choose option 2 in the installer.
+**Steam only (0.6.8):** there is no server / IP address / playit.gg / Tailscale mode any more. If an older install
+was set to a server address, the 0.6.8 installer or updater switches it to Steam once (other settings are kept,
+the old `.env` is saved in the `MP3P-backup-*` folder) and says so.
 
 ## Repository layout
 
 | Folder | What |
 | --- | --- |
 | [`mod/`](mod/) | The Balatro mod (Steamodded mod id `Multiplayer`), incl. the Lua P2P server core and the updater |
-| [`server/`](server/) | The 2-8 player TypeScript server (optional, for TCP mode) |
+| [`server/`](server/) | Reference TypeScript implementation of the lobby/PvP rules + the scenario test harness (not hosted, not shipped) |
 | [`installer/`](installer/) | Windows installer / uninstaller scripts and the texts that go into the Installer zip |
 | [`docs/`](docs/) | [Releasing](docs/RELEASING.md), [test checklist (NL)](docs/TESTING_NL.md) |
 | [`tools/`](tools/) | `build_release.py` — builds the Installer zip, source zip and SHA256SUMS |
 
 Tests: `cd mod && luajit tests/test_three_player.lua && luajit tests/test_steam_p2p.lua && luajit tests/test_updater.lua && luajit tests/test_koth.lua && luajit tests/test_koth_client.lua && luajit tests/test_jokers_3p.lua && luajit tests/test_teams.lua && luajit tests/test_multi_client.lua`,
-`cd server && npm ci && npm test && npm run test:lua`.
+`cd server && npm ci && npm test && npm run test:lua` (`test:lua` runs the same scenarios against the in-game Lua host).
 
 ## Credits
 

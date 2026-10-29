@@ -378,8 +378,10 @@ if MP.SPECTATE and MP.SPECTATE.register then MP.SPECTATE.register() end
 if MP.REJOIN and MP.REJOIN.register then MP.REJOIN.register() end
 if MP.MATCH_STATS and MP.MATCH_STATS.register then MP.MATCH_STATS.register() end
 
--- 3P fork: optional Steam peer-to-peer mode (.env: mode=steam). TCP stays the default/fallback.
--- 0.6.8 compat guard: untested Balatro/Steamodded/Lovely -> warning on the main menu; blocked
+-- 0.6.8: Balatro High Stakes is Steam peer-to-peer ONLY. The host's Balatro runs the game server
+-- (networking/p2p_server.lua) and friends join with the lobby code over Steam. The old TCP client
+-- (server address / playit / Tailscale) was removed; an old .env with another mode is ignored.
+-- Compat guard: untested Balatro/Steamodded/Lovely -> warning on the main menu; blocked
 -- version or a core file that failed to load -> safe mode (no networking, singleplayer works)
 local net_allowed = true
 if MP.COMPAT_GUARD and MP.COMPAT_GUARD.startup then
@@ -387,8 +389,17 @@ if MP.COMPAT_GUARD and MP.COMPAT_GUARD.startup then
 	net_allowed = not gok or allowed ~= false
 end
 
+if MP.ENV.mode ~= nil and MP.ENV.mode ~= "steam" then
+	sendWarnMessage("'.env' mode=" .. tostring(MP.ENV.mode)
+		.. " is no longer supported (server/TCP mode was removed in 0.6.8): using Steam P2P", "MULTIPLAYER")
+end
+if MP.ENV.server_url ~= nil or MP.ENV.server_port ~= nil then
+	sendInfoMessage("'.env' server_url/server_port are ignored (Steam P2P only since 0.6.8)", "MULTIPLAYER")
+end
+MP.ENV.mode = "steam"
+
 MP.STEAM_P2P = nil
-if MP.ENV.mode == "steam" and net_allowed then
+do
 	local function create_router()
 		local P2P = MP.load_mp_file("networking/steam_p2p.lua")
 		local Core = MP.load_mp_file("networking/p2p_server.lua")
@@ -415,15 +426,24 @@ if MP.ENV.mode == "steam" and net_allowed then
 			log = function(m) sendInfoMessage(m, "MULTIPLAYER-P2P") end,
 		})
 	end
-	local ok, err = pcall(function() MP.STEAM_P2P = create_router() end)
-	if not ok then
-		-- SteamAPI may be initialised after mods load: retry for 30 s, queueing messages meanwhile
+	-- SteamAPI may be initialised after mods load: retry for 30 s, queueing messages meanwhile.
+	-- If Steam stays unavailable, multiplayer is simply off (there is no server to fall back to);
+	-- the Reconnect button calls MP.START_P2P() again.
+	function MP.START_P2P()
+		if MP.SAFE_MODE then return false end
+		if MP.STEAM_P2P then return true end
+		local ok, err = pcall(function() MP.STEAM_P2P = create_router() end)
+		if ok then
+			sendInfoMessage("Steam P2P mode active (no server needed)", "MULTIPLAYER")
+			return true
+		end
 		sendInfoMessage("Steam P2P not ready yet (" .. tostring(err) .. "), retrying", "MULTIPLAYER")
 		local queue, t, last = {}, 0, -1
 		local stub = { pending = true }
 		function stub.send(msg) queue[#queue + 1] = msg end
 		function stub.invite() return false end
 		function stub.update(dt)
+			if MP.SAFE_MODE then MP.STEAM_P2P = nil; return end
 			t = t + (dt or 0)
 			if math.floor(t) == last then return end
 			last = math.floor(t)
@@ -434,78 +454,57 @@ if MP.ENV.mode == "steam" and net_allowed then
 				for _, m in ipairs(queue) do r.send(m) end
 			elseif t > 30 then
 				MP.STEAM_P2P = nil
-				sendWarnMessage("Steam P2P unavailable, falling back to TCP server: " .. tostring(r), "MULTIPLAYER")
-				if MP.START_TCP then MP.START_TCP() end
-				local json = require("json")
-				for _, m in ipairs(queue) do love.thread.getChannel("uiToNetwork"):push(json.encode(m)) end
+				sendWarnMessage("Steam P2P unavailable: " .. tostring(r)
+					.. " - multiplayer needs Steam (start Balatro from Steam, then press Reconnect)", "MULTIPLAYER")
+				pcall(function() love.thread.getChannel("networkToUi"):push('{"action":"disconnected"}') end)
 			end
 		end
 		MP.STEAM_P2P = stub
-		ok = true
+		return true
 	end
-	if ok then
-		if not MP.STEAM_P2P.pending then sendInfoMessage("Steam P2P mode active (no server needed)", "MULTIPLAYER") end
-		-- opt-in diagnostic (.env: p2p_selftest=true): hosts a lobby by itself and checks Steam
-		local st = MP.ENV.p2p_selftest and { t = 0, step = 0 } or nil
-		local function selftest(dt)
-			local R, L = MP.STEAM_P2P, function(m) sendInfoMessage("P2P-SELFTEST " .. m, "MULTIPLAYER") end
-			st.t = st.t + dt
-			if st.step == 0 and st.t > 8 then
-				st.step = 1
-				L("my steamid " .. tostring(R.backend.my_id()))
-				R.send({ action = "createLobby", gameMode = "attrition" })
-			elseif st.step == 1 and R.lobby then
-				st.step = 2
-				local code = R.backend.get_data(R.lobby, "mp3p_code")
-				L("lobby " .. R.lobby .. " code=" .. code .. " owner=" .. R.backend.owner(R.lobby)
-					.. " members=" .. #R.backend.members(R.lobby) .. " callbacks=" .. tostring(R.backend.cb_on))
-				L("launch args: " .. tostring(R.backend.launch_args()))
-				st.code, st.tries, st.next = code, 0, st.t + 5
-			elseif st.step == 2 and st.t > st.next and not st.busy then
-				st.busy, st.tries = true, st.tries + 1
-				R.backend.find_lobby(st.code, function(found)
-					st.busy = false
-					L("search #" .. st.tries .. " by code " .. st.code .. " -> " .. tostring(found) .. (found == R.lobby and " OK" or " MISMATCH"))
-					if found == R.lobby or st.tries >= 4 then
-						st.step = 3
-						if MP.ENV.p2p_selftest_invite then L("opening invite overlay -> " .. tostring(R.invite())) end
-					else st.next = st.t + 10 end
-				end)
-			elseif st.step == 1 and st.t > 40 then
-				st.step = 3; L("FAIL no Steam lobby after 40s")
-			end
+	-- opt-in diagnostic (.env: p2p_selftest=true): hosts a lobby by itself and checks Steam
+	local st = MP.ENV.p2p_selftest and { t = 0, step = 0 } or nil
+	local function selftest(dt)
+		local R, L = MP.STEAM_P2P, function(m) sendInfoMessage("P2P-SELFTEST " .. m, "MULTIPLAYER") end
+		st.t = st.t + dt
+		if st.step == 0 and st.t > 8 then
+			st.step = 1
+			L("my steamid " .. tostring(R.backend.my_id()))
+			R.send({ action = "createLobby", gameMode = "attrition" })
+		elseif st.step == 1 and R.lobby then
+			st.step = 2
+			local code = R.backend.get_data(R.lobby, "mp3p_code")
+			L("lobby " .. R.lobby .. " code=" .. code .. " owner=" .. R.backend.owner(R.lobby)
+				.. " members=" .. #R.backend.members(R.lobby) .. " callbacks=" .. tostring(R.backend.cb_on))
+			L("launch args: " .. tostring(R.backend.launch_args()))
+			st.code, st.tries, st.next = code, 0, st.t + 5
+		elseif st.step == 2 and st.t > st.next and not st.busy then
+			st.busy, st.tries = true, st.tries + 1
+			R.backend.find_lobby(st.code, function(found)
+				st.busy = false
+				L("search #" .. st.tries .. " by code " .. st.code .. " -> " .. tostring(found) .. (found == R.lobby and " OK" or " MISMATCH"))
+				if found == R.lobby or st.tries >= 4 then
+					st.step = 3
+					if MP.ENV.p2p_selftest_invite then L("opening invite overlay -> " .. tostring(R.invite())) end
+				else st.next = st.t + 10 end
+			end)
+		elseif st.step == 1 and st.t > 40 then
+			st.step = 3; L("FAIL no Steam lobby after 40s")
 		end
-		local p2p_update_ref = Game.update
-		function Game:update(dt)
-			if st and st.step < 3 and MP.STEAM_P2P and not MP.STEAM_P2P.pending then
-				local sok, serr = pcall(selftest, dt)
-				if not sok then st.step = 3; sendWarnMessage("P2P-SELFTEST error " .. tostring(serr), "MULTIPLAYER") end
-			end
-			if MP.STEAM_P2P then
-				local uok, uerr = pcall(MP.STEAM_P2P.update, dt)
-				if not uok then sendWarnMessage("Steam P2P update error: " .. tostring(uerr), "MULTIPLAYER") end
-			end
-			return p2p_update_ref(self, dt)
-		end
-	else
-		MP.STEAM_P2P = nil
-		sendWarnMessage("Steam P2P unavailable, falling back to TCP server: " .. tostring(err), "MULTIPLAYER")
 	end
+	local p2p_update_ref = Game.update
+	function Game:update(dt)
+		if st and st.step < 3 and MP.STEAM_P2P and not MP.STEAM_P2P.pending then
+			local sok, serr = pcall(selftest, dt)
+			if not sok then st.step = 3; sendWarnMessage("P2P-SELFTEST error " .. tostring(serr), "MULTIPLAYER") end
+		end
+		if MP.STEAM_P2P then
+			local uok, uerr = pcall(MP.STEAM_P2P.update, dt)
+			if not uok then sendWarnMessage("Steam P2P update error: " .. tostring(uerr), "MULTIPLAYER") end
+		end
+		return p2p_update_ref(self, dt)
+	end
+	if net_allowed then MP.START_P2P() end
 end
 
-local SOCKET = MP.load_mp_file("networking/socket.lua")
-MP.NETWORKING_THREAD = love.thread.newThread(SOCKET)
-local server_url = MP.ENV.server_url or SMODS.Mods["Multiplayer"].config.server_url
-local server_port = tonumber(MP.ENV.server_port) or SMODS.Mods["Multiplayer"].config.server_port
-sendInfoMessage(
-	string.format("Connecting to %s:%s", tostring(server_url), tostring(server_port)),
-	"MULTIPLAYER"
-)
-local tcp_started = false
-function MP.START_TCP()
-	if tcp_started or MP.SAFE_MODE then return end
-	tcp_started = true
-	MP.NETWORKING_THREAD:start(server_url, server_port)
-end
-if not MP.STEAM_P2P and net_allowed then MP.START_TCP() end
 if net_allowed then MP.ACTIONS.connect() end

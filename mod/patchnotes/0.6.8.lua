@@ -9,7 +9,7 @@ return {
 			"{C:money}Safer updates{}: warns if Balatro/Steamodded changes",
 		},
 		known = {
-			"{C:mult}Everyone{} needs 0.6.8",
+			"{C:mult}Steam only{} now (no server); everyone needs 0.6.8",
 		},
 	},
 	nl = {
@@ -20,7 +20,7 @@ return {
 			"{C:money}Veiliger{}: waarschuwt als Balatro/Steamodded wijzigt",
 		},
 		known = {
-			"{C:mult}Iedereen{} heeft 0.6.8 nodig",
+			"{C:mult}Alleen Steam{} (geen server); iedereen 0.6.8 nodig",
 		},
 	},
 }

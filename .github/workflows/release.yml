@@ -16,6 +16,9 @@ jobs:
       - name: Installer pin tests (Windows PowerShell, sandbox in TEMP)
         shell: powershell
         run: powershell -NoProfile -ExecutionPolicy Bypass -File tools\test_installer_pins.ps1
+      - name: Steam-only installer test (no mode prompt, old server .env -> mode=steam with backup)
+        shell: powershell
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File tools\test_installer_steam_only.ps1
       - name: Updater repo-rename fallback test (new name first, old name second)
         shell: powershell
         run: powershell -NoProfile -ExecutionPolicy Bypass -File tools\test_updater_rename.ps1
@@ -63,6 +66,7 @@ jobs:
           luajit tests/test_compat_guard.lua
           luajit tests/test_brand.lua
           luajit tests/test_ui_fit.lua
+          luajit tests/test_steam_only.lua
 
       - name: Check repo name (0.6.8 rename, see docs/REPO_RENAME_NL.md)
         run: |
@@ -71,7 +75,7 @@ jobs:
             echo "::warning::running in ${GITHUB_REPOSITORY}, mod/brand.json says $want - rename the repo first (docs/REPO_RENAME_NL.md)"
           fi
 
-      - name: Server tests
+      - name: Rules tests (TS reference + the in-game Lua host; the server itself is not shipped)
         working-directory: server
         run: |
           npm ci

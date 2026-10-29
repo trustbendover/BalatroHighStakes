@@ -32,5 +32,5 @@ en heeft tabbladen: **Prijzen**, **Spelers** en (bij teams) **Teams**.
 
 - Getest met de gesimuleerde Steam-backend en een nagebootste Balatro (`mod/tests/test_match_stats.lua`),
   nog niet in een echte match met vrienden. Het scherm zelf is alleen als preview-afbeelding nagemaakt.
-- Alleen Steam P2P: de TCP-server (TS) maakt geen statistieken.
+- Steam P2P (sinds 0.6.8 de enige manier om te spelen). De TS-referentieserver in `server/` maakt geen statistieken.
 - Wie de match verlaat staat er nog in (als uitgeschakeld), met de cijfers tot dat moment.

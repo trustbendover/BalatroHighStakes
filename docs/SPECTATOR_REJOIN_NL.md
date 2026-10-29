@@ -1,6 +1,6 @@
 # Meekijken en terugkeren na een disconnect (0.6.8)
 
-Kort overzicht voor spelers en testers. Geldt voor Steam P2P (`mode=steam`, de standaard), 2 tot 8 spelers.
+Kort overzicht voor spelers en testers. Geldt voor Steam P2P (sinds 0.6.8 de enige manier om te spelen), 2 tot 8 spelers.
 
 ## Meekijken (spectator)
 
@@ -39,4 +39,3 @@ Kort overzicht voor spelers en testers. Geldt voor Steam P2P (`mode=steam`, de s
   nog niet met echte vrienden over Steam. Het echt herladen van een run uit het checkpoint is nog niet in het
   echte spel getest.
 - Een PvP-blind die bezig was toen je wegviel kun je niet afmaken: je komt terug in shop of blind-keuze.
-- TCP-servermodus (TS-server) is niet aangepast: daar geen toeschouwers en geen samenvatting op de server.

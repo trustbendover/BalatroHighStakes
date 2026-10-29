@@ -5,8 +5,13 @@ Teams (2v2, 3v3, 4v4, 2v2v2, 2v2v2v2). Iedereen in het spel heeft deze mod nodig
 (Voorheen "Balatro Multiplayer 3P"; de installatiemap heet nog BalatroMultiplayer3P.)
 Windows + Steam-versie van Balatro.
 
+ALLEEN STEAM: sinds 0.6.8 speelt Balatro High Stakes alleen via Steam peer-to-peer. Geen server, geen
+IP-adres, geen playit.gg / Tailscale / port forwarding - de Balatro van de host is de server.
+
 UPDATEN VANAF EEN OUDERE VERSIE: iedereen (host EN vrienden) moet 0.6.8 installeren. Draai gewoon
-Install.bat opnieuw; hij vervangt de oude versie en houdt je instellingen.
+Install.bat opnieuw; hij vervangt de oude versie en houdt je instellingen. Speelde je eerder via een
+serveradres? Dan zet de installer dat een keer om naar Steam, meldt dat, en bewaart je oude .env in de
+backupmap.
 
 INSTALLEREN
 1. Sluit Balatro. Pak de hele zip uit (niet vanuit de zip starten).
@@ -15,9 +20,7 @@ INSTALLEREN
      Het is een gewoon batch/PowerShell-script; je kunt install.ps1 eerst lezen.
 3. De installer zoekt Balatro, installeert Lovely (modloader), Steamodded 1.0.0~BETA-1620a en
    de High Stakes-mod, en maakt een backup van alles wat hij vervangt (%APPDATA%\Balatro\MP3P-backup-*).
-4. Kies hoe je speelt:
-   1 = via Steam (STANDAARD, aanbevolen): geen server, geen port forwarding, geen Tailscale.
-   2 = via een serveradres (playit.gg / Tailscale / publiek IP + poort, standaard 8788).
+4. Niets te kiezen: de mod speelt altijd via Steam (mode=steam).
 5. Start Balatro gewoon via Steam. In het hoofdmenu staat 0.6.8~3P.
 
 UPDATES (vanaf 0.6.6)
@@ -30,7 +33,7 @@ UPDATES (vanaf 0.6.6)
 
 STEUN: vind je de mod leuk? https://ko-fi.com/trustbendover
 
-SPELEN IN STEAM-MODUS (keuze 1)
+SPELEN (STEAM)
 - Iedereen kan hosten: Play -> Create Lobby. De Balatro van de host is de server, dus de host
   moet Balatro open laten tot het spel klaar is.
 - Joinen met code: Play -> Join Lobby -> code typen. Wacht ~10 seconden nadat de host de lobby
@@ -43,17 +46,14 @@ SPELEN IN STEAM-MODUS (keuze 1)
 - Late join: een extra speler (tot 8) kan in een lopend spel komen (niet in 1v1 Duel of Teams);
   start op de laagste ante/levens en zit een blind die al bezig is uit.
 
-SERVERMODUS (keuze 2)
-De host draait de High Stakes-server (poort 8788) en deelt die via playit.gg, Tailscale of port forwarding.
-Wisselen kan altijd: Install.bat opnieuw, of %APPDATA%\Balatro\Mods\BalatroMultiplayer3P\.env
-aanpassen (regel mode=steam = Steam-modus).
-
 PROBLEMEN
 - Spel start niet / geen "Mods"-knop: een oude Lovely "version.dll" in de Balatro-map botst met
   Lovely 0.10 (winmm.dll). De installer haalt hem weg (met backup).
 - Crash in overrides.lua: verkeerde Steamodded-versie. Nodig: precies 1.0.0~BETA-1620a;
   draai Install.bat opnieuw.
 - "No Steam lobby found": 10 s wachten en opnieuw; code checken; host moet nog in de lobby zitten.
+- "Steam-multiplayer niet klaar" in het hoofdmenu: start Balatro via Steam (Steam moet draaien) en
+  druk op Reconnect / Opnieuw verbinding maken.
 - Logs: %APPDATA%\Balatro\Mods\lovely\log\ (nieuwste bestand), zoek op "Steam P2P".
 - Verwijderen: Uninstall.bat zet de backups terug.
 

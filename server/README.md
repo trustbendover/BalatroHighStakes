@@ -1,4 +1,13 @@
-# Balatro Multiplayer Server
+# Balatro Multiplayer Server (reference + test harness only)
+
+> **Balatro High Stakes does not use or support a hosted server.** Since 0.6.8 the mod plays over
+> Steam peer-to-peer only: the host's Balatro runs the game logic in-process
+> (`mod/networking/p2p_server.lua`). This folder is kept as the reference implementation of the
+> lobby/PvP rules and as the test harness: `npm test` runs the scenario tests against this TS code and
+> `npm run test:lua` runs the same tests against the in-game Lua host (`test/luaBridge.mjs`).
+> Hosting files (Docker, compose, standalone builds, logrotate) were removed in 0.6.8; it is not
+> shipped in the Installer zip.
+
 
 TCP game server for [Balatro Multiplayer](https://github.com/Balatro-Multiplayer/BalatroMultiplayer). Handles lobby management, game state synchronization, and PvP logic between two players.
 
@@ -9,12 +18,12 @@ TCP game server for [Balatro Multiplayer](https://github.com/Balatro-Multiplayer
 - **Keep-alive:** Server sends `keepAlive` after 5s of inactivity, retries 3 times at 2.5s intervals before closing the connection
 - **Security:** No TLS or client verification. The server operates on good faith that clients are not tampered with.
 
-## Setup
+## Tests
 
 ```bash
-npm install
-npm run build
-npm run start
+npm ci
+npm test          # TS reference
+npm run test:lua  # same scenarios against the in-game Lua host
 ```
 
 ### Message Flow

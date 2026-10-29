@@ -1,10 +1,7 @@
 {
 	"version": "0.6.8-MULTIPLAYER3P",
 	"scripts": {
-		"build-servers": "node build.js",
 		"build": "tsc",
-		"dev": "tsx watch src/main.ts",
-		"start": "node ./dist/main.js",
 		"test": "npm run build && node test/threePlayer.test.mjs && node test/rejoinLateJoin.test.mjs && node test/koth.test.mjs && node test/multiPlayer.test.mjs && node test/deathmatch.test.mjs",
 		"test:lua": "SERVER_ENTRY=test/luaBridge.mjs node test/threePlayer.test.mjs && SERVER_ENTRY=test/luaBridge.mjs node test/rejoinLateJoin.test.mjs && SERVER_ENTRY=test/luaBridge.mjs node test/koth.test.mjs && SERVER_ENTRY=test/luaBridge.mjs node test/multiPlayer.test.mjs && node test/deathmatch.test.mjs"
 	},

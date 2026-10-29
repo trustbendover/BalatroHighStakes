@@ -1,8 +1,7 @@
 # Testchecklist Balatro MP 3P – 0.6.5~3P (Steam P2P)
 
 Voorbereiding (iedereen):
-- [ ] Vrienden: nieuwste `BalatroMultiplayer3P-v0.6.5-Installer.zip` uitpakken → `Install.bat` → keuze **1 = via Steam**.
-- [ ] Host: in `%APPDATA%\Balatro\Mods\BalatroMultiplayer3P\.env` de regel `mode=steam` toevoegen (server_url/port mogen blijven staan).
+- [ ] Iedereen: nieuwste Installer-zip uitpakken → `Install.bat` (sinds 0.6.8 altijd Steam, er is niets te kiezen).
 - [ ] Iedereen start Balatro **via Steam**, Steam ingelogd, elkaar als Steam-vriend.
 - [ ] In het hoofdmenu staat versie **0.6.5~3P**.
 
@@ -29,15 +28,17 @@ Voorbereiding (iedereen):
 - [ ] Start met 2 spelers, derde joint tijdens de run (code of invite).
 - [ ] Derde krijgt laagste ante/levens; zit een lopende blind uit en doet bij de volgende mee.
 
-## 6. Terugval naar playit / server
-- [ ] Haal `mode=steam` weg uit `.env` (of installer opnieuw, keuze 2) en vul het playit-adres in.
-- [ ] De host start `start-server.bat` (of de server draait al) + playit.
-- [ ] Join via code werkt zoals voorheen.
+## 6. Oude serverinstelling wordt Steam (0.6.8)
+- Sinds 0.6.8 is er geen playit-/servermodus meer.
+- [ ] Iemand met een oude `.env` met `server_url=...` (zonder `mode=steam`) installeert/updatet naar 0.6.8:
+      de installer meldt een keer "now plays over Steam only", de `.env` heeft daarna `mode=steam`, andere regels
+      staan er nog, en de oude `.env` staat in `%APPDATA%\Balatro\MP3P-backup-*\settings__.env`.
+- [ ] Die speler kan daarna gewoon joinen met de code.
 
 ## Als iets faalt: wat screenshotten / doorsturen
 Log: `%APPDATA%\Balatro\Mods\lovely\log\` (nieuwste bestand) – stuur het hele bestand als dat kan. Zoek op:
 - `Steam P2P mode active` → Steam-modus is aan. Ontbreekt die regel? Dan:
-- `Steam P2P unavailable, falling back to TCP server: ...` → **deze regel met de fout erachter**.
+- `Steam P2P unavailable: ... multiplayer needs Steam` → **deze regel met de fout erachter** (Balatro via Steam gestart?).
 - `Steam P2P update error:` / `Steam P2P send error:` → screenshot inclusief de regels erboven.
 - `Steam lobby ... published for code` (host) / `Steam lobby creation failed`.
 - `Started from a Steam invite, lobby ...` / `Steam join request for lobby ...` (invite/Join game).

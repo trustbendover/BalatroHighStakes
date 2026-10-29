@@ -142,7 +142,7 @@ while (Get-Process -Name 'Balatro' -ErrorAction SilentlyContinue) {
 }
 Start-Sleep -Seconds 1
 
-# ---------- install (update mode: keeps .env) ----------
+# ---------- install (update mode: keeps .env; an old server/address setting is switched to Steam) ----------
 $ex = Join-Path $work 'x'
 Expand-Archive -LiteralPath $zip -DestinationPath $ex -Force
 $installer = Get-ChildItem -LiteralPath $ex -Recurse -Filter 'install.ps1' | Select-Object -First 1

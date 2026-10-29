@@ -18,6 +18,20 @@ Voorheen "Balatro Multiplayer 3P".*
   Stappen voor de releasedag en het bewijs dat 0.6.6/0.6.7 blijven updaten: `docs/REPO_RENAME_NL.md`.
   De installatiemap blijft `BalatroMultiplayer3P` (hernoemen alleen met een migratiestap in de installer).
 
+## Alleen Steam (0.6.8)
+- Vanaf 0.6.8 speelt Balatro High Stakes **alleen via Steam peer-to-peer**: de Balatro van de host is de server.
+  Er is geen servermodus meer (geen IP-adres, geen playit.gg, geen Tailscale, geen eigen server hosten).
+- De installer vraagt niets meer en schrijft altijd `mode=steam`. Stond een bestaande installatie op een
+  serveradres (of had de `.env` geen `mode=steam`), dan zet de 0.6.8-installer/updater dat **een keer** om naar
+  Steam: de andere instellingen blijven, de oude `.env` gaat naar `MP3P-backup-*\settings__.env`, en je krijgt
+  een melding in gewone taal.
+- De mod zelf: de TCP-client (`networking/socket.lua`) is weg. Leest hij toch een andere `mode` of
+  `server_url`, dan schrijft hij een logregel en gebruikt hij Steam. Lukt Steam niet (Balatro niet via Steam
+  gestart), dan staat er "Steam-multiplayer niet klaar" in het menu en probeert **Reconnect** het opnieuw.
+- `server/` blijft in de repo als referentie van de spelregels en als testharnas (`npm test`, en `npm run test:lua`
+  draait dezelfde scenario's tegen de Lua-host in het spel). Hij zit niet in de Installer-zip en wordt niet gehost;
+  Docker/compose/standalone-buildbestanden zijn verwijderd.
+
 ## Spelersaantallen
 | Modus | Spelers | Standaard levens | Bijzonderheden |
 | --- | --- | --- | --- |
@@ -72,4 +86,4 @@ verschijnen Gier, Lachende Derde en Middenmoot niet. Zie `JOKERS_NL.md`.
 ## Risico's
 - Lay-out met 8 spelers (lobby-lijst, lobby-info) is niet in het echte spel bekeken; kan krap zijn.
 - 0.6.6 en 0.6.7 door elkaar geeft een versiewaarschuwing en ander gedrag; iedereen moet updaten.
-- Teams/Duel zijn nieuwe servermodi: een oude TS-server (0.6.6) kent ze niet.
+- Teams/Duel waren nieuwe servermodi in 0.6.7. Sinds 0.6.8 is er alleen nog Steam P2P (geen losse server).

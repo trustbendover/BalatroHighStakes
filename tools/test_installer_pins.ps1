@@ -43,7 +43,7 @@ function W([string]$path, [string]$text) {
 }
 function Reset-Sandbox([string]$smodsVer, [string]$lovelyVer) {
     if (Test-Path -LiteralPath $root) { Remove-Item -LiteralPath $root -Recurse -Force }
-    foreach ($f in 'install.ps1', 'pins.ps1') { W (Join-Path $inst $f) ([IO.File]::ReadAllText((Join-Path $Repo "installer\$f"))) }
+    foreach ($f in 'install.ps1', 'pins.ps1', 'settings.ps1') { W (Join-Path $inst $f) ([IO.File]::ReadAllText((Join-Path $Repo "installer\$f"))) }
     W (Join-Path $payload 'BalatroMultiplayer3P\Multiplayer.json') '{ "id": "Multiplayer", "version": "0.6.8~3P" }'
     W (Join-Path $payload 'BalatroMultiplayer3P\compat.json') ([IO.File]::ReadAllText((Join-Path $Repo 'mod\compat.json')))
     W (Join-Path $payload 'smods\version.lua') 'return "1.0.0~BETA-1620a-STEAMODDED"'

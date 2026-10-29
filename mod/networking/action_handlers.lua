@@ -42,12 +42,10 @@ function Client.send(msg)
 		if not ok then sendWarnMessage("Steam P2P send error: " .. tostring(err), "MULTIPLAYER") end
 		return
 	end
-    local should_send_log = not (msg and msg.action and no_log_actions[msg.action])
-	msg = json.encode(msg)
-	if should_send_log then
-		sendTraceMessage(string.format("Client sent message: %s", msg), "MULTIPLAYER")
+	-- 0.6.8: Steam P2P only - there is no TCP server any more, so without Steam nothing is sent
+	if not (msg and msg.action and no_log_actions[msg.action]) then
+		sendTraceMessage("No Steam P2P connection, not sent: " .. tostring(type(msg) == "table" and msg.action or msg), "MULTIPLAYER")
 	end
-	love.thread.getChannel("uiToNetwork"):push(msg)
 end
 
 -- Server to Client
