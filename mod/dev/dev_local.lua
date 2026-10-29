@@ -46,7 +46,7 @@ function D.new_backend()
 end
 
 -- username = instance name (in-memory; the test profile is separate from the real one anyway)
-pcall(function() SMODS.Mods["Multiplayer"].config.username = D.name end)
+pcall(function() SMODS.Mods["Multiplayer"].config.username = D.name; MP.LOBBY.username = D.name end)
 
 D.FILE_CODE = D.dir .. "/lobby_code.txt"
 function D.write_code(code) local f = io.open(D.FILE_CODE, "wb"); if f then f:write(code); f:close() end end

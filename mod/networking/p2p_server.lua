@@ -345,7 +345,9 @@ function Server:check_game_over_inner(L)
 	for _, p in ipairs(L.players) do
 		if not p.eliminated and p.lives <= 0 then dying[#dying + 1] = p end
 	end
-	local survivors = #filter(L.players, function(p) return not p.eliminated and p.lives > 0 end) + #self:away_alive(L)
+	-- 0.6.8: only connected players count as standing. If every connected player dies at once while a
+	-- disconnected seat is still held, the final-score rule decides (nobody wins by being away).
+	local survivors = #filter(L.players, function(p) return not p.eliminated and p.lives > 0 end)
 	local spared = {}
 	if survivors == 0 and #dying > 0 and not self:teams_active(L) then
 		-- nobody left standing: the highest score among those dying now wins (ties: all of them)

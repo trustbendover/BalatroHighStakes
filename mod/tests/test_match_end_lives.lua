@@ -45,4 +45,10 @@ f.eliminated = true; S:lose_life(f, "round"); ok(f.lives == 3, "eliminated playe
 local g, h = pl("g", 1, "100"), pl("h", 1, "100")
 L = lobby({ g, h }); S:lose_life(g); S:lose_life(h); S:check_game_over(L)
 ok(g.got("winGame") and h.got("winGame") and not g.eliminated and not h.eliminated, "equal score on the last life: shared win")
+-- host left (seat held, 2 lives) and both connected players die in the same PvP: the higher score wins,
+-- the absent player does not win by being away and the match does not end without a winner
+local x, y = pl("x", 1, "900"), pl("y", 1, "100")
+L = lobby({ x, y }); L.slots = { { old = { id = "gone", username = "gone", lives = 2 } } }
+S:lose_life(x); S:lose_life(y); S:check_game_over(L)
+ok(x.got("winGame") and y.got("loseGame") and L.winnerId == "x" and not L.isInGame, "all connected die, away seat held: final score decides")
 print("PASS: match end lives")
