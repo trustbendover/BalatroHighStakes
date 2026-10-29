@@ -146,13 +146,16 @@ function CG.state(component, version, compat)
 end
 
 --- Pure: other Multiplayer mods that loaded next to us. mods = SMODS.Mods, own = our entry.
---- -> sorted list of { id=, name=, folder= } (mods that did not load or are disabled are ignored)
+--- -> sorted list of { id=, name=, folder=, loaded= }. Mods the player disabled in the Mods menu (or with
+--- .lovelyignore) are ignored. Mods Steamodded refused (can_load=false, e.g. MultiplayerPvP lists "Multiplayer"
+--- as a conflict, the API needs a newer Steamodded) still count: they make Steamodded restart the game on every
+--- start and show errors, so the player should move them out.
 function CG.find_clashes(mods, own)
 	local out = {}
 	for id, m in pairs(mods or {}) do
-		if CG.CLASH_IDS[id] and type(m) == "table" and m ~= own and m.can_load ~= false and not m.disabled then
+		if CG.CLASH_IDS[id] and type(m) == "table" and m ~= own and not m.disabled and not m.blacklisted and not m.lovelyIgnored then
 			local folder = type(m.path) == "string" and m.path:gsub("[/\\]+$", ""):match("([^/\\]+)$") or nil
-			out[#out + 1] = { id = id, name = m.name or id, folder = folder }
+			out[#out + 1] = { id = id, name = m.display_name or m.name or id, folder = folder, loaded = m.can_load ~= false }
 		end
 	end
 	table.sort(out, function(a, b) return a.id < b.id end)

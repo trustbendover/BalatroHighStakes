@@ -54,7 +54,9 @@
   with High Stakes. `Install.bat` now lists them and offers to move them to the backup folder (default yes; never
   deleted, `Uninstall.bat` puts them back; `-NoPrompt` moves them, `-KeepOtherMultiplayer` keeps them, `-DryRun`
   only prints `CLASH ...` lines). In the game, the startup check shows a "Heads up: another Multiplayer mod" pop-up
-  with Play anyway / Disable multiplayer for now when one of them is loaded.
+  with Play anyway / Disable multiplayer for now when one of them is installed (also when Steamodded refused to
+  load it: it still makes Steamodded restart the game and show errors on every start). Checked against the real
+  official v1.0.1 files (folders `BalatroMultiplayerPvP-1.0.1` / `BalatroMultiplayerAPI-1.0.1`, Thunderstore layout).
 
 - **Fix: no more "Found invalid metadata JSON file ... tests/koth_vectors.json" errors in the log.** The Installer
   zip no longer ships the mod's `tests/` folder (Steamodded scanned its JSON files as mod metadata). Harmless, but

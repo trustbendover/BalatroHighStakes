@@ -193,11 +193,13 @@ do
 		MultiplayerSPDRN = { name = "Speedrun", path = "C:/x/Mods/SPD/", can_load = false },
 		SomeOtherMod = { name = "Other", path = "C:/x/Mods/Other/" } }
 	local cl = CG.find_clashes(mods, own)
-	ok(#cl == 2 and cl[1].id == "MultiplayerAPI" and cl[1].folder == "MPAPI" and cl[2].id == "MultiplayerPvP" and cl[2].folder == "BalatroMultiplayerPvP",
-		"clash: MultiplayerAPI + MultiplayerPvP found (folder names only), our own mod, unrelated and not-loaded mods ignored")
+	ok(#cl == 3 and cl[1].id == "MultiplayerAPI" and cl[1].folder == "MPAPI" and cl[2].id == "MultiplayerPvP" and cl[2].folder == "BalatroMultiplayerPvP"
+		and cl[3].id == "MultiplayerSPDRN" and not cl[3].loaded and cl[2].loaded,
+		"clash: API, PvP and a mod Steamodded refused are found (folder names only), our own and unrelated mods ignored")
+	cl = { cl[1], cl[2] }
 	ok(#CG.find_clashes({ Multiplayer = own }, own) == 0 and #CG.find_clashes(nil, nil) == 0, "clash: nothing else installed -> no clash")
-	mods.MultiplayerPvP.disabled = true
-	ok(#CG.find_clashes(mods, own) == 1, "clash: a mod disabled in the Mods menu does not count")
+	mods.MultiplayerPvP.disabled = true; mods.MultiplayerSPDRN.lovelyIgnored = true
+	ok(#CG.find_clashes(mods, own) == 1, "clash: a mod disabled in the Mods menu (or .lovelyignore) does not count")
 	local r2 = CG.check(tested, compat, {}, cl)
 	ok(r2.status == "untested" and r2.clash and CG.decide(r2, nil) == "warn" and r2.signature:find("clash=MultiplayerPvP", 1, true), "clash -> warning (not safe mode), remembered per combination")
 	ok(CG.decide(r2, r2.signature) == "ok", "clash: Play anyway is remembered for the same mods")
@@ -211,6 +213,21 @@ do
 		walk(def)
 		local all = table.concat(s, "|")
 		ok(all:find(T.clash_title, 1, true) and all:find(T.clash_body, 1, true) and all:find(T.clash, 1, true) and all:find("BalatroMultiplayerPvP", 1, true), lang .. ": clash pop-up shows the title, the text and the folder")
+	end
+	-- real metadata of the official mods (tests/fixtures/official_mp_1.0.1), as Steamodded's loader fills SMODS.Mods
+	local fx = "tests/fixtures/official_mp_1.0.1/"
+	local function meta(f) return CG.json_decode(NFS.read(fx .. f)) end
+	local pvp, api, legacy = meta("MultiplayerPvP.json"), meta("MultiplayerAPI.json"), meta("Multiplayer-legacy-0.5.5.json")
+	ok(pvp.id == "MultiplayerPvP" and pvp.prefix == "mp" and api.id == "MultiplayerAPI" and legacy.id == "Multiplayer" and legacy.prefix == "mp", "fixture: real ids and prefixes of the official mods")
+	ok(CG.CLASH_IDS[pvp.id] and CG.CLASH_IDS[api.id] and CG.CLASH_IDS[legacy.id], "fixture: every official id is in CLASH_IDS")
+	local function entry(m, folder, can_load) m.path = "C:/x/Balatro/Mods/" .. folder .. "/"; m.can_load = can_load; return m end
+	for _, case in ipairs({ { "Steamodded 1620a (both refused)", false, false }, { "Steamodded 1814a+ (API loads, PvP refused)", true, false } }) do
+		local real = { Multiplayer = own, MultiplayerAPI = entry(meta("MultiplayerAPI.json"), "BalatroMultiplayerAPI-1.0.1", case[2]),
+			MultiplayerPvP = entry(meta("MultiplayerPvP.json"), "BalatroMultiplayerPvP-1.0.1", case[3]) }
+		local got = CG.find_clashes(real, own)
+		ok(#got == 2 and got[1].folder == "BalatroMultiplayerAPI-1.0.1" and got[1].name == "Multiplayer API" and got[1].loaded == case[2]
+			and got[2].folder == "BalatroMultiplayerPvP-1.0.1" and got[2].name == "Multiplayer PvP" and CG.decide(CG.check(tested, compat, {}, got), nil) == "warn",
+			"real official 1.0.1 mods, " .. case[1] .. ": both reported with their folders -> warning")
 	end
 	SMODS.Mods.MultiplayerPvP = { name = "Multiplayer PvP", path = "/m/BalatroMultiplayerPvP/" }
 	logs = {}
