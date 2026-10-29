@@ -242,9 +242,16 @@ function RJ.register()
 			local p = RJ.pending.p
 			RJ.pending = nil
 			local ok, err = pcall(RJ.restore, p)
-			if not ok then pcall(sendWarnMessage, "Rejoin restore failed: " .. tostring(err), "MULTIPLAYER") end
+			if not ok then
+				-- broken checkpoint: never leave the player stuck in the menu, start on the lobby seed instead
+				pcall(sendWarnMessage, "Rejoin restore failed: " .. tostring(err) .. " - restarting at the ante", "MULTIPLAYER")
+				if MP.THREEP and MP.THREEP.restart_at_ante then
+					local ok2, err2 = pcall(MP.THREEP.restart_at_ante, p)
+					if not ok2 then pcall(sendWarnMessage, "Rejoin restart failed: " .. tostring(err2), "MULTIPLAYER") end
+				end
+			end
 		end
-		if next(RJ.away) then
+		if next(RJ.away) then pcall(function()
 			t = t - (dt or 0)
 			if t <= 0 then
 				t = 0.5
@@ -255,7 +262,7 @@ function RJ.register()
 				end
 				if not RJ.bar_box then RJ.show_bar() end
 			end
-		end
+		end) end
 		return r
 	end
 end

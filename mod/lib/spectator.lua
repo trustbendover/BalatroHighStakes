@@ -233,7 +233,8 @@ end
 
 function SP.open()
 	SP.state.active = true
-	pcall(G.FUNCS.overlay_menu, { definition = SP.ui() })
+	local ok, err = pcall(function() G.FUNCS.overlay_menu({ definition = SP.ui() }) end)
+	if not ok then SP.state.active = false; pcall(sendWarnMessage, "Spectator panel failed: " .. tostring(err), "MULTIPLAYER") end
 end
 
 function SP.close()

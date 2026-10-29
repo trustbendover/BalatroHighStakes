@@ -179,7 +179,7 @@ do
 	pending = {}; U.state = "idle"; U.compat_state = nil
 	U.check(); pending[1].cb(200, rel); pending[2].cb(200, "<html>garbage")
 	ok(U.compat_state == "failed", "garbage compat.json ignored")
-	pending = {}; U.state = "idle"; U.compat_state = nil; MP.ENV.compat_check = "false"
+	pending = {}; U.state = "idle"; U.compat_state = nil; MP.ENV.compat_check = false
 	U.check(); pending[1].cb(200, rel)
 	ok(#pending == 1 and U.compat_state == nil, ".env compat_check=false turns the download off")
 	MP.ENV = {}

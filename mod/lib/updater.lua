@@ -120,11 +120,18 @@ local function request(h, url, cb)
 	end)
 end
 
+--- .env switch turned off? core.lua's .env reader turns "false" into the boolean false, so accept
+--- false, "false" and "0" (0.6.8 fix: update_check=false was ignored before).
+function U.env_off(key)
+	local v = MP.ENV and MP.ENV[key]
+	return v == false or v == "false" or v == "0" or v == 0
+end
+
 --- 0.6.8: fetch the newest compat.json (release asset, else the copy on main) once per session and
 --- hand it to the compat guard, which validates, merges and caches it. Small, async, fail-silent.
 function U.fetch_compat(h, release_body)
 	if U.compat_state or not (MP.COMPAT_GUARD and MP.COMPAT_GUARD.apply_remote) then return end
-	if MP.ENV and (MP.ENV.compat_check == "false" or MP.ENV.compat_check == "0") then return end
+	if U.env_off("compat_check") then return end
 	U.compat_state = "fetching"
 	local asset = U.parse_compat_asset(release_body)
 	local list = asset and { asset } or U.COMPAT_RAW_URLS
@@ -151,7 +158,7 @@ end
 --- Start the check once per session. Safe to call many times.
 function U.check()
 	if U.state ~= "idle" then return end
-	if MP.ENV and (MP.ENV.update_check == "false" or MP.ENV.update_check == "0") then U.state = "none"; return end
+	if U.env_off("update_check") then U.state = "none"; return end
 	local h = get_https()
 	if not h then
 		U.state = "no_https"; log("no https backend; offering the PowerShell updater instead"); U.refresh_button(); return

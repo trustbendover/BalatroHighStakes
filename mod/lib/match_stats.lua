@@ -452,7 +452,8 @@ function MS.open()
 	end
 	MS.show_at, MS.tab, MS.page = nil, "awards", 1
 	if MP.SPECTATE and MP.SPECTATE.state.active then MP.SPECTATE.state.active = false end
-	pcall(G.FUNCS.overlay_menu, { definition = MS.ui(MS.last) })
+	local ok, err = pcall(function() G.FUNCS.overlay_menu({ definition = MS.ui(MS.last) }) end)
+	if not ok then pcall(sendWarnMessage, "Match stats screen failed: " .. tostring(err), "MULTIPLAYER") end
 end
 
 function MS.close()
@@ -479,7 +480,8 @@ function MS.register()
 	G.FUNCS.mp_ms_close = function() MS.close() end
 	G.FUNCS.mp_ms_page = function(args)
 		MS.page, MS.tab = args and args.to_key or 1, "players"
-		pcall(G.FUNCS.overlay_menu, { definition = MS.ui(MS.last) })
+		local ok, err = pcall(function() G.FUNCS.overlay_menu({ definition = MS.ui(MS.last) }) end)
+	if not ok then pcall(sendWarnMessage, "Match stats screen failed: " .. tostring(err), "MULTIPLAYER") end
 	end
 	MP.register_action("matchStats", function(p)
 		MS.last = p
@@ -503,7 +505,7 @@ function MS.register()
 		end
 		if MS.show_at and now() >= MS.show_at and not (MP.REJOIN and MP.REJOIN.pending) then
 			MS.show_at = nil
-			if MP.LOBBY and MP.LOBBY.code then MS.open() end
+			if MP.LOBBY and MP.LOBBY.code then pcall(MS.open) end
 		end
 		return r
 	end

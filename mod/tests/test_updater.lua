@@ -73,6 +73,9 @@ U.state = "idle"; package.loaded["SMODS.https"] = nil; package.preload["SMODS.ht
 U.check(); ok(U.state == "no_https" and U.button_label() == "Check for updates", "no https -> PowerShell updater button")
 -- opt-out
 U.state = "idle"; MP.ENV.update_check = "false"; U.check(); ok(U.state == "none", ".env update_check=false")
+U.state = "idle"; MP.ENV.update_check = false; U.check(); ok(U.state == "none", ".env update_check=false as parsed by core.lua (boolean false)")
+U.state = "idle"; MP.ENV.update_check = true; ok(not U.env_off("update_check"), "update_check=true keeps the check on")
+MP.ENV.update_check = false
 -- start updater when script missing -> opens releases page, never crashes
 U.start_updater(); ok(U.state == "started" and love.opened == U.RELEASES_URL, "missing updater -> releases page")
 print("PASS test_updater")

@@ -49,6 +49,11 @@
 
 ## 0.6.8~3P (in development - not released yet) - host migration
 
+- **Fix: `update_check=false` / `compat_check=false` in `.env` are honoured again.** The `.env` reader turns
+  `false` into a boolean, so the opt-out was ignored since 0.6.6. Also: the spectator panel, match stats and rejoin
+  bar can no longer crash the game if a panel fails to build (warning in the log instead), and a failed rejoin
+  restore falls back to restarting at the saved ante.
+
 - **Panels keep a fixed width.** The spectator list is now columns (name | lives | score | status) in a fixed box,
   long names get "..", huge scores become compact (1.23e14), and the status has its own colour. The rejoin bar shows
   the first player by name and the rest as "+N more". The blind HUD line (team totals + opponents) is re-fitted when
