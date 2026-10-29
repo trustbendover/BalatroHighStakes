@@ -27,7 +27,7 @@ VENDOR = {
     "smods": (COMPAT["steamodded"]["pin"]["url"], COMPAT["steamodded"]["pin"]["sha256"]),
 }
 MOD_EXCLUDE = re.compile(r"(^|/)(\.git|\.github|\.env|node_modules|dist|logs?)(/|$)|\.log$")
-FORBIDDEN = [b"playit.gg/claim", b".ply.gg", b"joinmc.link"]
+FORBIDDEN = [b"playit.gg/claim", b".ply.gg", b"joinmc.link", b"virtualized.dev"]  # + upstream server address (Steam only)
 # extra private words (e.g. local account names) can be passed without committing them:
 FORBIDDEN += [w.strip().lower().encode() for w in os.environ.get("RELEASE_FORBIDDEN", "").split(",") if w.strip()]
 

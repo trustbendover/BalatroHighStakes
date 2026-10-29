@@ -351,7 +351,7 @@ function M.new_router(o)
 			B.set_presence("connect", "+connect_lobby " .. lobby)
 			B.set_presence("steam_player_group", lobby)
 			B.set_presence("steam_player_group_size", "3")
-			B.set_presence("status", "Balatro Multiplayer 3P lobby")
+			B.set_presence("status", "Balatro High Stakes lobby")
 		elseif B.clear_presence then
 			B.clear_presence()
 		end
@@ -427,7 +427,7 @@ function M.new_router(o)
 				log("invite: lobby " .. lobby .. " code='" .. code .. "' owner=" .. tostring(owner))
 				if code == "" then
 					R.joining = false; B.leave_lobby(lobby)
-					push({ action = "error", message = "That Steam lobby is not a 3P lobby (or it closed)" })
+					push({ action = "error", message = "That Steam lobby is not a Balatro High Stakes lobby (or it closed)" })
 					return
 				end
 				msg = { action = "joinLobby", code = code }

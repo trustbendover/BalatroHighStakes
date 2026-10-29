@@ -13,6 +13,7 @@ ok(core:find('MP.ENV.mode = "steam"', 1, true), "core.lua forces mode=steam")
 ok(core:find('MP.ENV.mode ~= nil and MP.ENV.mode ~= "steam"', 1, true) and core:find("is no longer supported", 1, true), "other mode -> log line")
 ok(not core:find('if MP.ENV.mode == "steam"', 1, true), "P2P no longer depends on mode=steam")
 ok(core:find("function MP.START_P2P()", 1, true), "MP.START_P2P exists (Reconnect retries Steam)")
+ok(read("scripts/release.sh") == nil, "upstream release script (prod server address) removed")
 local cfg = assert(read("config.lua"))
 ok(not cfg:find("server_url", 1, true) and not cfg:find("server_port", 1, true), "config.lua has no server address")
 local ex = assert(read(".env.example"))
@@ -59,6 +60,11 @@ for _, f in ipairs({ "../installer/README.txt", "../installer/LEES_MIJ.txt" }) d
 	ok(not s:find("option 2", 1, true) and not s:find("keuze 2", 1, true) and not s:lower():find("servermod", 1, true)
 		and not s:find("SERVER MODE", 1, true), f .. ": no server mode")
 end
+
+-- user-facing strings say High Stakes, not 3P
+local sp = assert(read("networking/steam_p2p.lua"))
+ok(not sp:find("Multiplayer 3P lobby", 1, true) and not sp:find("not a 3P lobby", 1, true), "Steam presence/errors say Balatro High Stakes")
+ok(not assert(read("lib/updater.lua")):find('"MP3P updater"', 1, true), "updater window title says Balatro High Stakes")
 
 -- patch notes mention it
 local pn = assert(read("patchnotes/0.6.8.lua"))

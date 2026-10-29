@@ -153,7 +153,7 @@ if (Test-Path -LiteralPath $ManifestPath) {
         $prev = Get-Content -LiteralPath $ManifestPath -Raw | ConvertFrom-Json
         $prevInstalled = @($prev.installedPaths)
         foreach ($b in @($prev.backups)) { if ($b) { $manifest.backups += [ordered]@{ original = $b.original; backup = $b.backup } } }
-        Say "Previous MP3P install found - updating it." DarkGray
+        Say "Previous Balatro High Stakes install found - updating it." DarkGray
     } catch {}
 }
 function Backup-Item($path, $kind) {

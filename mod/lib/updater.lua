@@ -190,7 +190,7 @@ function U.start_updater()
 		local f = io.open(ps1, "r")
 		if not f then love.system.openURL(U.RELEASES_URL); U.state = "started"; return end
 		f:close()
-		local cmd = ('start "MP3P updater" powershell -NoProfile -ExecutionPolicy Bypass -File "%s" -FromGame'):format(ps1)
+		local cmd = ('start "Balatro High Stakes updater" powershell -NoProfile -ExecutionPolicy Bypass -File "%s" -FromGame'):format(ps1)
 		log("starting updater: " .. cmd)
 		os.execute(cmd)
 		U.state = "started"
