@@ -56,8 +56,9 @@
   The build now fails if any other `.json` ends up in the mod folder.
 - **Fewer Lovely warnings:** the "money popup" patch (decks.toml) matched 3 places ("3 matches, wanted 1") and
   now targets only the money popup; The Order's seed-asterisk patch for Ankh is merged into one regex with the
-  vanilla one (no more "hash_seed ... resulted in no matches" without Ankh). Left as is: the All-in-Jest
-  patchwork compat patch (only matches with that mod installed).
+  vanilla one (no more "hash_seed ... resulted in no matches" without Ankh). The All in Jest Patchwork + Cocktail
+  compat patch makes exactly the same change when All in Jest is installed (checked against its real source), but
+  no longer warns without it.
 
 - **Warning for the official Balatro Multiplayer mods.** The official mod (id `Multiplayer`, the same id as ours)
   and its 1.0 platform (`MultiplayerPvP` with the same `mp` prefix, `MultiplayerAPI`, `MultiplayerSPDRN`) clash

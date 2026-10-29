@@ -142,17 +142,17 @@ val.children.center.VT.x, val.children.center.VT.y = temp_x, temp_y
 match_indent = true
 times = 1
 
-# cocktail deck - compatibility with patchwork deck
+# cocktail deck - compatibility with All in Jest's Patchwork deck (its game.lua patch in Game:update)
+# Same edit as before: " or G.GAME.modifiers.b_aij_patchwork" is added to the end of All in Jest's condition.
+# Done as a regex with a second alternative that always matches the vanilla comment "--Class Methods" (the text
+# is then appended inside that comment, so it does nothing). Without All in Jest the regex still has a match, so
+# Lovely no longer logs "resulted in no matches" on every start.
 [[patches]]
-[patches.pattern]
+[patches.regex]
 target = "game.lua"
-pattern = '''if (G.GAME.selected_back and G.GAME.selected_back.name == 'b_aij_patchwork') or (G.GAME.selected_sleeve and G.GAME.selected_sleeve == 'sleeve_aij_patchwork') then'''
-position = 'at'
-payload = '''
-if (G.GAME.selected_back and G.GAME.selected_back.name == 'b_aij_patchwork') or (G.GAME.selected_sleeve and G.GAME.selected_sleeve == 'sleeve_aij_patchwork') or G.GAME.modifiers.b_aij_patchwork then
-'''
-match_indent = true
-times = 1
+pattern = '''if \(G\.GAME\.selected_back and G\.GAME\.selected_back\.name == 'b_aij_patchwork'\) or \(G\.GAME\.selected_sleeve and G\.GAME\.selected_sleeve == 'sleeve_aij_patchwork'\)|--Class Methods'''
+position = "after"
+payload = " or G.GAME.modifiers.b_aij_patchwork"
 
 # fix magic trick suit+rank desync
 # this fix should become obsolete in a later steamodded version (currently 1620a)
