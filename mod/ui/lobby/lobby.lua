@@ -495,6 +495,9 @@ end
 
 local start_run_ref = G.FUNCS.start_run
 G.FUNCS.start_run = function(e, args)
+	-- 0.6.8: loading a saved run (rejoin restore) goes straight to the game; the lobby deck/stake
+	-- bookkeeping below is only for starting a NEW run and would drop the savetext
+	if args and args.savetext then return start_run_ref(e, args) end
 	if MP.LOBBY.code then
 		if not args.mp_start then
 			G.FUNCS.exit_overlay_menu()
@@ -509,7 +512,7 @@ G.FUNCS.start_run = function(e, args)
 			if MP.LOBBY.is_host then
 				MP.LOBBY.config.back = args.challenge and "Challenge Deck"
 					or (args.deck and args.deck.name)
-					or G.GAME.viewed_back.name
+					or (G.GAME.viewed_back and G.GAME.viewed_back.name) or MP.LOBBY.deck.back or MP.LOBBY.config.back or "Red Deck"
 				MP.LOBBY.config.stake = chosen_stake
 				MP.LOBBY.config.sleeve = G.viewed_sleeve
 				MP.LOBBY.config.challenge = args.challenge and args.challenge.id or ""
@@ -517,7 +520,7 @@ G.FUNCS.start_run = function(e, args)
 			end
 			MP.LOBBY.deck.back = args.challenge and "Challenge Deck"
 				or (args.deck and args.deck.name)
-				or G.GAME.viewed_back.name
+				or (G.GAME.viewed_back and G.GAME.viewed_back.name) or MP.LOBBY.deck.back or MP.LOBBY.config.back or "Red Deck"
 			MP.LOBBY.deck.stake = chosen_stake
 			MP.LOBBY.deck.sleeve = G.viewed_sleeve
 			MP.LOBBY.deck.challenge = args.challenge and args.challenge.id or ""
