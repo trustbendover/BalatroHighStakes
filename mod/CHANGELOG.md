@@ -54,6 +54,10 @@
   `compat.cfg` and `brand.cfg` (still plain JSON inside). The mod, installer and updater read the old names as a fallback; the release asset stays
   `compat.json`, and the in-game check tries `mod/compat.cfg` and then `mod/compat.json` on GitHub main.
   The build now fails if any other `.json` ends up in the mod folder.
+- **Fewer Lovely warnings:** the "money popup" patch (decks.toml) matched 3 places ("3 matches, wanted 1") and
+  now targets only the money popup; The Order's seed-asterisk patch for Ankh is merged into one regex with the
+  vanilla one (no more "hash_seed ... resulted in no matches" without Ankh). Left as is: the All-in-Jest
+  patchwork compat patch (only matches with that mod installed).
 
 - **Warning for the official Balatro Multiplayer mods.** The official mod (id `Multiplayer`, the same id as ours)
   and its 1.0 platform (`MultiplayerPvP` with the same `mp` prefix, `MultiplayerAPI`, `MultiplayerSPDRN`) clash

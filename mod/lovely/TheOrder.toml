@@ -20,23 +20,17 @@ match_indent = true
 
 # Adds an asterisk to the front of the seed
 # This isn't required for the mod to function, but it makes it easier to identify that seeds vary from vanilla
+# One regex for vanilla and Ankh compat (Ankh's hash_seed line). This used to be two pattern patches, and the Ankh
+# one made Lovely log "resulted in no matches" on every start without Ankh. The payload is idempotent.
 [[patches]]
-[patches.pattern]
+[patches.regex]
 target = "game.lua"
-pattern = "for k, v in pairs(self.GAME.pseudorandom) do if v == 0 then self.GAME.pseudorandom[k] = pseudohash(k..self.GAME.pseudorandom.seed) end end"
+pattern = '''(?<indent>[\t ]*)(?<line>for k, v in pairs\(self\.GAME\.pseudorandom\) do if v == 0 then|self\.GAME\.pseudorandom\.seed = hash_seed\(self\.GAME\.pseudorandom\.seed\))'''
 position = "before"
-payload = '''if self.GAME.pseudorandom.seed:sub(1, 1) ~= "*" and MP.should_use_the_order() then self.GAME.pseudorandom.seed = "*" .. self.GAME.pseudorandom.seed end'''
-match_indent = true
-
-# Ankh compat w/ previous patch
-[[patches]]
-[patches.pattern]
-target = "game.lua"
-pattern = "self.GAME.pseudorandom.seed = hash_seed(self.GAME.pseudorandom.seed)"
-position = "before"
-payload = '''if self.GAME.pseudorandom.seed:sub(1, 1) ~= "*" and MP.should_use_the_order() then self.GAME.pseudorandom.seed = "*" .. self.GAME.pseudorandom.seed end'''
-match_indent = true
-
+root_capture = "indent"
+line_prepend = "$indent"
+payload = '''if self.GAME.pseudorandom.seed:sub(1, 1) ~= "*" and MP.should_use_the_order() then self.GAME.pseudorandom.seed = "*" .. self.GAME.pseudorandom.seed end
+'''
 
 
 
