@@ -27,6 +27,9 @@ VENDOR = {
     "smods": (COMPAT["steamodded"]["pin"]["url"], COMPAT["steamodded"]["pin"]["sha256"]),
 }
 MOD_EXCLUDE = re.compile(r"(^|/)(\.git|\.github|\.env|node_modules|dist|logs?)(/|$)|\.log$")
+# the Installer payload also leaves out the mod's tests/ (Steamodded scans every *.json in the mod folder and
+# logged "Found invalid metadata JSON file ... tests/koth_vectors.json" errors); the source zip keeps them
+PAYLOAD_EXCLUDE = re.compile(MOD_EXCLUDE.pattern + r"|^tests/")
 FORBIDDEN = [b"playit.gg/claim", b".ply.gg", b"joinmc.link", b"virtualized.dev"]  # + upstream server address (Steam only)
 # extra private words (e.g. local account names) can be passed without committing them:
 FORBIDDEN += [w.strip().lower().encode() for w in os.environ.get("RELEASE_FORBIDDEN", "").split(",") if w.strip()]
@@ -130,7 +133,7 @@ def main():
             if n.endswith("/") or not n.startswith(prefix):
                 continue
             z.writestr(f"{inst_name}/payload/smods/" + n[len(prefix):], smods.read(n))
-        add_tree(z, os.path.join(ROOT, "mod"), f"{inst_name}/payload/{FOLDER}", MOD_EXCLUDE)
+        add_tree(z, os.path.join(ROOT, "mod"), f"{inst_name}/payload/{FOLDER}", PAYLOAD_EXCLUDE)
 
     src_name = f"{PREFIX}-{tag}-source"
     with zipfile.ZipFile(src_zip, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
@@ -140,6 +143,12 @@ def main():
 
     for p in (inst_zip, src_zip):
         check_clean(p)
+    with zipfile.ZipFile(inst_zip) as z:
+        bad = [n for n in z.namelist() if f"/payload/{FOLDER}/tests/" in n]
+        if bad:
+            sys.exit(f"{inst_zip}: mod tests must not be shipped ({bad[0]})")
+        if not any(n.endswith(f"/payload/{FOLDER}/core.lua") for n in z.namelist()):
+            sys.exit(f"{inst_zip}: mod core.lua missing from the payload")
     # compat.json is also a release asset: the in-game update check reads it from the latest release
     compat_out = os.path.join(a.out, "compat.json")
     shutil.copyfile(COMPAT_PATH, compat_out)

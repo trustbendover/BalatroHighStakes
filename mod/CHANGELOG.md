@@ -49,6 +49,10 @@
 
 ## 0.6.8~3P (in development - not released yet) - host migration
 
+- **Fix: no more "Found invalid metadata JSON file ... tests/koth_vectors.json" errors in the log.** The Installer
+  zip no longer ships the mod's `tests/` folder (Steamodded scanned its JSON files as mod metadata). Harmless, but
+  it looked like a broken install.
+
 - **Steam only.** Balatro High Stakes now plays over Steam peer-to-peer only: no server, no IP address, no
   playit.gg / Tailscale. The installer no longer asks how you play and always writes `mode=steam`. An existing
   install with a server address (or no `mode=steam`) is switched to Steam once by the 0.6.8 installer/updater:
