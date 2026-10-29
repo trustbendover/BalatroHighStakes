@@ -92,6 +92,7 @@ async function lobby(n, mode, opts = {}) {
 }
 async function start(cs) {
   for (const c of cs) c.msgs = []
+  for (const c of cs.slice(1)) c.send({ action: 'readyLobby' }); await new Promise((r) => setTimeout(r, 100))
   cs[0].send({ action: 'startGame' })
   for (const c of cs) { await c.waitAction('startGame'); await c.waitAction('playerInfo') }
 }

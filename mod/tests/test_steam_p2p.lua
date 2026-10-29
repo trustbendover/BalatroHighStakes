@@ -77,6 +77,13 @@ B.send({ action = "joinLobby", code = code }); C.send({ action = "joinLobby", co
 ok(B.last("joinedLobby") and C.last("joinedLobby") and B.r.mode == "guest", "guests joined via Steam lobby code")
 ok(#A.last("lobbyInfo").players == 3, "host lobbyInfo has 3 players")
 ok(B.count("connected") == 1, "remote 'connected' swallowed")
+-- 0.6.8: Start is refused until every guest is Ready (host-side check, not only the greyed-out button)
+A.send({ action = "startGame" }); pump()
+ok(not B.last("startGame") and A.last("error") and A.last("error").message:find("Waiting for 2 player", 1, true), "start refused: 2 guests not ready")
+B.send({ action = "readyLobby" }); pump(); A.send({ action = "startGame" }); pump()
+ok(not B.last("startGame") and A.last("error").message:find("Waiting for 1 player", 1, true), "start refused: 1 guest not ready")
+B.send({ action = "unreadyLobby" }); pump(); B.send({ action = "readyLobby" }); C.send({ action = "readyLobby" }); pump()
+ok(not (B.last("startGame") or C.last("startGame")), "readying alone never starts the match")
 A.send({ action = "startGame" }); pump()
 ok(B.last("startGame") and C.last("playerInfo").lives == 2, "game started on all 3 with 2 lives")
 local function round(sc)
@@ -205,7 +212,7 @@ ok(#eight[1].last("lobbyInfo").players == 8 and eight[8].r.mode == "guest", "8 p
 eight[9].send({ action = "joinLobby", code = code8 }); pump(10)
 ok(eight[9].last("error") and eight[9].last("error").message:find("full"), "9th player refused by the host core")
 for _, p in ipairs(eight) do p.msgs = {} end
-eight[1].send({ action = "startGame" }); pump(10)
+for i = 2, #eight do eight[i].send({ action = "readyLobby" }) end; pump(2); eight[1].send({ action = "startGame" }); pump(10)
 local tu = eight[5].last("teamsUpdate")
 ok(tu and tu.teamSize == 4 and tu.team == "B", "4v4 teams over P2P (seat 5 is team B)")
 for i = 1, 8 do eight[i].send({ action = "readyBlind" }) end pump(10)
@@ -227,7 +234,7 @@ dm[1].send({ action = "lobbyOptions", starting_lives = "1", deathmatch_grace = "
 for i = 2, 5 do dm[i].send({ action = "joinLobby", code = codedm }) end
 pump(10)
 for _, p in ipairs(dm) do p.msgs = {} end
-dm[1].send({ action = "startGame" }); pump(10)
+for i = 2, #dm do dm[i].send({ action = "readyLobby" }) end; pump(2); dm[1].send({ action = "startGame" }); pump(10)
 ok(dm[5].last("playerInfo").lives == 1, "deathmatch started over P2P")
 local function dmround(ps, sc)
 	for _, p in ipairs(dm) do p.msgs = {} end
@@ -247,7 +254,7 @@ ok(el and el.username == "dm_4" and el.reason == "disconnected", "disconnect pas
 for _, p in ipairs(dm) do p.msgs = {} end
 dm[1].send({ action = "stopGame" }); pump(10)
 ok(dm[1].last("stopGame") and not dm[2].last("stopGame") and not dm[3].last("stopGame"), "eliminated host returns to the lobby, the match goes on")
-dm[1].send({ action = "startGame" }); pump(10)
+for i = 2, #dm do dm[i].send({ action = "readyLobby" }) end; pump(2); dm[1].send({ action = "startGame" }); pump(10)
 ok(dm[1].last("error") and dm[1].last("error").message:find("still running"), "no restart while the match runs")
 dmround({ dm[2], dm[3] }, { 50, 60 })
 local fin = dm[1].last("deathmatchUpdate")

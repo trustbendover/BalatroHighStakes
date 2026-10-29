@@ -10,6 +10,16 @@ Core.MAX_PLAYERS = 8
 Core.MIN_PLAYERS = 2
 function Core.max_players(mode) return mode == "duel" and 2 or Core.MAX_PLAYERS end
 --- nil when the lobby can start, else the reason (sent to the host as an error).
+--- guests (not the host, players[1]) that are not Ready in the lobby; spectators are never waited for
+function Core.unready_count(players)
+	local n = 0
+	for i = 2, #(players or {}) do
+		local p = players[i]
+		if not (p.isReadyLobby or p.spectator) then n = n + 1 end
+	end
+	return n
+end
+
 function Core.start_error(mode, n, options)
 	if n < Core.MIN_PLAYERS then return "Need at least 2 players to start." end
 	if n > Core.max_players(mode) then return "Too many players for this mode." end
@@ -1265,6 +1275,10 @@ function H.startGame(S, c)
 	if L.isInGame then return sendA(c, { action = "error", message = "A match is still running." }) end
 	local why = Core.start_error(L.gameMode, #S:seated(L), L.options)
 	if why then return sendA(c, { action = "error", message = why }) end
+	-- 0.6.8: every guest must be Ready (spectators and returning players count as ready); the host's Start button
+	-- is greyed out until then, this guards against an old/modified client
+	local waiting = Core.unready_count(L.players)
+	if waiting > 0 then return sendA(c, { action = "error", message = "Waiting for " .. waiting .. " player(s) to ready up." }) end
 	S:promote_spectators(L)
 	L.startPlayers = #S:seated(L)
 	L.lastStats = nil

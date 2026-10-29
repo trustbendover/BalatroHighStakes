@@ -1654,6 +1654,10 @@ return {
             b_open_log_parser = "Log Parser",
 		},
 		v_dictionary = {
+			k_wait_ready = "Waiting for #1# players to ready up",
+			k_wait_ready_one = "Waiting for 1 player to ready up",
+			k_wait_ready_btn = "#1# PLAYERS",
+			k_wait_ready_btn_one = "1 PLAYER",
 			k_koth_status = "King: #1#  |  Bounty #2#  |  Hill #3#/#4#",
 			k_koth_msg_hill = "#1# held the hill and wins!",
 			k_koth_msg_claimed = "Bounty claimed! +$#1#",

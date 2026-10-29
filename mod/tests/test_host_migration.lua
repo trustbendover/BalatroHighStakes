@@ -96,7 +96,7 @@ local function setup(n, mode, opts)
 	return ps, code
 end
 local function start(ps)
-	ps[1].send({ action = "startGame" }); pump(6)
+	for i = 2, #ps do ps[i].send({ action = "readyLobby" }) end; pump(2); ps[1].send({ action = "startGame" }); pump(6)
 	run(1)
 end
 local function clear(ps) for _, p in ipairs(ps) do p.msgs = {} end end
@@ -150,7 +150,7 @@ for _, n in ipairs({ 2, 3, 5, 8 }) do
 			assert(li.isHost and #li.players == n - 1, mode .. " " .. n .. "p: lobby has " .. (n - 1) .. " players, P2 is host")
 			assert(NET.lobbies[ps[2].r.lobby].owner == ps[2].name, "Steam lobby owner moved to the new host")
 			if n >= 3 and mode ~= "teams" then
-				clear(rest); ps[2].send({ action = "startGame" }); pump(6)
+				for _, p in ipairs(rest) do if p ~= ps[2] then p.send({ action = "readyLobby" }) end end; pump(2); clear(rest); ps[2].send({ action = "startGame" }); pump(6)
 				assert(ps[3].last("startGame"), mode .. " " .. n .. "p: the new host can start the game")
 			end
 		end

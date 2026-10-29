@@ -70,6 +70,7 @@ jobs:
           luajit tests/test_brand.lua
           luajit tests/test_version_string.lua
           luajit tests/test_lobby_presets.lua
+          luajit tests/test_start_ready.lua
           luajit tests/test_ui_fit.lua
           luajit tests/test_steam_only.lua
 

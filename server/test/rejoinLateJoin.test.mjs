@@ -57,6 +57,7 @@ async function lobbyOf(names, lives = '3') {
   for (const c of cs.slice(1)) { c.send({ action: 'joinLobby', code: j.code }); c.token = (await c.waitAction('joinedLobby')).reconnectToken }
   await sleep(100)
   for (const c of cs) c.msgs = []
+  for (const c of cs.slice(1)) c.send({ action: 'readyLobby' }); await new Promise((r) => setTimeout(r, 100))
   cs[0].send({ action: 'startGame' })
   for (const c of cs) await c.waitAction('startGame')
   await sleep(100)

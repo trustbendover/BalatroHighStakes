@@ -1,7 +1,25 @@
 local Disableable_Button = MP.UI.Disableable_Button
 
+--- 0.6.8: the host's Start button text while it is greyed out
+function MP.UI.start_wait_text()
+	local n = MP.LOBBY.unready_count or 0
+	local count = MP.LOBBY.player_list and #MP.LOBBY.player_list or 0
+	local problem = count >= 2 and MP.MODES and MP.MODES.start_problem(count)
+	if count >= 2 and not problem and n > 0 then
+		local head = localize("b_wait_for_players")
+		head = type(head) == "table" and head[1] or "WAITING FOR"
+		return { head, localize({ type = "variable", key = n == 1 and "k_wait_ready_btn_one" or "k_wait_ready_btn", vars = { n } }) }
+	end
+	return MP.LOBBY.guest and MP.LOBBY.guest.username and localize("b_wait_for_guest_ready") or localize("b_wait_for_players")
+end
+
 local function get_warnings()
 	local warnings = {}
+	-- 0.6.8: host sees how many guests still have to press Ready
+	if MP.LOBBY.is_host and not MP.LOBBY.ready_to_start and (MP.LOBBY.unready_count or 0) > 0 then
+		local n = MP.LOBBY.unready_count
+		table.insert(warnings, { localize({ type = "variable", key = n == 1 and "k_wait_ready_one" or "k_wait_ready", vars = { n } }), G.C.UI.TEXT_LIGHT, 0.3 })
+	end
 
 	-- Player count vs. mode (1v1 Duel: exactly 2, Teams: 4/6/8, others 2-8)
 	local count = MP.LOBBY.player_list and #MP.LOBBY.player_list or 0
@@ -150,8 +168,7 @@ function MP.UI.create_lobby_main_button(text_scale)
 			minw = 3.65,
 			minh = 1.55,
 			label = { localize("b_start") },
-			disabled_text = MP.LOBBY.guest.username and localize("b_wait_for_guest_ready")
-				or localize("b_wait_for_players"),
+			disabled_text = MP.UI.start_wait_text(),
 			scale = text_scale * 2,
 			col = true,
 			enabled_ref_table = MP.LOBBY,

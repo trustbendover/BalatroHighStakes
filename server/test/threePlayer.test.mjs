@@ -63,6 +63,7 @@ async function main() {
   const ids = Object.fromEntries(infoA.players.map((p) => [p.username, p.id]))
   const all = [A, B, C]
   for (const c of all) c.msgs = []
+  for (const c of all.slice(1)) c.send({ action: 'readyLobby' }); await new Promise((r) => setTimeout(r, 100))
   A.send({ action: 'startGame' })
   for (const c of all) { await c.waitAction('startGame'); const pi = await c.waitAction('playerInfo'); assert.equal(pi.lives, 2) }
   console.log('ok: game started with 2 lives')
@@ -138,6 +139,7 @@ async function main() {
 
   // Scenario 2: a player leaves mid-game; the other two keep playing
   for (const c of all) c.msgs = []
+  for (const c of all.slice(1)) c.send({ action: 'readyLobby' }); await new Promise((r) => setTimeout(r, 100))
   A.send({ action: 'startGame' })
   for (const c of all) await c.waitAction('startGame')
   C.send({ action: 'leaveLobby' })

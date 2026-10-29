@@ -364,10 +364,12 @@ local function action_lobbyInfo(p)
 	if p.players then
 		local all_ready = #p.players >= 2
 		if is_host and MP.MODES and MP.MODES.start_problem(#p.players) then all_ready = false end
+		local unready = 0
 		for i = 2, #p.players do
-			if not p.players[i].ready then all_ready = false end
+			if not p.players[i].ready then all_ready = false; unready = unready + 1 end
 		end
 		MP.LOBBY.ready_to_start = all_ready
+		MP.LOBBY.unready_count = unready -- 0.6.8: for the host's "waiting for N players" hint
 	else
 		MP.LOBBY.ready_to_start = guest ~= nil and guestReady
 	end

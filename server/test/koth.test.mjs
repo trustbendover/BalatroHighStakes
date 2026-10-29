@@ -84,6 +84,7 @@ async function main() {
   const ids = Object.fromEntries(info.players.map((p) => [p.username, p.id]))
   const all = [A, B, C]
   for (const c of all) c.msgs = []
+  for (const c of all.slice(1)) c.send({ action: 'readyLobby' }); await new Promise((r) => setTimeout(r, 100))
   A.send({ action: 'startGame' })
   for (const c of all) {
     await c.waitAction('startGame')

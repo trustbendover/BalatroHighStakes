@@ -96,7 +96,7 @@ local function setup(n, mode, opts)
 	return ps, code
 end
 local function start(ps)
-	ps[1].send({ action = "startGame" }); pump(6)
+	for i = 2, #ps do ps[i].send({ action = "readyLobby" }) end; pump(2); ps[1].send({ action = "startGame" }); pump(6)
 	run(1)
 end
 local function clear(ps) for _, p in ipairs(ps) do p.msgs = {} end end
@@ -222,7 +222,7 @@ do
 	ok(winners == 1 and not B.last("winGame") and not B.last("loseGame"), "attrition: exactly one winner, spectators get no win/lose")
 	ok(B.last("matchOver"), "attrition: spectators are told the match is over")
 	-- next match: spectators become players while there are free seats
-	ps[1].send({ action = "startGame" }); pump(8)
+	for i = 2, #ps do ps[i].send({ action = "readyLobby" }) end; pump(2); ps[1].send({ action = "startGame" }); pump(8)
 	ok(B.last("startGame"), "next match: a spectator gets a seat")
 end
 

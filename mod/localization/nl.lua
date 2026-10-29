@@ -501,6 +501,10 @@ return {
 			loc_playing = "Speelt ",
 		},
 		v_dictionary = {
+			k_wait_ready = "Wachten tot #1# spelers klaar zijn",
+			k_wait_ready_one = "Wachten tot 1 speler klaar is",
+			k_wait_ready_btn = "#1# SPELERS",
+			k_wait_ready_btn_one = "1 SPELER",
 			k_koth_status = "Koning: #1#  |  Premie #2#  |  Heuvel #3#/#4#",
 			k_koth_msg_hill = "#1# hield de heuvel vast en wint!",
 			k_koth_msg_claimed = "Premie gepakt! +$#1#",
