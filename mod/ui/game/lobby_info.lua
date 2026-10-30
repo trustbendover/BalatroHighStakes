@@ -311,7 +311,8 @@ function MP.UI.create_UIBox_player_row(type)
 					{
 						n = G.UIT.T,
 						config = {
-							text = MP.INSANE_INT.to_string(highest_score),
+							text = (MP.UI.aij_blind_drawn and MP.UI.aij_blind_drawn() and not ((type == "host" and MP.LOBBY.is_host) or (type == "guest" and not MP.LOBBY.is_host)))
+								and "???" or MP.INSANE_INT.to_string(highest_score), -- All in Jest "Blind Drawn"
 							scale = 0.425,
 							colour = G.C.FILTER,
 							shadow = true,

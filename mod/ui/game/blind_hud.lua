@@ -1,3 +1,9 @@
+-- All in Jest compat (0.6.8): its "Blind Drawn" joker hides the nemesis' score/hands. AiJ's lovely patches
+-- target the old file layout (ui/game.lua, ui/hud.lua) and no longer apply, so the effect lives here.
+function MP.UI.aij_blind_drawn()
+	return SMODS and SMODS.find_card and next(SMODS.find_card("j_aij_mp_blind_drawn")) ~= nil or false
+end
+
 function MP.UI.update_blind_HUD(blind, reset, silent)
     if MP.is_mp_or_ghost() then
         -- Prepare blind name
@@ -201,6 +207,11 @@ end
 G.FUNCS.multiplayer_blind_chip_UI_scale = function(e)
 	if MP.THREEP then MP.THREEP.refresh_hud() end
 	MP.GAME.enemy.hands_text = tostring(MP.GAME.enemy.hands)
+	if MP.UI.aij_blind_drawn() then
+		MP.GAME.enemy.hands_text, MP.GAME.enemy.score_text = "?", "???"
+		e.config.scale = 0.7
+		return
+	end
 
 	-- Hide the opponent's score until we have played a hand this PvP blind, so
 	-- a player can't watch the enemy score before committing their own hand.
@@ -226,7 +237,7 @@ G.FUNCS.multiplayer_blind_chip_UI_scale = function(e)
 end
 
 function MP.UI.juice_up_pvp_hud()
-	if MP.is_pvp_boss() then
+	if MP.is_pvp_boss() and not MP.UI.aij_blind_drawn() then
 		G.HUD_blind:get_UIE_by_ID("HUD_blind_count"):juice_up()
 		G.HUD_blind:get_UIE_by_ID("dollars_to_be_earned"):juice_up()
 	end
