@@ -95,7 +95,7 @@ function Game:update(dt)
 	pcall(no_tutorial)
 	if D.lang and not D.lang_done and G.SETTINGS and G.set_language and t > 1 then
 		D.lang_done = true
-		pcall(function() G.SETTINGS.language = D.lang; G.SETTINGS.real_language = D.lang; G:set_language(); log("language " .. D.lang) end)
+		pcall(function() G.SETTINGS.language = D.lang; G.SETTINGS.real_language = D.lang; G:set_language(); if SMODS and SMODS.handle_loc_file then for _, m in pairs(SMODS.Mods) do if m.can_load and m.path then pcall(SMODS.handle_loc_file, m.path, m.id) end end end; if init_localization then init_localization() end; log("language " .. D.lang) end)
 	end
 	pcall(function()
 		if D.speed and G.SETTINGS and D.autoplay then G.SETTINGS.GAMESPEED = D.speed end
