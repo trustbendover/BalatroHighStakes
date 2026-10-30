@@ -268,6 +268,13 @@ function A.tick(D, dt, t)
 		end
 	else A.skip_for = nil; A.skip_wanted = false end
 	if A.match_over_tick(D, t) then return end
+	-- info pop-ups during the run ("X joined the running game!"): a player reads and closes them
+	if G.OVERLAY_MENU and G.STAGE == G.STAGES.RUN then
+		A.ov_t = A.ov_t or t
+		if t - A.ov_t > 3 then A.ov_t = nil; D.log("autoplay: closing info pop-up"); G.FUNCS.exit_overlay_menu() end
+		return
+	end
+	A.ov_t = nil
 	local found = A.buttons()
 	local act = A.decide(A.snapshot(D, found))
 	if not act then return end
