@@ -36,7 +36,9 @@ function S.tick(D, dt, t)
 		S.br = S.br or { phase = 0, at = t }
 		if t < S.br.at or not BR then return end
 		local ph = S.br.phase
-		if ph == 0 then D.shot("bugreport_menu_button"); S.br.phase, S.br.at = 1, t + 1.5
+		if ph == 0 then
+			if G.OVERLAY_MENU then G.FUNCS.exit_overlay_menu(); S.br.at = t + 3; return end -- unlock pop-ups hide the buttons
+			D.shot("bugreport_menu_button"); S.br.phase, S.br.at = 1, t + 1.5
 		elseif ph == 1 then
 			BR.form.title = "Lobby froze"; BR.form.desc = "Clicked ready twice in 3v3"
 			G.FUNCS.mp_bug_report_open(); S.br.phase, S.br.at = 2, t + 4
