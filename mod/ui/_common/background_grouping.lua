@@ -1,6 +1,17 @@
 function MP.UI.BackgroundGrouping(text, nodes, config)
 	config = config or {}
 	config.text_scale = config.text_scale or 0.33
+	if config.header_top then -- 0.6.8 menus: clean header above the group
+		return {
+			n = config.col and G.UIT.C or G.UIT.R,
+			config = { align = "cm", padding = 0.05, r = 0.1, colour = G.C.UI.TRANSPARENT_DARK },
+			nodes = {
+				{ n = G.UIT.R, config = { align = "cm", padding = 0.06 }, nodes = {
+					{ n = G.UIT.T, config = { text = text, colour = G.C.UI.TEXT_LIGHT, scale = 0.4, shadow = true } } } },
+				{ n = G.UIT.R, config = { align = "cm" }, nodes = nodes },
+			},
+		}
+	end
 	return {
 		n = config.col and G.UIT.C or G.UIT.R,
 		config = { align = "cm", padding = 0.05, r = 0.1, colour = G.C.UI.TRANSPARENT_DARK },

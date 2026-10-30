@@ -73,7 +73,7 @@ function MP.UI.Main_Lobby_Options(info_area_id, default_info_area, button_func, 
 			end
 			buttons[#buttons + 1] = MP.UI.UTILS.create_row({ align = "cm", padding = 0.05 }, { button })
 		end
-		categories[#categories + 1] = MP.UI.BackgroundGrouping(localize(category.name), buttons)
+		categories[#categories + 1] = MP.UI.BackgroundGrouping(localize(category.name), buttons, { header_top = true })
 	end
 
 	return  {

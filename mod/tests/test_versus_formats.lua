@@ -53,4 +53,5 @@ ok(not io.open("ui/main_menu/play_button/gamemode_selection.lua"):read("*a"):fin
 ok(M.display_name("gamemode_mp_duel") == "1v1" and M.subtitle("gamemode_mp_koth") == nil, "label 1v1, no subtitle outside Versus")
 for _, lang in ipairs({ "en-us", "nl" }) do local s2 = io.open("localization/" .. lang .. ".lua"):read("*a")
 	ok(s2:find('k_duel = "1v1"', 1, true) and s2:find("k_teams_sub = ", 1, true) and s2:find("k_duel_sub = ", 1, true), lang .. " Versus labels + subtitles") end
+ok(io.open("ui/lobby/_lobby_options/main_options.lua"):read("*a"):find("header_top = true", 1, true), "category headers sit above their modes")
 print("PASS: versus formats")
