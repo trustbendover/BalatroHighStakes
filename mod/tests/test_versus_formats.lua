@@ -42,4 +42,7 @@ for _, lang in ipairs({ "en-us", "nl" }) do
 	ok(s:find('k_versus = "Versus"', 1, true) and s:find('k_ffa = "Free-for-all"', 1, true), lang .. " keeps Versus / Free-for-all")
 	for _, m in ipairs({ "koth", "teams", "deathmatch" }) do ok(s:find("k_" .. m .. "_rules = ", 1, true), lang .. " full rules for " .. m) end
 end
+-- dictionary keys with #n# are translated (they used to fall back to English in NL)
+localize = function(k) if k == "k_mode_players_range" then return "#1#-#2# spelers" end return k end
+ok(M.players_label("koth") == "2-8 spelers", "player count uses the translated dictionary text")
 print("PASS: versus formats")

@@ -327,6 +327,7 @@ return {
 			k_teams4 = "4v4",
 			k_mode_players_exact = "#1# spelers",
 			k_mode_players_range = "#1#-#2# spelers",
+			k_values_are_modifiable = "* Waarden zijn aanpasbaar",
 			k_mode_need_exactly_n = "#1# heeft precies #2# spelers nodig",
 			k_duel_short = "Eén tegen één. De laagste score per Aartsvijand-blind verliest een leven.",
 			k_teams2_short = "Twee teams van 2. De opgetelde teamscore telt.",

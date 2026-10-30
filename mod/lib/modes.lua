@@ -20,8 +20,15 @@ M.LIMITS = {
 M.TEAMS_RULES = M.TEAMS_RULES or (MP.load_mp_file and MP.load_mp_file("networking/teams_rules.lua")) or nil
 
 local function L(key, fallback, vars)
-	local ok, s = pcall(localize, vars and { type = "variable", key = key, vars = vars } or key)
-	if ok and type(s) == "string" and s ~= "ERROR" and s ~= key then return s end
+	-- the mode keys live in misc.dictionary, so substitute #n# here (type=variable only reads v_dictionary)
+	local ok, s = pcall(localize, key)
+	if not (ok and type(s) == "string" and s ~= "ERROR" and s ~= key) and vars then
+		ok, s = pcall(localize, { type = "variable", key = key, vars = vars })
+		if ok and type(s) == "string" and s ~= "ERROR" and s ~= key then return s end
+		s = nil
+	end
+	if ok and type(s) == "string" and s ~= "ERROR" and s ~= key then fallback = s end
+	if ok and type(s) == "string" and s ~= "ERROR" and s ~= key and not vars then return s end
 	if vars then
 		for i, v in ipairs(vars) do fallback = fallback:gsub("#" .. i .. "#", tostring(v)) end
 	end
