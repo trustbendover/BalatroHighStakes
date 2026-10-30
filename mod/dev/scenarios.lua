@@ -90,6 +90,7 @@ function S.tick(D, dt, t)
 	end
 	if S.step == 3 and in_lobby then
 		if t - S.lobby_t > 3 then once(D, "lobby") end
+		if t - S.lobby_t > 10 then once(D, "lobby_title") end
 		if D.role == "host" and D.scenario == "presets" and not S.preset_done and t - S.lobby_t > 5 and MP.PRESETS then
 			S.preset_done = true
 			MP.PRESETS.apply({ options = MP.PRESETS.BUILTIN[2].options, log_id = "built-in quick" }, "Quick Duel")

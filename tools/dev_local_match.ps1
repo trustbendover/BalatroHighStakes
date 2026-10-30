@@ -14,7 +14,7 @@ param(
     [string]$DevZip,
     [ValidateRange(2, 8)][int]$Players = 2,
     [ValidateSet('full_match', 'host_leave', 'guest_rejoin', 'elimination', 'presets', 'ready_gating')][string]$Scenario = 'full_match',
-    [ValidateSet('attrition', 'deathmatch', 'duel', 'showdown', 'survival', 'koth', 'teams')][string]$Mode = 'attrition',
+    [ValidateSet('attrition', 'deathmatch', 'duel', 'showdown', 'survival', 'koth', 'teams', 'teams2', 'teams3', 'teams4')][string]$Mode = 'attrition',
     [string]$GameDir = 'G:\SteamLibrary\steamapps\common\Balatro',
     [string]$Root = (Join-Path $env:USERPROFILE 'GrokBot\Projects\BalatroMP3P\DevLocal'),
     [switch]$HostManual,          # you play the host yourself; guests are bots
