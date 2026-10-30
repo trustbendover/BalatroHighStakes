@@ -1313,6 +1313,7 @@ return {
 			k_rj_waiting = "#1# disconnected - waiting to rejoin #2#",
 			k_rj_more = "+#1# more",
 			k_rj_rejoined = "#1# rejoined",
+			k_player_joined_run = "#1# joined the match",
 			k_rj_expired = "#1# did not return in time",
 			k_rj_restored = "Rejoined! Your run is restored (ante #1#)",
 			k_rj_restarted = "Rejoined! Your run restarts at ante #1# (same seed, lives kept)",

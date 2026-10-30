@@ -806,8 +806,11 @@ end
 
 local function action_player_joined(p)
 	local name = p.username and (p.username:match("([^~]+)") or p.username) or "A player"
-	sendWarnMessage(name .. " joined the game", "MULTIPLAYER")
-	MP.UI.UTILS.overlay_message(name .. " joined the running game!")
+	-- 0.6.8: a short notice that fades by itself (the OK pop-up blocked play mid-round)
+	local msg = (MP.SPECTATE and MP.SPECTATE.L) and MP.SPECTATE.L("k_player_joined_run", "#1# joined the match", { name })
+		or (name .. " joined the match")
+	if MP.REJOIN and MP.REJOIN.notify then MP.REJOIN.notify(msg, G.C and G.C.GREEN)
+	else sendWarnMessage(msg, "MULTIPLAYER") end
 end
 
 local function action_rejoin_failed(p)

@@ -296,6 +296,7 @@ return {
 			k_rj_waiting = "#1# verbinding weg - wacht op terugkeer #2#",
 			k_rj_more = "+#1# meer",
 			k_rj_rejoined = "#1# is terug",
+			k_player_joined_run = "#1# doet nu mee",
 			k_rj_expired = "#1# kwam niet op tijd terug",
 			k_rj_restored = "Terug! Je run is hersteld (ante #1#)",
 			k_rj_restarted = "Terug! Je run start opnieuw op ante #1# (zelfde seed, levens behouden)",
