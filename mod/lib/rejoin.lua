@@ -153,7 +153,7 @@ end
 
 function RJ.restore(p)
 	local chk = RJ.load()
-	local ok = chk and RJ.usable(chk.meta, p, os.time())
+	local ok = not p.lateJoin and chk and RJ.usable(chk.meta, p, os.time())
 	local lives = tonumber(p.lives) or (MP.GAME and MP.GAME.lives)
 	if not ok then
 		if MP.THREEP and MP.THREEP.restart_at_ante then MP.THREEP.restart_at_ante(p) end

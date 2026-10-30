@@ -797,7 +797,10 @@ local function action_resume_game(p)
 		return
 	end
 	if MP.SPECTATE then MP.SPECTATE.state.match, MP.SPECTATE.state.joined = true, false end
-	if MP.REJOIN and not p.lateJoin then return MP.REJOIN.queue(p) end
+	-- 0.6.8: late joins wait for the lobby screen too. resumeGame can arrive in the same frame as
+	-- joinedLobby; the lobby-enter hook in Game:update then sent the fresh run back to the menu
+	-- (late joiner left at the lobby with 0 lives). RJ.restore never uses a checkpoint for a late join.
+	if MP.REJOIN then return MP.REJOIN.queue(p) end
 	return restart_at_ante(p)
 end
 
