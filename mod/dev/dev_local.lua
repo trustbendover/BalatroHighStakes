@@ -31,6 +31,7 @@ D.capture = env("HS_DEV_CAPTURE")
 D.shot_every = tonumber(env("HS_DEV_SHOT_EVERY", "0")) or 0
 D.speed = tonumber(env("HS_DEV_SPEED", "4")) or 4
 D.persona = env("HS_DEV_PERSONA")      -- aggressive | conservative | shopper | saver | random (default by name)
+D.lang = env("HS_DEV_LANG")              -- e.g. nl: switch the test profile language once at start
 D.seed = tonumber(env("HS_DEV_SEED", "")) -- bot decision seed (default from name+persona)
 
 local function log(m) if sendInfoMessage then sendInfoMessage(m, "HS-DEV") end end
@@ -92,6 +93,10 @@ function Game:update(dt)
 	t = t + (dt or 0)
 	pcall(place)
 	pcall(no_tutorial)
+	if D.lang and not D.lang_done and G.SETTINGS and G.set_language and t > 1 then
+		D.lang_done = true
+		pcall(function() G.SETTINGS.language = D.lang; G.SETTINGS.real_language = D.lang; G:set_language(); log("language " .. D.lang) end)
+	end
 	pcall(function()
 		if D.speed and G.SETTINGS and D.autoplay then G.SETTINGS.GAMESPEED = D.speed end
 		if D.SC then D.SC.tick(D, dt, t) end
