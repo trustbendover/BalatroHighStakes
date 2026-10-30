@@ -136,6 +136,14 @@ function S.tick(D, dt, t)
 	if G.STAGE == G.STAGES.RUN then
 		S.step = math.max(S.step, 4)
 		once(D, "run_start", "run_start")
+		-- HS_DEV_AIJ_CARD=<joker key>: give the host that All-in-Jest joker, then shoot the blind select screen
+		local aij_card = os.getenv("HS_DEV_AIJ_CARD")
+		if aij_card and aij_card ~= "" and D.role == "host" and not S.aij_added and G.jokers and SMODS.add_card then
+			S.aij_added = true
+			local okk, err = pcall(SMODS.add_card, { key = aij_card })
+			D.log("scenario: added " .. aij_card .. " " .. tostring(okk) .. " " .. tostring(err or ""))
+		end
+		if S.aij_added and G.STATE == G.STATES.BLIND_SELECT then later(D, "aij_blind_select", "aij_blind_select", t, 2) end
 		-- lobby info overlay (shows "<ruleset> <mode name>", e.g. "Blitz 4v4 Duels"); autoplay closes it again
 		if D.role == "host" and not S.info_open and t > 0 then S.info_open = t + 4 end
 		if S.info_open and S.info_open ~= true and t > S.info_open and not G.OVERLAY_MENU then

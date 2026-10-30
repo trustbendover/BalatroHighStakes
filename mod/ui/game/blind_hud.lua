@@ -1,5 +1,24 @@
 -- All in Jest compat (0.6.8): its "Blind Drawn" joker hides the nemesis' score/hands. AiJ's lovely patches
 -- target the old file layout (ui/game.lua, ui/hud.lua) and no longer apply, so the effect lives here.
+--- All-in-Jest port (their "AiJ Blind Functionality 5/5" patch targets an old file name): blinds with an
+--- aij_blind_amount_display() hook, or Fall of Count Chaligny (all blinds x1), show their dynamic amount on the
+--- blind select screen. Returns the amount to show, or nil = keep ours. No All-in-Jest: always nil.
+function MP.UI.aij_blind_amount(blind_config, ante, ante_scaling)
+	if not (SMODS and SMODS.find_card and rawget(_G, "All_in_Jest")) or type(blind_config) ~= "table" then return nil end
+	local ok, res = pcall(function()
+		local chaligny = next(SMODS.find_card("j_aij_fall_of_count_chaligny")) ~= nil
+		local base = get_blind_amount(ante)
+		if type(blind_config.aij_blind_amount_display) == "function" then
+			local ret = blind_config:aij_blind_amount_display(blind_config, base, chaligny and 1 or blind_config.mult)
+			if type(ret) == "number" then return ret * ante_scaling end
+			return nil
+		end
+		if chaligny then return base * 1 * ante_scaling end
+		return nil
+	end)
+	if ok then return res end
+	return nil
+end
 function MP.UI.aij_blind_drawn()
 	return SMODS and SMODS.find_card and next(SMODS.find_card("j_aij_mp_blind_drawn")) ~= nil or false
 end

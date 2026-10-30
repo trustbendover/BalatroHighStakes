@@ -151,6 +151,8 @@ function create_UIBox_blind_choice(type, run_info)
 		local blind_amt = get_blind_amount(G.GAME.round_resets.blind_ante)
 			* blind_choice.config.mult
 			* G.GAME.starting_params.ante_scaling
+		local aij_amt = MP.UI.aij_blind_amount and MP.UI.aij_blind_amount(blind_choice.config, G.GAME.round_resets.blind_ante, G.GAME.starting_params.ante_scaling)
+		if aij_amt then blind_amt = aij_amt end
 
 		if
 			G.GAME.round_resets.blind_choices[type] == "bl_mp_nemesis" or G.GAME.round_resets.pvp_blind_choices[type]
