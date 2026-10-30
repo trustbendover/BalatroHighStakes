@@ -993,7 +993,13 @@ function Server:rejoin(L, c, token)
 	local slot = find(L.slots, function(s) return s.reconnectToken == token end)
 	if not slot and L.isInGame then
 		local stale = find(L.players, function(p) return p.reconnectToken == token and p ~= c end)
-		if stale then slot = self:take_over(L, stale) end
+		if stale then slot = self:take_over(L, stale)
+		elseif c.lobby == L and c.reconnectToken == token and find(L.players, function(p) return p == c end) then
+			-- 0.6.8: the same peer (same Steam ID) restarted the game before its old connection timed out:
+			-- hold its seat and give it straight back (was "Token invalid", then a duplicate late join)
+			self:disconnect(c)
+			slot = find(L.slots, function(s) return s.old == c end)
+		end
 	end
 	if not slot then return false end
 	self:reclaim(L, c, slot)
