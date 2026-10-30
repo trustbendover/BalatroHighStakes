@@ -187,7 +187,8 @@ function RJ.on_back(p)
 	if not p or not p.playerId then return end
 	local a = RJ.away[p.playerId]
 	RJ.away[p.playerId] = nil
-	local name = clean((a and a.name) or (MP.LOBBY and MP.LOBBY.names_by_id and MP.LOBBY.names_by_id[p.playerId]) or p.username)
+	local known = a and a.name ~= "?" and a.name or nil -- the away entry may have been made without a name
+	local name = clean(known or (MP.LOBBY and MP.LOBBY.names_by_id and MP.LOBBY.names_by_id[p.playerId]) or p.username)
 	RJ.notify(L("k_rj_rejoined", "#1# rejoined", { name }), G.C and G.C.GREEN)
 	RJ.show_bar()
 end
