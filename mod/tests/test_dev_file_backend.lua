@@ -68,6 +68,16 @@ CLK = CLK + 1
 local got2 = fresh.receive()
 local seen = false for _, m in ipairs(got2) do if m.data:find("hello", 1, true) then seen = true end end
 ok(seen, "restarted receiver gets the host's messages (stream keyed by receiver session)")
+-- receiver's peers file briefly missing while the host sends: the stream must not reset
+local pf = DIR .. "/peers/" .. ps[g].name
+local keep = io.open(pf, "rb"):read("*a"); os.remove(pf)
+ok(newhost.b.send(ps[g].name, '{"action":"during_gap"}'), "send while the peers file is being replaced")
+local w = io.open(pf, "wb"); w:write(keep); w:close()
+newhost.b.send(ps[g].name, '{"action":"after_gap"}')
+CLK = CLK + 1
+local got3, a3, b3 = fresh.receive(), false, false
+for _, m in ipairs(got3) do if m.data:find("during_gap", 1, true) then a3 = true end if m.data:find("after_gap", 1, true) then b3 = true end end
+ok(a3 and b3, "no stream reset/stall across a peers-file gap")
 -- Windows replace (remove+rename) or an AV scan can hide a state file for a moment: not a departure
 do
 	local lid = "Lgrace"; local a = FB.new({ dir = DIR, me = "dev1", peers = PEERS, now = now, session = "ga" })

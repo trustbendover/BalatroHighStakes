@@ -164,10 +164,13 @@ function M.new(o)
 	local tx = {}
 	function B.send(peer, data)
 		local to = safe(peer)
-		local s = raw_read(P("peers/", to))
-		local rs = s and s:match("^(%S+)") or "none"
+		-- a briefly missing/half-replaced peers file must NOT look like a restart (that would reset the
+		-- stream and stall the receiver): keep the last known session unless a different real one shows up
+		local s = sread(P("peers/", to))
+		local rs = s and s:match("^(%S+)")
 		local t = tx[to]
-		if not t or t.rs ~= rs then t = { rs = rs, seq = 0 }; tx[to] = t end
+		if not rs then rs = t and t.rs or "none" end
+		if not t or (t.rs ~= rs) then t = { rs = rs, seq = 0 }; tx[to] = t end
 		t.seq = t.seq + 1 -- contiguous per (sender session, receiver session)
 		local name = table.concat({ to, me, session, rs, string.format("%09d", t.seq) }, "__") .. ".msg"
 		local tmp = P("tmp/", name)
