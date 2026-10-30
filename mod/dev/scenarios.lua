@@ -38,6 +38,8 @@ function S.tick(D, dt, t)
 		local ph = S.br.phase
 		if ph == 0 then
 			if G.OVERLAY_MENU then G.FUNCS.exit_overlay_menu(); S.br.at = t + 3; return end -- unlock pop-ups hide the buttons
+			if not G.MP3P_PATCHNOTES_UI and t < (S.br.wait or t + 20) then S.br.wait = S.br.wait or t + 20; S.br.at = t + 0.5; return end
+			if not S.br.settle then S.br.settle = true; S.br.at = t + 2; return end -- let the menu finish animating
 			D.shot("bugreport_menu_button"); S.br.phase, S.br.at = 1, t + 1.5
 		elseif ph == 1 then
 			BR.form.title = "Lobby froze"; BR.form.desc = "Clicked ready twice in 3v3"
