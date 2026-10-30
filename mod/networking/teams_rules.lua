@@ -160,4 +160,24 @@ function T.resolve(present, size, gt, eq)
 	return low.letter
 end
 
+--- Best team(s) when every team dies at once: letters of the highest team value (ties: all).
+function T.best(present, size, gt, eq)
+	local teams = {}
+	for _, letter in ipairs(T.LETTERS) do
+		local l = present[letter]
+		if l and #l > 0 then teams[#teams + 1] = { letter = letter, value = T.team_value(l, size) } end
+	end
+	local best = {}
+	for _, t in ipairs(teams) do
+		if #best == 0 then best = { t }
+		else
+			local c = T.compare(t.value, best[1].value, gt, eq)
+			if c > 0 then best = { t } elseif c == 0 then best[#best + 1] = t end
+		end
+	end
+	local out = {}
+	for i, t in ipairs(best) do out[i] = t.letter end
+	return out
+end
+
 return T

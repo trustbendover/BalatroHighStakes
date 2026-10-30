@@ -355,6 +355,16 @@ function Server:check_game_over_inner(L)
 		for _, p in ipairs(dying) do if best == nil or s_gt(p.score, best) then best = p.score end end
 		for _, p in ipairs(dying) do if s_eq(p.score, best) then spared[p] = true end end
 	end
+	if survivors == 0 and #dying > 0 and self:teams_active(L) and #self:away_alive(L) == 0 then
+		-- Teams: every team out at once (e.g. failed rounds at the same ante): the best team value wins
+		local present = {}
+		for _, p in ipairs(dying) do
+			if p.team then present[p.team] = present[p.team] or {}; table.insert(present[p.team], p.score) end
+		end
+		for _, letter in ipairs(Core.TEAMS.best(present, L.teamSize, s_gt, s_eq)) do
+			for _, p in ipairs(dying) do if p.team == letter then spared[p] = true end end
+		end
+	end
 	for _, p in ipairs(dying) do
 		-- a player spared by the final-score tie rule wins: not eliminated, not in the elimination order
 		if not spared[p] then
@@ -736,6 +746,9 @@ end
 function Server:lose_life_for(c, cause)
 	local L = c.lobby
 	if not L or not self:teams_active(L) or not c.team then return self:lose_life(c, cause) end
+	-- same guards as lose_life: nothing after the match, nothing for the eliminated / spectators
+	if not L.isInGame or c.eliminated or c.spectator then return end
+	if (L.teamLives[c.team] or c.lives or 0) <= 0 then return end
 	local blocked = (cause == "timer") and c.timerLivesBlocker or (cause ~= "timer" and c.roundLivesBlocker)
 	if blocked then return end
 	for _, m in ipairs(self:team_members(L, c.team)) do
