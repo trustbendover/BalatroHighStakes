@@ -12,7 +12,9 @@ function MP.UI.start_wait_text()
 	end
 	-- too few (or a wrong number of) players for the mode, e.g. alone in the lobby: same style, no count.
 	-- ("NEED N MORE" was left out: Duel can also have too many, Teams needs an even count.)
-	return localize("b_wait_for_players")
+	-- a missing translation returns the string "ERROR": the button needs a list of lines (crashed the lobby)
+	local t = localize("b_wait_for_players")
+	return type(t) == "table" and t or { "WAITING FOR", "PLAYERS" }
 end
 
 local function get_warnings()
