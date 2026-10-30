@@ -4,7 +4,7 @@ MP = {}
 G = { FUNCS = {} }
 local BR = dofile("lib/bug_report.lua")
 local raw = table.concat({
-	[[C:\Users\sverr\AppData\Roaming\Balatro\Mods\lovely\log\x.log]],
+	[[C:\Users\jdoe\AppData\Roaming\Balatro\Mods\lovely\log\x.log]],
 	"C:/Users/Some One/GrokBot/file.lua",
 	"/home/alice/.local/share/love/Balatro",
 	"/Users/bob/Library/Application Support/Balatro",
@@ -12,11 +12,11 @@ local raw = table.concat({
 	"connect 192.168.1.20:5000",
 	"rejoin_token=abc123def, token: zzz999, encryptID=154031384470.61; hostHash: preview=false",
 	"Steam lobby Ldev1_24c910_1793389938 published for code HOWBP",
-	"(username: Sverre~1) (playerId: p1-x)",
+	"(username: Jane~1) (playerId: p1-x)",
 	"Kevin wins the match",
 }, "\n")
 local s = BR.sanitize(raw, { names = { "Kevin" }, codes = { "QWERT" } })
-for _, bad in ipairs({ "sverr", "Some One", "alice", "bob", "76561198012345678", "123456]", "192.168", "abc123def", "zzz999", "154031384470", "HOWBP", "Ldev1_24c910", "Sverre", "Kevin" }) do
+for _, bad in ipairs({ "jdoe", "Some One", "alice", "bob", "76561198012345678", "123456]", "192.168", "abc123def", "zzz999", "154031384470", "HOWBP", "Ldev1_24c910", "Jane", "Kevin" }) do
 	ok(not s:find(bad, 1, true), "removed " .. bad)
 end
 ok(s:find([[C:\Users\USER\AppData]], 1, true) and s:find("/home/USER/", 1, true), "paths keep their shape")
@@ -28,8 +28,8 @@ ok(#url <= 6000, "url under 6000 chars (" .. #url .. ")")
 ok(url:find("^https://github.com/owner/repo/issues/new%?labels=bug&title=Crash%+in%+lobby&body="), "prefilled title + body")
 ok(url:find("cut", 1, true), "cut note when the body is shortened")
 ok(#BR.build_url("t", "short body") < 300, "short body stays whole")
-local file, body = BR.render({ title = "T", desc = "at C:\\Users\\sverr\\x", info = "Mod: x", log = string.rep("l\n", 500) .. "last C:\\Users\\sverr\\y" }, { names = {} }, "bug_report_1.txt")
-ok(not file:find("sverr") and not body:find("sverr"), "render sanitizes everything")
+local file, body = BR.render({ title = "T", desc = "at C:\\Users\\jdoe\\x", info = "Mod: x", log = string.rep("l\n", 500) .. "last C:\\Users\\jdoe\\y" }, { names = {} }, "bug_report_1.txt")
+ok(not file:find("jdoe") and not body:find("jdoe"), "render sanitizes everything")
 ok(body:find("bug_report_1.txt", 1, true) and body:find("drag", 1, true), "body tells to drag in the report file")
 local _, n = body:gsub("\nl", "")
 ok(n <= BR.LOG_LINES_URL, "issue body only has a short log tail")
