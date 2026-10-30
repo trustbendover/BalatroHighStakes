@@ -113,7 +113,7 @@ function S.tick(D, dt, t)
 		if D.role == "host" and not S.info_open and t > 0 then S.info_open = t + 4 end
 		if S.info_open and S.info_open ~= true and t > S.info_open and not G.OVERLAY_MENU then
 			S.info_open = true
-			pcall(function() G.SETTINGS.paused = true; G.FUNCS.overlay_menu({ definition = create_UIBox_generic_options({ contents = { MP.UI.create_UIBox_settings() } }) }) end)
+			pcall(function() G.SETTINGS.paused = true; G.FUNCS.overlay_menu({ definition = create_UIBox_generic_options({ contents = { create_tabs({ tabs = { { label = localize("b_lobby_info"), chosen = true, tab_definition_function = MP.UI.create_UIBox_settings } }, tab_h = 8, snap_to_nav = true }) } }) }) end)
 			later(D, "lobby_info", "lobby_info", t, 1)
 		end
 		local a = ante()
