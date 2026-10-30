@@ -48,6 +48,8 @@ function D.messages(prev, p)
 	local out = {}
 	local known = {}
 	for _, o in ipairs((prev and prev.out) or {}) do known[o.id] = true end
+	local seen = {} -- last known names (a dropped seat may arrive without one)
+	for _, a in ipairs((prev and prev.alive) or {}) do seen[a.id] = a.username end
 	local n_alive = #(p.alive or {})
 	for _, o in ipairs(p.out or {}) do
 		if not known[o.id] then
@@ -55,7 +57,7 @@ function D.messages(prev, p)
 				out[#out + 1] = p.running and L("k_dm_you_out", "You are out (place #1#). Watch the standings or return to the lobby.", { o.place or "?" })
 					or L("k_dm_you_out_final", "You finished in place #1#", { o.place or "?" })
 			elseif p.running then
-				out[#out + 1] = L("k_dm_eliminated", "#1# eliminated - #2# left", { name_of(o.id, o.username), n_alive })
+				out[#out + 1] = L("k_dm_eliminated", "#1# eliminated - #2# left", { name_of(o.id, o.username or seen[o.id]), n_alive })
 			end
 		end
 	end

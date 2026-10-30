@@ -413,13 +413,17 @@ end
 function Server:deathmatch_broadcast(L)
 	if L.gameMode ~= "deathmatch" then return end
 	local alive, out = {}, {}
+	-- 0.6.8: remember every name seen, so a seat that dropped (crash) still shows its name, not "?"
+	L.nameById = L.nameById or {}
+	for _, p in ipairs(L.players) do if p.id and p.username then L.nameById[p.id] = p.username end end
+	for _, sl in ipairs(L.slots) do if sl.old and sl.old.id and sl.old.username then L.nameById[sl.old.id] = sl.old.username end end
 	for _, p in ipairs(L.players) do
 		if not p.eliminated then alive[#alive + 1] = { id = p.id, username = p.username, lives = p.lives } end
 	end
 	for _, sl in ipairs(L.slots) do
 		if not sl.old.eliminated then alive[#alive + 1] = { id = sl.old.id, username = sl.old.username, lives = sl.old.lives, away = true } end
 	end
-	for i, id in ipairs(L.elimOrder or {}) do out[#out + 1] = { id = id, place = #alive + (#(L.elimOrder) - i) + 1 } end
+	for i, id in ipairs(L.elimOrder or {}) do out[#out + 1] = { id = id, username = L.nameById[id], place = #alive + (#(L.elimOrder) - i) + 1 } end
 	for _, p in ipairs(L.players) do
 		sendA(p, { action = "deathmatchUpdate", you = p.id, alive = alive, out = out,
 			running = L.isInGame and true or false, winnerId = (not L.isInGame) and L.winnerId or nil })

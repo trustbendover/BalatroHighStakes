@@ -66,4 +66,16 @@ local d1 = dollars
 MP.GAME.enemies.c.eliminated = true; MP.GAME.enemies.c.lives = 0
 for _, x in ipairs({ v, l, h }) do x.def.update(nil, x, 0) end
 ok(dollars > d1 and v.ability.extra.hands == 2 and math.abs(l.ability.extra.x_mult - (1 + 2 * g)) < 1e-9, "Vulture + Laughing Third react to a grace-timeout elimination")
+-- 0.6.8: a dropped seat (crash) shows its last known name, never "?"
+local pa = { running = true, you = "me", alive = { { id = "me", username = "Me", lives = 2 }, { id = "zz", username = "Zed", lives = 1 } }, out = {} }
+local pb = { running = true, you = "me", alive = { { id = "me", username = "Me", lives = 2 } }, out = { { id = "zz", place = 2 } } }
+local mz = D.messages(pa, pb)
+ok(mz[1] and mz[1]:find("Zed", 1, true) and not mz[1]:find("?", 1, true), "dropped player keeps the last known name (" .. tostring(mz[1]) .. ")")
+-- host side: out entries carry the name
+local Core = dofile("networking/p2p_server.lua"); local Sx = Core.new()
+local got = {}
+local a = { id = "a", username = "Ann", lives = 1, send = function(t) got[#got + 1] = t end }
+local Lx = { gameMode = "deathmatch", players = { a }, slots = { { old = { id = "b", username = "Bob", eliminated = true } } }, elimOrder = { "b" }, isInGame = true }
+Sx:deathmatch_broadcast(Lx)
+ok(got[1].out[1].username == "Bob", "host: eliminated seat sent with its name")
 print("PASS: deathmatch client")
