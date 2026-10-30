@@ -109,6 +109,11 @@ function S.tick(D, dt, t)
 	if G.STAGE == G.STAGES.RUN then
 		S.step = math.max(S.step, 4)
 		once(D, "run_start", "run_start")
+		-- lobby info overlay (shows "<ruleset> <mode name>", e.g. "Blitz 4v4 Duels"); autoplay closes it again
+		if D.role == "host" and not S.info_open and t > 0 then S.info_open = t + 4 end
+		if S.info_open and S.info_open ~= true and t > S.info_open and not G.OVERLAY_MENU then
+			S.info_open = true; pcall(G.FUNCS.lobby_info); later(D, "lobby_info", "lobby_info", t, 1)
+		end
 		local a = ante()
 		if a >= 2 then later(D, "ante2", "ante2", t) end
 		if MP.GAME and MP.GAME.pvp_reached then later(D, "pvp_" .. a, "pvp_ante" .. a, t) end
