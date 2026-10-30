@@ -195,7 +195,9 @@ end
 
 function RJ.on_expired(p)
 	if not p or not p.playerId or not RJ.away[p.playerId] then return end
-	local name = RJ.away[p.playerId].name
+	local a = RJ.away[p.playerId]
+	local known = a.name ~= "?" and a.name or nil
+	local name = clean(known or (MP.LOBBY and MP.LOBBY.names_by_id and MP.LOBBY.names_by_id[p.playerId]) or p.username)
 	RJ.away[p.playerId] = nil
 	RJ.notify(L("k_rj_expired", "#1# did not return in time", { name }), G.C and G.C.RED)
 	RJ.show_bar()

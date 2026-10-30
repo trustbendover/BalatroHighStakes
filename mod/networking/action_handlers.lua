@@ -726,6 +726,7 @@ local function action_player_eliminated(p)
 	end
 	if G.STAGE == G.STAGES.RUN then MP.THREEP.refresh_hud() end
 	local name = (MP.LOBBY.names_by_id and MP.LOBBY.names_by_id[p.playerId]) or p.username or "?"
+	name = tostring(name):gsub("~.*$", "") -- never show the internal "~colour" suffix
 	sendWarnMessage(name .. " eliminated", "MULTIPLAYER")
 	if MP.UI.UTILS and MP.UI.UTILS.overlay_message and G.STAGE ~= G.STAGES.RUN then MP.UI.UTILS.overlay_message(name .. " is out!") end
 end
