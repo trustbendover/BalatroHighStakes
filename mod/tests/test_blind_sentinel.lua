@@ -25,4 +25,17 @@ for _, f in ipairs({ "localization/en-us.lua", "localization/nl.lua" }) do
 	local s = io.open(f):read("*a")
 	ok(s:find("k_mp_blind_failed", 1, true) and s:find("k_mp_blind_out", 1, true), f .. " has both keys")
 end
+-- the "Score at least" line is hidden while the sentinel shows, restored afterwards
+local label = { config = { text = "Score at least" } }
+G.HUD_blind = { get_UIE_by_ID = function() return { children = { nil, { children = { nil, { children = { nil, { children = { { children = { label } } } } } } } } } } end }
+MP.is_mp_or_ghost = function() return true end; MP.GAME.lives = 0
+G.GAME.blind = { chips = -1 }; G.FUNCS.blind_chip_UI_scale(e)
+ok(label.config.text == "" and MP.UI.sentinel_label_hidden, "label hidden while Out shows")
+G.GAME.blind = { chips = 800 }; G.FUNCS.blind_chip_UI_scale(e)
+ok(label.config.text == "Score at least" and not MP.UI.sentinel_label_hidden, "label restored on a normal blind")
+label.config.text = "Current Enemy score"; G.FUNCS.blind_chip_UI_scale(e)
+ok(label.config.text == "Current Enemy score", "PvP label left alone")
+G.GAME.blind = { chips = -1 }; G.FUNCS.blind_chip_UI_scale(e)
+MP.is_mp_or_ghost = function() return false end; G.GAME.blind = { chips = 300 }; G.FUNCS.blind_chip_UI_scale(e)
+ok(label.config.text == "Current Enemy score" and not MP.UI.sentinel_label_hidden, "leaving MP restores the saved label")
 print("all ok")

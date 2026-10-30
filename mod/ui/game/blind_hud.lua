@@ -258,7 +258,33 @@ G.FUNCS.blind_chip_UI_scale = function(e)
 		local label = MP.UI.blind_sentinel_text(G.GAME.blind.chips, MP.GAME and MP.GAME.lives)
 		if label then
 			G.GAME.blind.chip_text = label
-			if e and e.config then e.config.scale = 0.5 end
+			if e and e.config then e.config.scale = (#label > 8) and 0.45 or 0.6 end
 		end
+		MP.UI.set_blind_target_label(label == nil)
+	elseif MP.UI.sentinel_label_hidden then
+		MP.UI.set_blind_target_label(true)
+	end
+end
+
+-- Hide the "Score at least" line while the sentinel label is shown; restore it afterwards.
+-- Only restores what we hid (PvP sets its own "Current Enemy score" label, left alone).
+local function target_label_node()
+	local ok, node = pcall(function()
+		return G.HUD_blind:get_UIE_by_ID("HUD_blind").children[2].children[2].children[2].children[1].children[1]
+	end)
+	return ok and node and node.config and node or nil
+end
+function MP.UI.set_blind_target_label(visible)
+	if visible and not MP.UI.sentinel_label_hidden then return end
+	if not visible and MP.UI.sentinel_label_hidden then return end
+	local node = target_label_node()
+	if not node then return end
+	if visible then
+		if node.config.text == "" then node.config.text = MP.UI.sentinel_label_saved or localize("ph_blind_score_at_least") end
+		MP.UI.sentinel_label_hidden, MP.UI.sentinel_label_saved = false, nil
+	else
+		MP.UI.sentinel_label_saved = node.config.text
+		node.config.text = ""
+		MP.UI.sentinel_label_hidden = true
 	end
 end

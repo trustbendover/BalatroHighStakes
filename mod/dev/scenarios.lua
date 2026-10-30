@@ -87,6 +87,8 @@ function S.tick(D, dt, t)
 		end
 		if S.quit_at and t > S.quit_at then S.quit_at = math.huge; love.event.quit() end
 	end
+	if MP.UI and MP.UI.sentinel_label_hidden and G.STATE ~= G.STATES.GAME_OVER then once(D, "blind_sentinel") end
+	if G.STATE == G.STATES.SELECTING_HAND and G.GAME.blind and type(G.GAME.blind.chips) == "number" and G.GAME.blind.chips > 0 and not (MP.is_pvp_boss and MP.is_pvp_boss()) then later(D, "blind_normal", "blind_normal", t, 1.0) end
 	if MP.SPECTATE and MP.SPECTATE.watching and MP.SPECTATE.watching() then later(D, "spectating", "spectating", t, 1.5) end
 	if G.STATE == G.STATES.GAME_OVER then later(D, "game_over", "game_over", t, 2) end
 	flush(D, t)
