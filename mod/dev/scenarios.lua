@@ -30,7 +30,7 @@ function S.tick(D, dt, t)
 	if S.step == 0 then S.setup(D); S.step = 1 end
 	-- bug_report: main menu button, the form, then a submit with the browser/folder opening stubbed out
 	if D.scenario == "bug_report" then
-		if G.STAGE ~= G.STAGES.MAIN_MENU or t < 8 then return end
+		if G.STAGE ~= G.STAGES.MAIN_MENU or t < 25 then return end -- after the menu intro zoom
 		local BR = MP.BUG_REPORT
 		S.br = S.br or { phase = 0, at = t }
 		if t < S.br.at or not BR then return end
@@ -38,7 +38,7 @@ function S.tick(D, dt, t)
 		if ph == 0 then D.shot("bugreport_menu_button"); S.br.phase, S.br.at = 1, t + 1.5
 		elseif ph == 1 then
 			BR.form.title = "Lobby froze"; BR.form.desc = "Clicked ready twice in 3v3"
-			G.FUNCS.mp_bug_report_open(); S.br.phase, S.br.at = 2, t + 2
+			G.FUNCS.mp_bug_report_open(); S.br.phase, S.br.at = 2, t + 4
 		elseif ph == 2 then D.shot("bugreport_form"); S.br.phase, S.br.at = 3, t + 1
 		elseif ph == 3 then
 			local real = love.system.openURL

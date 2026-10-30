@@ -123,7 +123,7 @@ function BR.collect(title, desc)
 	local function L(s) lines[#lines + 1] = s end
 	L("Mod: Balatro High Stakes " .. tostring(MP.MOD_VERSION or (SMODS and SMODS.Mods and SMODS.Mods.Multiplayer and SMODS.Mods.Multiplayer.version) or "?"))
 	L("Balatro: " .. tostring(G and G.VERSION or "?") .. " | Steamodded: " .. tostring(SMODS and SMODS.version or MP.SMODS_VERSION or "?")
-		.. " | Lovely: " .. tostring((rawget(_G, "lovely") and lovely.version) or "?"))
+		.. " | Lovely: " .. tostring((SMODS and SMODS.Mods and SMODS.Mods.Lovely and SMODS.Mods.Lovely.version) or (rawget(_G, "lovely") and lovely.version) or "?"))
 	L("OS: " .. tostring(love and love.system and love.system.getOS() or "?") .. " | Language: " .. tostring(G and G.SETTINGS and G.SETTINGS.language or "?"))
 	L("In lobby: " .. tostring(MP.LOBBY and MP.LOBBY.code ~= nil) .. " | Host: " .. tostring(MP.LOBBY and MP.LOBBY.is_host or false))
 	L("Gamemode: " .. tostring(cfg.gamemode) .. " | Ruleset: " .. tostring(cfg.ruleset))
