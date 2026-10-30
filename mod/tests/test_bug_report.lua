@@ -57,4 +57,15 @@ local rows = BR.ml_lines(string.rep("word ", 40) .. "\nlast", 205, 30, 4, true)
 ok(#rows == 4 and rows[4]:find("|", 1, true), "wraps and scrolls to the cursor row")
 for _, r in ipairs(BR.ml_lines(string.rep("abc ", 50), 0, 30, 7, false)) do ok(#r <= 30, "row fits " .. #r) break end
 ok(not BR.ml_key(st, "a"), "plain letters come via textinput, not keypressed")
+-- input fields: placeholder, single-line title, focus
+local tl = { text = "", cursor = 0, active = false, max = 60, single = true }
+BR.field_refresh(tl, 64, 1, "Type a short title...", true)
+ok(tl.ph == "Type a short title..." and tl.rows.r1 == "", "placeholder shown when empty and unfocused")
+tl.active = true; BR.field_refresh(tl, 64, 1, "Type a short title...", true)
+ok(tl.ph == "" and tl.rows.r1 == "|", "focused+empty: no placeholder, cursor visible")
+BR.ml_insert(tl, "a\nb"); ok(tl.text == "a b", "title is single-line")
+ok(not BR.ml_key(tl, "return"), "Enter in title is not inserted")
+BR.ml_insert(tl, string.rep("x", 100)); ok(#tl.text == 60, "title capped at 60")
+BR.field_refresh(tl, 64, 1, "ph", true); ok(tl.ph == "", "no placeholder with text")
+ok(BR.TEXT.nl.ph_title == "Typ een korte titel..." and BR.TEXT.en.ph_desc == "Describe what happened..." and BR.TEXT.nl.hint, "EN/NL placeholders")
 print("PASS: bug report")
