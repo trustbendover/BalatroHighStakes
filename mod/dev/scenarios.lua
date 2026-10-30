@@ -68,7 +68,7 @@ function S.tick(D, dt, t)
 	if S.step == 1 and menu and not in_lobby and t > 6 and not G.OVERLAY_MENU then
 		if D.role == "host" then
 			MP.LOBBY.config.ruleset = MP.LOBBY.config.ruleset or "ruleset_mp_blitz"
-			MP.LOBBY.config.gamemode = "gamemode_mp_" .. D.mode
+			if MP.UI.select_gamemode_entry then MP.UI.select_gamemode_entry(D.mode) else MP.LOBBY.config.gamemode = "gamemode_mp_" .. D.mode end
 			D.log("scenario: creating lobby " .. D.mode)
 			G.FUNCS.start_lobby(nil)
 			S.step = 2
