@@ -1403,13 +1403,19 @@ function H.failRound(S, c)
 	local L = c.lobby
 	if not L or c.eliminated then return end
 	if L.options.death_on_round_loss then S:lose_life_for(c, "round") end
-	S:check_game_over(L)
+	if S:check_game_over(L) then return end
+	-- 0.6.8: the others may already be Ready at the PvP blind, waiting only for this player.
+	-- If this failed round eliminated them, start that blind now (it hung forever before).
+	S:try_start_blind(L)
+	S:try_resolve_pvp(L)
 end
 function H.failTimer(S, c)
 	local L = c.lobby
 	if c.eliminated then return end
 	S:lose_life_for(c, "timer")
-	if L then S:check_game_over(L) end
+	if not L or S:check_game_over(L) then return end
+	S:try_start_blind(L)
+	S:try_resolve_pvp(L)
 end
 function H.setAnte(S, c, a) c.ante = tonumber(a.ante) or c.ante end
 function H.setLocation(S, c, a) S:set_location(c, a.location) end
