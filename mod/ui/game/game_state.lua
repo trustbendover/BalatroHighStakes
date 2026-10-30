@@ -86,7 +86,8 @@ local function eval_hand_and_jokers()
 			end
 
 			--calculate the hand effects
-			local effects = { G.hand.cards[i]:get_end_of_round_effect() }
+			-- pass the end-of-round context like Steamodded does (All-in-Jest reads it; nil crashed the game)
+			local effects = { G.hand.cards[i]:get_end_of_round_effect({ cardarea = G.hand, end_of_round = true, playing_card_end_of_round = true, other_card = G.hand.cards[i] }) }
 			for k = 1, #G.jokers.cards do
 				--calculate the joker individual card effects
 				local eval = G.jokers.cards[k]:calculate_joker({
