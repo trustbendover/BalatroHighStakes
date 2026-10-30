@@ -33,6 +33,8 @@ export const startError = (mode: GameMode | string, n: number, options: { [k: st
 	if (mode === "duel" && n !== 2) return "1v1 Duel needs exactly 2 players.";
 	if (mode === "teams") {
 		const [size, why] = teamsPlan(n, options);
+		const fmt = Number(options?.teams_format ?? 0);
+		if (size === null && fmt >= 2 && fmt <= 4) return `${fmt}v${fmt} ${why}.`;
 		if (size === null) return `Teams ${why} (4, 6 or 8 players).`;
 	}
 	return null;
@@ -481,7 +483,7 @@ class Lobby {
 	};
 
 	setOptions = (options: { [key: string]: string }) => {
-		const teamsBefore = `${this.options.teams_order ?? ""}|${this.options.teams_size ?? ""}`;
+		const teamsBefore = `${this.options.teams_order ?? ""}|${this.options.teams_size ?? ""}|${this.options.teams_format ?? ""}`;
 		for (const key of Object.keys(options)) {
 			if (options[key] === "true" || options[key] === "false") {
 				this.options[key] = options[key] === "true";
@@ -492,7 +494,7 @@ class Lobby {
 		for (const p of this.players.slice(1)) p.sendAction({ action: "lobbyOptions", gamemode: this.gameMode, ...options });
 		// Re-broadcast the team preview only when the split really changed (the host re-sends
 		// all options after every lobbyInfo, so an unconditional broadcast would loop).
-		const teamsAfter = `${this.options.teams_order ?? ""}|${this.options.teams_size ?? ""}`;
+		const teamsAfter = `${this.options.teams_order ?? ""}|${this.options.teams_size ?? ""}|${this.options.teams_format ?? ""}`;
 		if (this.gameMode === "teams" && !this.isInGame && teamsAfter !== teamsBefore) this.broadcastLobbyInfo();
 	};
 

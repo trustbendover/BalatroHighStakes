@@ -1,30 +1,50 @@
+-- 0.6.8: grouped Gamemodes menu. Versus = fixed formats (2v2-4v4 are Teams with a fixed team size),
+-- Free-for-all = everyone against everyone, Challenge = co-op style.
+MP.UI.GAMEMODE_GROUPS = {
+	{ name = "k_versus", entries = { "duel", "teams2", "teams3", "teams4" } },
+	{ name = "k_ffa", entries = { "attrition", "showdown", "koth", "deathmatch" } },
+	{ name = "k_challenge", entries = { "survival" } },
+}
+--- menu entry -> gamemode key + Versus team format (nil for a plain mode)
+function MP.UI.gamemode_entry(entry)
+	local f = tostring(entry):match("^teams(%d)$")
+	if f then return "teams", tonumber(f) end
+	return entry, nil
+end
+function MP.UI.gamemode_entry_label(entry)
+	local mode, f = MP.UI.gamemode_entry(entry)
+	if f then return f .. "v" .. f end
+	return localize("k_" .. mode)
+end
+function MP.UI.gamemode_menu_groups()
+	local out = {}
+	for _, g in ipairs(MP.UI.GAMEMODE_GROUPS) do
+		local buttons = {}
+		for _, e in ipairs(g.entries) do
+			buttons[#buttons + 1] = { button_id = e .. "_gamemode_button", button_localize_key = "k_" .. e, label = MP.UI.gamemode_entry_label(e) }
+		end
+		out[#out + 1] = { name = g.name, buttons = buttons }
+	end
+	return out
+end
+--- select a menu entry in the lobby config
+function MP.UI.select_gamemode_entry(entry)
+	local mode, f = MP.UI.gamemode_entry(entry)
+	MP.LOBBY.config.gamemode = "gamemode_mp_" .. mode
+	MP.LOBBY.config.teams_format = f or 0
+	if f then MP.LOBBY.config.teams_size = f end
+	MP.LOBBY.gamemode_entry = entry
+end
+
 function G.UIDEF.gamemode_selection_options()
-	MP.LOBBY.config.gamemode = "gamemode_mp_attrition"
+	MP.UI.select_gamemode_entry("duel")
 
 	local default_gamemode_area = UIBox({
-		definition = G.UIDEF.gamemode_info("attrition"),
+		definition = G.UIDEF.gamemode_info("duel"),
 		config = { align = "cm" },
 	})
 
-	local gamemode_buttons_data = {
-		{
-			name = "k_battle",
-			buttons = {
-				{ button_id = "attrition_gamemode_button", button_localize_key = "k_attrition" },
-				{ button_id = "duel_gamemode_button", button_localize_key = "k_duel" },
-				{ button_id = "showdown_gamemode_button", button_localize_key = "k_showdown" },
-				{ button_id = "koth_gamemode_button", button_localize_key = "k_koth" },
-				{ button_id = "teams_gamemode_button", button_localize_key = "k_teams" },
-				{ button_id = "deathmatch_gamemode_button", button_localize_key = "k_deathmatch" },
-			},
-		},
-		{
-			name = "k_challenge",
-			buttons = {
-				{ button_id = "survival_gamemode_button", button_localize_key = "k_survival" },
-			},
-		},
-	}
+	local gamemode_buttons_data = MP.UI.gamemode_menu_groups()
 
 	return MP.UI.Main_Lobby_Options(
 		"gamemode_area",
@@ -67,15 +87,15 @@ function G.FUNCS.change_gamemode_selection(e)
 		e,
 		"gamemode_area",
 		G.UIDEF.gamemode_info,
-		"attrition_gamemode_button",
-		function(gamemode_name)
-			MP.LOBBY.config.gamemode = "gamemode_mp_" .. gamemode_name
-		end
+		"duel_gamemode_button",
+		function(entry) MP.UI.select_gamemode_entry(entry) end
 	)
 end
 
-function G.UIDEF.gamemode_info(gamemode_name)
+function G.UIDEF.gamemode_info(entry)
+	local gamemode_name, fmt = MP.UI.gamemode_entry(entry)
 	local gamemode = MP.Gamemodes["gamemode_mp_" .. gamemode_name]
+	MP.UI.gamemode_card_entry = entry
 
 	local gamemode_info_tabs = UIBox({
 		definition = G.UIDEF.gamemode_tabs(gamemode),
@@ -134,10 +154,11 @@ function G.UIDEF.gamemode_info(gamemode_name)
 	}
 end
 
+function MP.UI.remember_gamemode_tabs(a) MP.UI.last_gamemode_tabs = a; return a end
 function G.UIDEF.gamemode_tabs(gamemode)
 	local default_tabs = UIBox({
-		definition = G.UIDEF.lobby_setup_tabs_definition(gamemode, "info", 1, false),
-		config = { align = "cm", tab_type = "info", chosen_tab = 1 },
+		definition = G.UIDEF.lobby_setup_tabs_definition(gamemode, "overview", 1, false),
+		config = { align = "cm", tab_type = "overview", chosen_tab = 1 },
 	})
 
 	return {
@@ -160,10 +181,10 @@ function G.UIDEF.gamemode_tabs(gamemode)
 						config = { align = "bm", padding = 0.05 },
 						nodes = {
 							create_option_cycle({
-								options = { localize("k_info"), localize("k_bans"), localize("k_reworks") },
+								options = { localize("k_mode_overview"), localize("k_info"), localize("k_bans"), localize("k_reworks") },
 								current_option = 1,
 								opt_callback = "gamemode_switch_tabs",
-								opt_args = { ui = default_tabs, gamemode = gamemode },
+								opt_args = MP.UI.remember_gamemode_tabs({ ui = default_tabs, gamemode = gamemode }),
 								w = 5,
 								colour = G.C.ORANGE,
 								cycle_shoulders = false,
@@ -186,7 +207,7 @@ function G.FUNCS.gamemode_switch_tabs(args)
 	local active_tab = tabs_wrap.UIBox:get_UIE_by_ID("gamemode_active_tab")
 	local active_tab_idx = active_tab and active_tab.config.tab_idx or 1
 
-	local tab_type = (args.to_key == 2 and "banned") or (args.to_key == 3 and "rework") or "info"
+	local tab_type = (args.to_key == 2 and "rules") or (args.to_key == 3 and "banned") or (args.to_key == 4 and "rework") or "overview"
 	local def = G.UIDEF.lobby_setup_tabs_definition(callback_args.gamemode, tab_type, active_tab_idx, false)
 
 	tabs_object.config.tab_type = tab_type
@@ -200,4 +221,35 @@ function G.FUNCS.gamemode_switch_tabs(args)
 	})
 
 	tabs_wrap.UIBox:recalculate()
+end
+
+--- 0.6.8 mode card. "overview": name, player count, one short line and the blind chips;
+--- "rules": the full rules text only (so long text never overlaps the graphic).
+function MP.UI.gamemode_card_nodes(gamemode, tab_type)
+	local key = MP.MODES.key(gamemode.key)
+	local entry = MP.UI.gamemode_card_entry
+	local _, fmt = MP.UI.gamemode_entry(entry or key)
+	if MP.UI.gamemode_entry(entry or key) ~= key then entry, fmt = key, nil end
+	entry = entry or key
+	local function text_row(text, scale, colour)
+		return { n = G.UIT.R, config = { align = "cm", padding = 0.03 }, nodes = {
+			{ n = G.UIT.T, config = { text = text, scale = scale, colour = colour or G.C.UI.TEXT_LIGHT } } } }
+	end
+	if tab_type == "rules" then
+		local rk = "k_" .. key .. "_rules"
+		local ok, v = pcall(localize, rk)
+		if not ok or type(v) ~= "string" or v == "ERROR" or v == rk then rk = "k_" .. key .. "_description" end
+		local text, scale = MP.UTILS.mode_desc(rk, 0.45, 11)
+		return { text_row(text, scale) }
+	end
+	local nodes = {
+		text_row(MP.UI.gamemode_entry_label(entry), 0.75, G.C.WHITE),
+		{ n = G.UIT.R, config = { align = "cm", padding = 0.05 }, nodes = {
+			{ n = G.UIT.C, config = { align = "cm", colour = G.C.BLUE, r = 0.1, padding = 0.08 }, nodes = {
+				{ n = G.UIT.T, config = { text = MP.MODES.players_label(key, fmt), scale = 0.4, colour = G.C.WHITE } } } } } },
+		text_row(select(1, MP.UTILS.mode_desc("k_" .. entry .. "_short", 0.5, 1)), select(2, MP.UTILS.mode_desc("k_" .. entry .. "_short", 0.5, 1))),
+	}
+	local info = gamemode:create_info_menu()
+	for i = 3, #info do nodes[#nodes + 1] = info[i] end
+	return nodes
 end

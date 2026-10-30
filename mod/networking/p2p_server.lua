@@ -26,6 +26,8 @@ function Core.start_error(mode, n, options)
 	if mode == "duel" and n ~= 2 then return "1v1 Duel needs exactly 2 players." end
 	if mode == "teams" then
 		local size, why = Core.TEAMS and Core.TEAMS.plan(n, options)
+		local fmt = tonumber((options or {}).teams_format)
+		if not size and fmt and fmt >= 2 and fmt <= 4 then return fmt .. "v" .. fmt .. " " .. tostring(why) .. "." end
 		if not size then return "Teams " .. tostring(why or "unavailable") .. " (4, 6 or 8 players)." end
 	end
 	return nil
@@ -1396,7 +1398,7 @@ function H.lobbyOptions(S, c, a)
 	local L = c.lobby
 	if not L then return end
 	local opts = {}
-	local teams_before = tostring(L.options.teams_order or "") .. "|" .. tostring(L.options.teams_size or "")
+	local teams_before = tostring(L.options.teams_order or "") .. "|" .. tostring(L.options.teams_size or "") .. "|" .. tostring(L.options.teams_format or "")
 	for k, v in pairs(a) do
 		if k ~= "action" then
 			if v == "true" then v = true elseif v == "false" then v = false end
@@ -1406,7 +1408,7 @@ function H.lobbyOptions(S, c, a)
 	end
 	for i = 2, #L.players do sendA(L.players[i], copy(copy({ gamemode = L.gameMode }, opts), { action = "lobbyOptions" })) end
 	-- re-broadcast the team preview only on a real change (the host re-sends all options after each lobbyInfo)
-	local teams_after = tostring(L.options.teams_order or "") .. "|" .. tostring(L.options.teams_size or "")
+	local teams_after = tostring(L.options.teams_order or "") .. "|" .. tostring(L.options.teams_size or "") .. "|" .. tostring(L.options.teams_format or "")
 	if L.gameMode == "teams" and not L.isInGame and teams_after ~= teams_before then S:lobby_info(L) end
 end
 function H.failRound(S, c)

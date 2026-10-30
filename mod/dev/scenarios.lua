@@ -25,8 +25,39 @@ function S.setup(D)
 	D.on_action = function() end
 end
 
+S.MODES = { "attrition", "duel", "showdown", "koth", "teams", "deathmatch", "survival" }
 function S.tick(D, dt, t)
 	if S.step == 0 then S.setup(D); S.step = 1 end
+	-- modes_info: open the Gamemodes menu, select every entry, screenshot its Overview and Info (rules) tab
+	if D.scenario == "modes_info" then
+		if G.STAGE ~= G.STAGES.MAIN_MENU or t < 8 then return end
+		local entries = { "duel", "teams2", "teams3", "teams4", "attrition", "showdown", "koth", "deathmatch", "survival" }
+		S.mi = S.mi or { i = 0, at = t, phase = "open" }
+		if t < S.mi.at then return end
+		if S.mi.phase == "open" then
+			G.FUNCS.overlay_menu({ definition = G.UIDEF.gamemode_selection_tabs() })
+			S.mi.phase, S.mi.at = "next", t + 2
+		elseif S.mi.phase == "next" then
+			S.mi.i = S.mi.i + 1
+			local e = entries[S.mi.i]
+			if not e then
+				if not S.mi.done then S.mi.done = true; G.FUNCS.exit_overlay_menu(); D.log("scenario: modes_info done") end
+				return
+			end
+			local btn = G.OVERLAY_MENU and G.OVERLAY_MENU:get_UIE_by_ID(e .. "_gamemode_button")
+			if btn then G.FUNCS.change_gamemode_selection(btn) else D.log("scenario: no button " .. e) end
+			S.mi.phase, S.mi.at = "overview", t + 1.5
+		elseif S.mi.phase == "overview" then
+			D.shot("mode_" .. entries[S.mi.i] .. "_overview")
+			local a = MP.UI.last_gamemode_tabs
+			if a then G.FUNCS.gamemode_switch_tabs({ to_key = 2, cycle_config = { opt_args = a } }) end
+			S.mi.phase, S.mi.at = "rules", t + 1.5
+		elseif S.mi.phase == "rules" then
+			D.shot("mode_" .. entries[S.mi.i] .. "_rules")
+			S.mi.phase, S.mi.at = "next", t + 0.5
+		end
+		return
+	end
 	local menu = G.STAGE == G.STAGES.MAIN_MENU and G.MAIN_MENU_UI ~= nil
 	local in_lobby = MP.LOBBY and MP.LOBBY.code
 	-- 1. host creates the lobby; guests join with the code the host wrote to the shared folder

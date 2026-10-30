@@ -30,6 +30,12 @@ function T.plan(n, options)
 	n = tonumber(n) or 0
 	if n < T.DEFAULTS.min_players then return nil, "needs at least 4 players" end
 	if n > T.DEFAULTS.max_players then return nil, "at most 8 players" end
+	-- 0.6.8 Versus formats (2v2 / 3v3 / 4v4): exactly two teams of teams_format players
+	local fmt = math.floor(tonumber((options or {}).teams_format) or 0)
+	if fmt >= 2 and fmt <= 4 then
+		if n ~= 2 * fmt then return nil, "needs exactly " .. (2 * fmt) .. " players" end
+		return fmt, 2
+	end
 	local size = math.floor(tonumber((options or {}).teams_size) or T.DEFAULTS.size)
 	if size < 2 or size > 4 then size = T.DEFAULTS.size end
 	if n % size ~= 0 or n / size < 2 then

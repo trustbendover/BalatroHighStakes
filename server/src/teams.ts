@@ -25,6 +25,12 @@ export const teamsConfig = (options: Opts = {}) => {
 export const teamsPlan = (n: number, options: Opts = {}): [number, number] | [null, string] => {
 	if (n < TEAMS_DEFAULTS.minPlayers) return [null, "needs at least 4 players"];
 	if (n > TEAMS_DEFAULTS.maxPlayers) return [null, "at most 8 players"];
+	// 0.6.8 Versus formats (2v2 / 3v3 / 4v4): exactly two teams of teams_format players
+	const fmt = Math.floor(Number(options.teams_format ?? 0));
+	if (Number.isFinite(fmt) && fmt >= 2 && fmt <= 4) {
+		if (n !== 2 * fmt) return [null, `needs exactly ${2 * fmt} players`];
+		return [fmt, 2];
+	}
 	let size = Math.floor(Number(options.teams_size ?? TEAMS_DEFAULTS.size));
 	if (!Number.isFinite(size) || size < 2 || size > 4) size = TEAMS_DEFAULTS.size;
 	if (n % size !== 0 || n / size < 2) {

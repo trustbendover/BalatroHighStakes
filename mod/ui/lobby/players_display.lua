@@ -49,6 +49,14 @@ function MP.UI.players_section_rows(text_scale)
 	end
 	-- Teams: the host picks who plays together
 	if MP.LOBBY.is_host and MP.TEAMS and MP.TEAMS.is_active() then
+		local fixed = MP.MODES.teams_format and MP.MODES.teams_format(MP.LOBBY.config)
+		if fixed then -- Versus 2v2/3v3/4v4: the team size is the format, only shuffling is left
+			rows[#rows + 1] = MP.UI.UTILS.create_row({ align = "cm", padding = 0.05 }, {
+				UIBox_button({ id = "teams_shuffle", button = "mp_teams_shuffle", label = { MP.MODES.L("b_teams_shuffle", "Shuffle teams") },
+					minw = 1.6, minh = 0.4, scale = 0.3, colour = G.C.ORANGE, col = true }),
+			})
+			return rows
+		end
 		rows[#rows + 1] = MP.UI.UTILS.create_row({ align = "cm", padding = 0.05 }, {
 			UIBox_button({ id = "teams_shuffle", button = "mp_teams_shuffle", label = { MP.MODES.L("b_teams_shuffle", "Shuffle teams") },
 				minw = 1.6, minh = 0.4, scale = 0.3, colour = G.C.ORANGE, col = true }),

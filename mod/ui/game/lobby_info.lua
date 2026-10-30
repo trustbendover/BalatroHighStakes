@@ -47,7 +47,7 @@ function MP.UI.create_UIBox_settings() -- optimize this please
 		},
 		nodes = {
 			MP.UI.UTILS.create_row({ align = "cm", padding = 0.05 }, {
-				MP.UI.UTILS.create_text_node((localize("k_" .. ruleset) .. " " .. localize("k_" .. gamemode)), {
+				MP.UI.UTILS.create_text_node((localize("k_" .. ruleset) .. " " .. ((MP.MODES and MP.MODES.display_name) and MP.MODES.display_name("gamemode_mp_" .. gamemode) or localize("k_" .. gamemode))), {
 					colour = G.C.UI.TEXT_LIGHT,
 					scale = 0.6,
 				}),

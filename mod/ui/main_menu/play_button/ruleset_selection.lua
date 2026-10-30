@@ -391,6 +391,19 @@ function G.UIDEF.lobby_setup_tabs_definition(ruleset_or_gamemode, tab_type, chos
 	end
 
 	local tab_id = ruleset_or_gamemode.key:find("ruleset") and "ruleset_active_tab" or "gamemode_active_tab"
+	if not is_ruleset and (tab_type == "overview" or tab_type == "rules") and MP.UI.gamemode_card_nodes then
+		return {
+			n = G.UIT.ROOT,
+			config = { id = tab_id, align = "cm", colour = G.C.CLEAR },
+			nodes = {
+				{
+					n = G.UIT.C,
+					config = { align = "tm", padding = 0.2, r = 0.1, minw = 10.7, maxw = 10.7, minh = 5.75, maxh = 5.75 },
+					nodes = MP.UI.gamemode_card_nodes(ruleset_or_gamemode, tab_type),
+				},
+			},
+		}
+	end
 
 	return {
 		n = G.UIT.ROOT,
