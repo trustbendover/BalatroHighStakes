@@ -42,8 +42,14 @@ function S.tick(D, dt, t)
 			if not S.br.settle then S.br.settle = true; S.br.at = t + 2; return end -- let the menu finish animating
 			D.shot("bugreport_menu_button"); S.br.phase, S.br.at = 1, t + 1.5
 		elseif ph == 1 then
-			BR.form.title = "Lobby froze"; BR.form.desc = "Clicked ready twice in 3v3"
-			G.FUNCS.mp_bug_report_open(); S.br.phase, S.br.at = 2, t + 4
+			BR.form.title = "Lobby froze"
+			G.FUNCS.mp_bug_report_open(); S.br.phase, S.br.at = 1.5, t + 2
+		elseif ph == 1.5 then
+			-- type through the real keyboard hooks: text, Enter, Backspace
+			G.FUNCS.mp_bug_desc_focus()
+			for _, w in ipairs({ "Clicked ready twice in 3v3, then the lobby froze for everyone. ", "The host could not start and nobody could leave. Happens every time after a rematch." }) do love.textinput(w) end
+			love.keypressed("return"); love.textinput("Steps: 1) 3v3 lobby 2) ready, unready, ready 3) rematchx"); love.keypressed("backspace")
+			S.br.phase, S.br.at = 2, t + 2
 		elseif ph == 2 then D.shot("bugreport_form"); S.br.phase, S.br.at = 3, t + 1
 		elseif ph == 3 then
 			local real = love.system.openURL

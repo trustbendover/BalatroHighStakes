@@ -40,4 +40,21 @@ ok(not BR.allowed(), "not available during a match")
 G.STAGE = 1; ok(BR.allowed(), "available in main menu / lobby")
 local src = io.open("lib/bug_report.lua"):read("*a")
 ok(not src:find("https.request", 1, true) and not src:find("socket", 1, true), "no automatic network sends")
+-- multi-line description box
+local st = { text = "", cursor = 0 }
+BR.ml_insert(st, "Hello"); BR.ml_key(st, "return"); BR.ml_insert(st, "wörld")
+ok(st.text == "Hello\nwörld" and st.cursor == #st.text, "typing + Enter = new line")
+BR.ml_key(st, "backspace"); ok(st.text == "Hello\nwörl", "backspace")
+BR.ml_key(st, "left"); BR.ml_key(st, "left"); BR.ml_key(st, "backspace"); ok(st.text == "Hello\nwrl" and st.cursor == 7, "backspace removes a whole UTF-8 char (ö)")
+BR.ml_key(st, "home"); ok(st.cursor == 6, "Home = start of the line"); BR.ml_key(st, "end"); ok(st.cursor == #st.text, "End = end of the line")
+BR.ml_key(st, "home"); BR.ml_key(st, "delete"); ok(st.text == "Hello\nrl", "delete")
+love = { system = { getClipboardText = function() return "pasted\r\ntext" end } }
+st.cursor = #st.text; BR.ml_key(st, "v", true); ok(st.text == "Hello\nrlpasted\ntext", "Ctrl+V pastes (CRLF -> LF)")
+local big = { text = "", cursor = 0 }
+BR.ml_insert(big, string.rep("é", 600)); ok(#big.text <= BR.DESC_MAX and #big.text % 2 == 0, "1000-byte cap, never splits a UTF-8 char")
+ok(BR.DESC_MAX == 1000, "about 1000 characters")
+local rows = BR.ml_lines(string.rep("word ", 40) .. "\nlast", 205, 30, 4, true)
+ok(#rows == 4 and rows[4]:find("|", 1, true), "wraps and scrolls to the cursor row")
+for _, r in ipairs(BR.ml_lines(string.rep("abc ", 50), 0, 30, 7, false)) do ok(#r <= 30, "row fits " .. #r) break end
+ok(not BR.ml_key(st, "a"), "plain letters come via textinput, not keypressed")
 print("PASS: bug report")

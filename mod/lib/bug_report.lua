@@ -172,11 +172,146 @@ function BR.submit(title, desc)
 	return fname, url
 end
 
+
+-- ---------- multi-line description box (keyboard: type, Enter = new line, Backspace/Delete, arrows, Home/End, Ctrl+V) ----------
+BR.DESC_MAX = 1000
+BR.DESC_COLS = 64
+BR.DESC_ROWS = 7
+BR.ml = BR.ml or { text = "", cursor = 0, active = false }
+local function utf8_prev(s, i) -- byte index of the start of the char ending at i
+	if i <= 0 then return 0 end
+	local j = i
+	while j > 1 and (s:byte(j) or 0) >= 0x80 and (s:byte(j) or 0) < 0xC0 do j = j - 1 end
+	return j - 1
+end
+local function utf8_next(s, i)
+	if i >= #s then return #s end
+	local j = i + 1
+	while j < #s and (s:byte(j + 1) or 0) >= 0x80 and (s:byte(j + 1) or 0) < 0xC0 do j = j + 1 end
+	return j
+end
+function BR.ml_insert(st, str)
+	str = tostring(str or ""):gsub("\r\n", "\n"):gsub("\r", "\n"):gsub("\t", " ")
+	local room = BR.DESC_MAX - #st.text
+	if room <= 0 then return false end
+	if #str > room then -- cut on a whole UTF-8 character
+		local keep = {}
+		local n = 0
+		for ch in str:gmatch("[%z\1-\127\194-\244][\128-\191]*") do
+			if n + #ch > room then break end
+			keep[#keep + 1] = ch; n = n + #ch
+		end
+		str = table.concat(keep)
+	end
+	st.text = st.text:sub(1, st.cursor) .. str .. st.text:sub(st.cursor + 1)
+	st.cursor = st.cursor + #str
+	return true
+end
+function BR.ml_key(st, key, ctrl)
+	if key == "backspace" then
+		if st.cursor > 0 then local p = utf8_prev(st.text, st.cursor); st.text = st.text:sub(1, p) .. st.text:sub(st.cursor + 1); st.cursor = p end
+	elseif key == "delete" then
+		if st.cursor < #st.text then local n = utf8_next(st.text, st.cursor); st.text = st.text:sub(1, st.cursor) .. st.text:sub(n + 1) end
+	elseif key == "left" then st.cursor = utf8_prev(st.text, st.cursor)
+	elseif key == "right" then st.cursor = utf8_next(st.text, st.cursor)
+	elseif key == "home" then local b = st.text:sub(1, st.cursor):match(".*()\n"); st.cursor = b or 0
+	elseif key == "end" then local e = st.text:find("\n", st.cursor + 1, true); st.cursor = e and e - 1 or #st.text
+	elseif key == "return" or key == "kpenter" then BR.ml_insert(st, "\n")
+	elseif ctrl and key == "v" then
+		local okc, clip = pcall(function() return love.system.getClipboardText() end)
+		if okc and clip then BR.ml_insert(st, clip) end
+	else return false end
+	return true
+end
+--- Wrapped display rows (word wrap at cols, hard breaks on \n), with a "|" cursor when show_cursor;
+--- scrolled so the cursor row is visible. Returns rows (always `rows` strings).
+function BR.ml_lines(text, cursor, cols, rows, show_cursor)
+	local t = text
+	if show_cursor then t = text:sub(1, cursor) .. "\1" .. text:sub(cursor + 1) end
+	local out, cur_row = {}, 1
+	for para in (t .. "\n"):gmatch("([^\n]*)\n") do
+		local line = ""
+		for word, sp in para:gmatch("([^ ]*)( ?)") do
+			if word == "" and sp == "" then break end
+			local piece = word .. sp
+			while #piece > cols do -- very long word: hard cut
+				if #line > 0 then out[#out + 1] = line; line = "" end
+				out[#out + 1] = piece:sub(1, cols); piece = piece:sub(cols + 1)
+			end
+			if #line + #word > cols and #line > 0 then out[#out + 1] = line; line = "" end
+			line = line .. piece
+		end
+		out[#out + 1] = line
+	end
+	for i, l in ipairs(out) do if l:find("\1", 1, true) then cur_row = i; out[i] = l:gsub("\1", "|") end end
+	local first = math.max(1, math.min(cur_row - rows + 1, #out - rows + 1))
+	if not show_cursor then first = 1 end
+	local res = {}
+	for i = 1, rows do res[i] = out[first + i - 1] or "" end
+	return res
+end
+function BR.ml_refresh()
+	local st = BR.ml
+	local blink = st.active and (math.floor(((love and love.timer and love.timer.getTime()) or 0) * 2) % 2 == 0)
+	local rows = BR.ml_lines(st.text, st.cursor, BR.DESC_COLS, BR.DESC_ROWS, st.active)
+	if st.active and not blink then for i, r in ipairs(rows) do rows[i] = r:gsub("|", " ", 1) end end
+	st.rows = st.rows or {}
+	for i = 1, BR.DESC_ROWS do st.rows["r" .. i] = rows[i] end
+	st.count = #st.text .. "/" .. BR.DESC_MAX
+end
+-- keyboard hooks (only while the box has focus; everything else goes to the game as usual)
+if love and not BR.hooked then
+	BR.hooked = true
+	local kp, ti = love.keypressed, love.textinput
+	love.keypressed = function(key, ...)
+		local st = BR.ml
+		if st.active and G and G.CONTROLLER and G.CONTROLLER.text_input_hook then st.active = false end -- title field took focus
+		if st.active then
+			if key == "escape" then st.active = false; return kp and kp(key, ...) end
+			local ctrl = love.keyboard and (love.keyboard.isDown("lctrl") or love.keyboard.isDown("rctrl") or love.keyboard.isDown("lgui") or love.keyboard.isDown("rgui"))
+			BR.ml_key(st, key, ctrl); BR.ml_refresh()
+			return -- swallow: no game hotkeys while typing
+		end
+		if kp then return kp(key, ...) end
+	end
+	love.textinput = function(t, ...)
+		if BR.ml.active then BR.ml_insert(BR.ml, t); BR.ml_refresh(); return end
+		if ti then return ti(t, ...) end
+	end
+end
+
 -- ---------- UI ----------
 function BR.allowed()
 	return G and G.STAGES and G.STAGE == G.STAGES.MAIN_MENU
 end
 BR.form = BR.form or { title = "", desc = "" }
+function BR.desc_box_node()
+	BR.ml_refresh()
+	local rows = {}
+	for i = 1, BR.DESC_ROWS do
+		rows[#rows + 1] = { n = G.UIT.R, config = { align = "cl", minh = 0.32 }, nodes = {
+			{ n = G.UIT.T, config = { ref_table = BR.ml.rows, ref_value = "r" .. i, scale = 0.33, colour = G.C.WHITE } } } }
+	end
+	return { n = G.UIT.R, config = { align = "cm", padding = 0.05 }, nodes = {
+		{ n = G.UIT.C, config = { align = "cm" }, nodes = {
+			{ n = G.UIT.R, config = { align = "tl", padding = 0.1, r = 0.1, minw = 12, maxw = 12, minh = BR.DESC_ROWS * 0.32 + 0.2,
+				colour = G.C.BLACK, emboss = 0.05, button = "mp_bug_desc_focus", hover = true, func = "mp_bug_desc_tick" },
+				nodes = { { n = G.UIT.C, config = { align = "tl" }, nodes = rows } } },
+			{ n = G.UIT.R, config = { align = "cr", padding = 0.03 }, nodes = {
+				{ n = G.UIT.T, config = { ref_table = BR.ml, ref_value = "count", scale = 0.28, colour = G.C.UI.TEXT_LIGHT } } } },
+		} },
+	} }
+end
+function G.FUNCS.mp_bug_desc_focus()
+	if G.CONTROLLER then G.CONTROLLER.text_input_hook = nil; G.CONTROLLER.text_input_id = nil end
+	if love and love.keyboard and love.keyboard.setTextInput then pcall(love.keyboard.setTextInput, true) end
+	BR.ml.active = true; BR.ml.cursor = #BR.ml.text; BR.ml_refresh()
+end
+function G.FUNCS.mp_bug_desc_tick(e)
+	if BR.ml.active and (not G.OVERLAY_MENU or (G.CONTROLLER and G.CONTROLLER.text_input_hook)) then BR.ml.active = false end
+	BR.ml_refresh()
+	if e and e.config then e.config.colour = BR.ml.active and G.C.L_BLACK or G.C.BLACK end
+end
 function BR.form_def()
 	return create_UIBox_generic_options({
 		back_func = "exit_overlay_menu",
@@ -189,8 +324,7 @@ function BR.form_def()
 				create_text_input({ id = "br_title", max_length = 60, w = 8, ref_table = BR.form, ref_value = "title", prompt_text = BR.T("f_title"), extended_corpus = true }) } },
 			{ n = G.UIT.R, config = { align = "cm", padding = 0.05 }, nodes = {
 				{ n = G.UIT.T, config = { text = BR.T("f_desc"), scale = 0.35, colour = G.C.UI.TEXT_LIGHT } } } },
-			{ n = G.UIT.R, config = { align = "cm", padding = 0.05 }, nodes = {
-				create_text_input({ id = "br_desc", max_length = 240, w = 12, ref_table = BR.form, ref_value = "desc", prompt_text = BR.T("f_desc"), extended_corpus = true }) } },
+			BR.desc_box_node(),
 			{ n = G.UIT.R, config = { align = "cm", padding = 0.1 }, nodes = {
 				UIBox_button({ label = { BR.T("submit") }, button = "mp_bug_report_submit", colour = G.C.GREEN, minw = 4, minh = 0.6, scale = 0.45 }) } },
 		},
@@ -206,8 +340,10 @@ function G.FUNCS.mp_bug_report_submit()
 		if attention_text then attention_text({ scale = 0.6, text = BR.T("need_title"), hold = 2, align = "cm", offset = { x = 0, y = -2.5 }, major = G.ROOM_ATTACH }) end
 		return
 	end
-	BR.submit(BR.form.title, BR.form.desc)
+	BR.ml.active = false
+	BR.submit(BR.form.title, BR.ml.text)
 	BR.form.title, BR.form.desc = "", ""
+	BR.ml.text, BR.ml.cursor = "", 0
 	G.FUNCS.exit_overlay_menu()
 	if attention_text then attention_text({ scale = 0.45, text = BR.T("saved"), hold = 6, align = "cm", offset = { x = 0, y = -2.5 }, major = G.ROOM_ATTACH }) end
 end
