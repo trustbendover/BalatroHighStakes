@@ -20,4 +20,11 @@ ok(MP.UI.aij_blind_amount({ mult = 2, aij_blind_amount_display = function() erro
 local bc = io.open("ui/game/blind_choice.lua"):read("*a")
 local p1, p2 = bc:find("MP.UI.aij_blind_amount", 1, true), bc:find('blind_amt = "????"', 1, true)
 ok(p1 and p2 and p1 < p2, "applied before the Nemesis ???? (PvP amounts stay hidden)")
+-- compat shim used by All-in-Jest's Fall of Count Chaligny tooltip (crashed the game when missing)
+MP.UTILS = {}
+local layer = false
+MP.is_layer_active = function(n) return layer and n == "standard" end
+dofile("lib/ruleset_utils.lua")
+ok(type(MP.UTILS.is_standard_ruleset) == "function" and MP.UTILS.is_standard_ruleset() == false, "is_standard_ruleset shim exists")
+layer = true; ok(MP.UTILS.is_standard_ruleset() == true, "shim follows the standard layer")
 print("PASS: All-in-Jest blind amounts")

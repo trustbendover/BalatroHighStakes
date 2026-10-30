@@ -53,3 +53,13 @@ function MP.UTILS.check_lovely_version()
 	end
 	return false
 end
+
+-- Compat shim for other mods (All-in-Jest 0.7.2 Fall of Count Chaligny calls this): the old helper was replaced by
+-- layers; without it hovering such jokers crashed the game.
+MP.UTILS = MP.UTILS or {}
+if not MP.UTILS.is_standard_ruleset then
+	function MP.UTILS.is_standard_ruleset()
+		local ok, res = pcall(function() return MP.is_layer_active and MP.is_layer_active("standard") end)
+		return ok and res and true or false
+	end
+end
