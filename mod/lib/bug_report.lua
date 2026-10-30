@@ -217,6 +217,7 @@ function BR.add_menu_button()
 	pcall(function()
 		if G.MP3P_BUGREPORT_UI then G.MP3P_BUGREPORT_UI:remove(); G.MP3P_BUGREPORT_UI = nil end
 		if not (BR.allowed() and G.ROOM_ATTACH) then return end
+		if MP.PATCH_NOTES and MP.PATCH_NOTES.menu_buttons_visible and not MP.PATCH_NOTES.menu_buttons_visible() then return end
 		local y = ((MP.PATCH_NOTES and MP.PATCH_NOTES.menu_button_y) or 1.3) + 0.65
 		G.MP3P_BUGREPORT_UI = UIBox({
 			definition = { n = G.UIT.ROOT, config = { align = "cm", colour = G.C.CLEAR }, nodes = {

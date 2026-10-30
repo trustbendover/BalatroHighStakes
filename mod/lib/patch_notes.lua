@@ -376,7 +376,27 @@ function PN.menu_stack_bottom(boxes, root, self_box)
 	return bottom or PN.MENU_STACK_FALLBACK
 end
 
+--- Patch notes + Report a bug buttons: only on the home menu once it is fully loaded (menu up for
+--- PN.MENU_BUTTONS_DELAY s, no lobby, no run, no other menu open). PN.tick shows/hides them.
+PN.MENU_BUTTONS_DELAY = 1.5
+function PN.menu_buttons_visible(env)
+	env = env or PN.env()
+	return env.main_menu and not env.in_lobby and not env.in_run and not env.overlay and (env.menu_age or 0) >= PN.MENU_BUTTONS_DELAY and true or false
+end
+function PN.remove_menu_buttons()
+	pcall(function()
+		if G.MP3P_PATCHNOTES_UI then G.MP3P_PATCHNOTES_UI:remove(); G.MP3P_PATCHNOTES_UI = nil end
+		if G.MP3P_BUGREPORT_UI then G.MP3P_BUGREPORT_UI:remove(); G.MP3P_BUGREPORT_UI = nil end
+	end)
+end
+function PN.update_menu_buttons()
+	local want = PN.menu_buttons_visible()
+	if want and not G.MP3P_PATCHNOTES_UI then PN.add_menu_button()
+	elseif not want and (G.MP3P_PATCHNOTES_UI or G.MP3P_BUGREPORT_UI) then PN.remove_menu_buttons() end
+end
+
 function PN.add_menu_button()
+	if not PN.menu_buttons_visible() then return PN.remove_menu_buttons() end
 	pcall(function()
 		if G.MP3P_PATCHNOTES_UI then G.MP3P_PATCHNOTES_UI:remove(); G.MP3P_PATCHNOTES_UI = nil end
 		if not (G.STAGES and G.STAGE == G.STAGES.MAIN_MENU and G.ROOM_ATTACH) then return end
@@ -415,6 +435,7 @@ end
 function PN.tick()
 	local main_menu = G and G.STAGES and G.STAGE == G.STAGES.MAIN_MENU and G.MAIN_MENU_UI ~= nil
 	if not main_menu then PN.menu_since = nil else PN.menu_since = PN.menu_since or love.timer.getTime() end
+	pcall(PN.update_menu_buttons)
 	-- an invite / lobby join started while the notes are open: get out of the way
 	if PN.is_open() and MP.LOBBY and MP.LOBBY.code then
 		local v = PN.view

@@ -30,6 +30,7 @@ function S.tick(D, dt, t)
 	if S.step == 0 then S.setup(D); S.step = 1 end
 	-- bug_report: main menu button, the form, then a submit with the browser/folder opening stubbed out
 	if D.scenario == "bug_report" then
+		if G.STAGE == G.STAGES.MAIN_MENU and not S.br_early then S.br_early = true; D.shot("bugreport_menu_loading") end
 		if G.STAGE ~= G.STAGES.MAIN_MENU or t < 25 then return end -- after the menu intro zoom
 		local BR = MP.BUG_REPORT
 		S.br = S.br or { phase = 0, at = t }
