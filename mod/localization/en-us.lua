@@ -1335,7 +1335,7 @@ return {
 			k_teams_sub = "Duels",
 			k_duel_description = "A clean one-on-one duel for exactly 2 players, like Attrition in the original Balatro Multiplayer. After the first ante every boss blind is a Nemesis blind; the lower score loses a life. Lives are set in the lobby options (default 4).",
 			k_teams = "Teams",
-			k_versus = "Versus",
+			k_versus = "Duels",
 			k_ffa = "Free-for-all",
 			k_mode_overview = "Overview",
 			k_teams2 = "2v2",

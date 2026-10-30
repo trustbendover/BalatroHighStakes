@@ -41,7 +41,7 @@ ok(cb:find("gamemode_entry", 1, true) and cb:find("teams_format", 1, true), "sta
 for _, lang in ipairs({ "en-us", "nl" }) do
 	local s = io.open("localization/" .. lang .. ".lua"):read("*a")
 	for _, e in ipairs(ids) do ok(s:find("k_" .. e .. "_short = ", 1, true), lang .. " has k_" .. e .. "_short") end
-	ok(s:find('k_versus = "Versus"', 1, true) and s:find('k_ffa = "Free-for-all"', 1, true), lang .. " keeps Versus / Free-for-all")
+	ok(s:find('k_versus = "Duels"', 1, true) and s:find('k_ffa = "Free-for-all"', 1, true), lang .. " header Duels + Free-for-all")
 	for _, m in ipairs({ "koth", "teams", "deathmatch" }) do ok(s:find("k_" .. m .. "_rules = ", 1, true), lang .. " full rules for " .. m) end
 end
 -- dictionary keys with #n# are translated (they used to fall back to English in NL)
@@ -49,6 +49,7 @@ localize = function(k) if k == "k_mode_players_range" then return "#1#-#2# spele
 ok(M.players_label("koth") == "2-8 spelers", "player count uses the translated dictionary text")
 localize = function(k) return ({ k_duel = "1v1", k_duel_sub = "Duels", k_teams_sub = "Duels", k_koth = "King of the Hill" })[k] or k end
 ok(M.full_name("gamemode_mp_duel") == "1v1 Duels" and M.full_name("gamemode_mp_teams", { teams_format = 3 }) == "3v3 Duels", "Versus names: 1v1 Duels / 3v3 Duels")
+ok(not io.open("ui/main_menu/play_button/gamemode_selection.lua"):read("*a"):find("sublabel =", 1, true), "no subtitles under the entries")
 ok(M.display_name("gamemode_mp_duel") == "1v1" and M.subtitle("gamemode_mp_koth") == nil, "label 1v1, no subtitle outside Versus")
 for _, lang in ipairs({ "en-us", "nl" }) do local s2 = io.open("localization/" .. lang .. ".lua"):read("*a")
 	ok(s2:find('k_duel = "1v1"', 1, true) and s2:find("k_teams_sub = ", 1, true) and s2:find("k_duel_sub = ", 1, true), lang .. " Versus labels + subtitles") end

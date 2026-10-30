@@ -318,7 +318,7 @@ return {
 			k_teams_sub = "Duels",
 			k_duel_description = "Een zuiver één-tegen-één duel voor precies 2 spelers, zoals Attrition in de originele Balatro Multiplayer. Na de eerste ante is elke boss blind een Aartsvijand-blind; de laagste score verliest een leven. Levens stel je in bij de lobby-opties (standaard 4).",
 			k_teams = "Teams",
-			k_versus = "Versus",
+			k_versus = "Duels",
 			k_ffa = "Free-for-all",
 			k_mode_overview = "Overzicht",
 			k_challenge = "Uitdaging",
