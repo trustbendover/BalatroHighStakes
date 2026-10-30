@@ -35,6 +35,8 @@ MP.UI.select_gamemode_entry("teams3")
 ok(MP.LOBBY.config.gamemode == "gamemode_mp_teams" and MP.LOBBY.config.teams_format == 3 and MP.LOBBY.config.teams_size == 3, "3v3 -> teams mode, format 3")
 MP.UI.select_gamemode_entry("koth")
 ok(MP.LOBBY.config.gamemode == "gamemode_mp_koth" and MP.LOBBY.config.teams_format == 0, "other mode clears the format")
+local cb = io.open("ui/main_menu/play_button/play_button_callbacks.lua"):read("*a")
+ok(cb:find("gamemode_entry", 1, true) and cb:find("teams_format", 1, true), "start_lobby restores the Versus format after the config reset")
 -- localization: every entry has a short line in EN and NL, Versus/Free-for-all stay English in NL
 for _, lang in ipairs({ "en-us", "nl" }) do
 	local s = io.open("localization/" .. lang .. ".lua"):read("*a")

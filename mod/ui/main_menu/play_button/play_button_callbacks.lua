@@ -127,6 +127,10 @@ function G.FUNCS.start_lobby(e)
 	if MP.MODES and MP.MODES.default_lives(MP.LOBBY.config.gamemode) then
 		MP.LOBBY.config.starting_lives = MP.MODES.default_lives(MP.LOBBY.config.gamemode)
 	end
+	-- Versus 2v2/3v3/4v4: the menu entry survives the config reset above
+	local fmt = MP.LOBBY.config.gamemode == "gamemode_mp_teams" and tostring(MP.LOBBY.gamemode_entry or ""):match("^teams(%d)$")
+	MP.LOBBY.config.teams_format = fmt and tonumber(fmt) or 0
+	if fmt then MP.LOBBY.config.teams_size = tonumber(fmt) end
 	if MP.LOBBY.config.gamemode == "gamemode_mp_teams" then
 		MP.LOBBY.config.teams_size = MP.LOBBY.config.teams_size or 2
 		MP.LOBBY.config.teams_order = nil
