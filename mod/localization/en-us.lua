@@ -1428,6 +1428,8 @@ return {
 			k_info = "Info",
 			k_continue_singleplayer_tooltip = "This will overwrite your current singleplayer run",
 			k_enemy_score = "Current Enemy score",
+			k_mp_blind_failed = "Failed",
+			k_mp_blind_out = "Out",
 			k_enemy_hands = "Enemy hands left: ",
 			k_coming_soon = "Coming Soon!",
 			k_wait_enemy = "Waiting for enemy to finish...",

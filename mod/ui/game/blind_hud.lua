@@ -231,3 +231,34 @@ function MP.UI.juice_up_pvp_hud()
 		G.HUD_blind:get_UIE_by_ID("dollars_to_be_earned"):juice_up()
 	end
 end
+
+-- The "prevent losing" path in Game:update_new_round sets G.GAME.blind.chips = -1 as a
+-- sentinel. SMODS' G.FUNCS.blind_chip_UI_scale formats blind.chips into chip_text every
+-- frame, so the HUD showed "Score at least -1" (most visible for eliminated players, who
+-- stay on that blind). Never show the sentinel: show "Out" when eliminated, "Failed" otherwise.
+function MP.UI.blind_sentinel_text(chips, lives)
+	local neg
+	if type(chips) == "number" then
+		neg = chips < 0
+	elseif type(chips) == "table" and to_big then
+		local ok, r = pcall(function() return to_big(chips) < to_big(0) end)
+		neg = ok and r
+	end
+	if not neg then return nil end
+	local out = (lives ~= nil and (tonumber(lives) or 1) <= 0)
+		or (MP.SPECTATE and MP.SPECTATE.watching and MP.SPECTATE.watching())
+	if out then return localize("k_mp_blind_out") end
+	return localize("k_mp_blind_failed")
+end
+
+local blind_chip_UI_scale_ref = G.FUNCS.blind_chip_UI_scale
+G.FUNCS.blind_chip_UI_scale = function(e)
+	if blind_chip_UI_scale_ref then blind_chip_UI_scale_ref(e) end
+	if MP.is_mp_or_ghost and MP.is_mp_or_ghost() and G.GAME and G.GAME.blind then
+		local label = MP.UI.blind_sentinel_text(G.GAME.blind.chips, MP.GAME and MP.GAME.lives)
+		if label then
+			G.GAME.blind.chip_text = label
+			if e and e.config then e.config.scale = 0.5 end
+		end
+	end
+end

@@ -376,6 +376,8 @@ return {
 			-- What's the context of toggle jokers?
 			k_continue_singleplayer_tooltip = "Dit zal je huidige Singleplayer run overschrijden",
 			k_enemy_score = "Huidige score van je vijand",
+			k_mp_blind_failed = "Mislukt",
+			k_mp_blind_out = "Uitgeschakeld",
 			k_enemy_hands = "Handen van vijand over: ",
 			k_coming_soon = "Binnenkort Beschikbaar!",
 			k_wait_enemy = "Wachten tot vijand is geëindigt...",

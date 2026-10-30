@@ -75,6 +75,7 @@ jobs:
           luajit tests/test_dev_autoplay.lua
           luajit tests/test_match_end_lives.lua
           luajit tests/test_rejoin_start_run.lua
+          luajit tests/test_blind_sentinel.lua
           luajit tests/test_ui_fit.lua
           luajit tests/test_steam_only.lua
 

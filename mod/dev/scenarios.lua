@@ -87,7 +87,7 @@ function S.tick(D, dt, t)
 		end
 		if S.quit_at and t > S.quit_at then S.quit_at = math.huge; love.event.quit() end
 	end
-	if MP.SPECTATE and MP.SPECTATE.watching and MP.SPECTATE.watching() then once(D, "spectating") end
+	if MP.SPECTATE and MP.SPECTATE.watching and MP.SPECTATE.watching() then later(D, "spectating", "spectating", t, 1.5) end
 	if G.STATE == G.STATES.GAME_OVER then later(D, "game_over", "game_over", t, 2) end
 	flush(D, t)
 end
