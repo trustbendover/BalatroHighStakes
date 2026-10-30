@@ -38,6 +38,7 @@ function S.tick(D, dt, t)
 			G.FUNCS.overlay_menu({ definition = G.UIDEF.gamemode_selection_tabs() })
 			S.mi.phase, S.mi.at = "next", t + 2
 		elseif S.mi.phase == "next" then
+			if not G.OVERLAY_MENU then S.mi.phase = "open"; return end
 			S.mi.i = S.mi.i + 1
 			local e = entries[S.mi.i]
 			if not e then
@@ -49,8 +50,11 @@ function S.tick(D, dt, t)
 			S.mi.phase, S.mi.at = "overview", t + 1.5
 		elseif S.mi.phase == "overview" then
 			D.shot("mode_" .. entries[S.mi.i] .. "_overview")
+			S.mi.phase, S.mi.at = "switch", t + 1
+		elseif S.mi.phase == "switch" then
 			local a = MP.UI.last_gamemode_tabs
-			if a then G.FUNCS.gamemode_switch_tabs({ to_key = 2, cycle_config = { opt_args = a } }) end
+			local okk, err = pcall(function() if a then G.FUNCS.gamemode_switch_tabs({ to_key = 2, cycle_config = { opt_args = a } }) end end)
+			if not okk then D.log("scenario: rules tab failed: " .. tostring(err)) end
 			S.mi.phase, S.mi.at = "rules", t + 1.5
 		elseif S.mi.phase == "rules" then
 			D.shot("mode_" .. entries[S.mi.i] .. "_rules")
