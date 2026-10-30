@@ -16,12 +16,16 @@ function MP.UI.gamemode_entry_label(entry)
 	if f then return f .. "v" .. f end
 	return localize("k_" .. mode)
 end
+function MP.UI.gamemode_entry_sub(entry)
+	local mode, f = MP.UI.gamemode_entry(entry)
+	return MP.MODES.subtitle("gamemode_mp_" .. mode, { teams_format = f or 0 })
+end
 function MP.UI.gamemode_menu_groups()
 	local out = {}
 	for _, g in ipairs(MP.UI.GAMEMODE_GROUPS) do
 		local buttons = {}
 		for _, e in ipairs(g.entries) do
-			buttons[#buttons + 1] = { button_id = e .. "_gamemode_button", button_localize_key = "k_" .. e, label = MP.UI.gamemode_entry_label(e) }
+			buttons[#buttons + 1] = { button_id = e .. "_gamemode_button", button_localize_key = "k_" .. e, label = MP.UI.gamemode_entry_label(e), sublabel = MP.UI.gamemode_entry_sub(e) }
 		end
 		out[#out + 1] = { name = g.name, buttons = buttons }
 	end
@@ -244,6 +248,7 @@ function MP.UI.gamemode_card_nodes(gamemode, tab_type)
 	end
 	local nodes = {
 		text_row(MP.UI.gamemode_entry_label(entry), 0.75, G.C.WHITE),
+		MP.UI.gamemode_entry_sub(entry) and text_row(MP.UI.gamemode_entry_sub(entry), 0.35, G.C.UI.TEXT_INACTIVE) or { n = G.UIT.R, config = { minh = 0.01 } },
 		{ n = G.UIT.R, config = { align = "cm", padding = 0.05 }, nodes = {
 			{ n = G.UIT.C, config = { align = "cm", colour = G.C.BLUE, r = 0.1, padding = 0.08 }, nodes = {
 				{ n = G.UIT.T, config = { text = MP.MODES.players_label(key, fmt), scale = 0.4, colour = G.C.WHITE } } } } } },

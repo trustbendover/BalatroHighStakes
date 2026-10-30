@@ -61,6 +61,16 @@ function MP.UI.Main_Lobby_Options(info_area_id, default_info_area, button_func, 
 				scale = 0.4,
 				minh = 0.6,
 			})
+			if data.sublabel then -- small subtitle under the label (Versus: "Duel" / "Team Battle")
+				local function find(n) if type(n) ~= "table" then return nil end
+					if n.config and n.config.button then return n end
+					for _, c in ipairs(n.nodes or {}) do local f = find(c); if f then return f end end end
+				local b = find(button)
+				if b and b.nodes then
+					b.nodes[#b.nodes + 1] = { n = G.UIT.R, config = { align = "cm" }, nodes = {
+						{ n = G.UIT.T, config = { text = data.sublabel, scale = 0.25, colour = G.C.UI.TEXT_LIGHT } } } }
+				end
+			end
 			buttons[#buttons + 1] = MP.UI.UTILS.create_row({ align = "cm", padding = 0.05 }, { button })
 		end
 		categories[#categories + 1] = MP.UI.BackgroundGrouping(localize(category.name), buttons)

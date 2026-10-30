@@ -229,6 +229,7 @@ LP.L = L
 function LP.mode_name(gamemode)
 	if type(gamemode) ~= "string" then return "?" end
 	local short = gamemode:gsub("^gamemode_mp_", "")
+	if MP.MODES and MP.MODES.full_name then return MP.MODES.full_name(gamemode) end
 	return L("k_" .. short, short:sub(1, 1):upper() .. short:sub(2))
 end
 

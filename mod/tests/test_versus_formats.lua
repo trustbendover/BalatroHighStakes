@@ -47,4 +47,9 @@ end
 -- dictionary keys with #n# are translated (they used to fall back to English in NL)
 localize = function(k) if k == "k_mode_players_range" then return "#1#-#2# spelers" end return k end
 ok(M.players_label("koth") == "2-8 spelers", "player count uses the translated dictionary text")
+localize = function(k) return ({ k_duel = "1v1", k_duel_sub = "Duel", k_teams_sub = "Team Battle", k_koth = "King of the Hill" })[k] or k end
+ok(M.full_name("gamemode_mp_duel") == "1v1 Duel" and M.full_name("gamemode_mp_teams", { teams_format = 3 }) == "3v3 Team Battle", "Versus names: 1v1 Duel / 3v3 Team Battle")
+ok(M.display_name("gamemode_mp_duel") == "1v1" and M.subtitle("gamemode_mp_koth") == nil, "label 1v1, no subtitle outside Versus")
+for _, lang in ipairs({ "en-us", "nl" }) do local s2 = io.open("localization/" .. lang .. ".lua"):read("*a")
+	ok(s2:find('k_duel = "1v1"', 1, true) and s2:find("k_teams_sub = ", 1, true) and s2:find("k_duel_sub = ", 1, true), lang .. " Versus labels + subtitles") end
 print("PASS: versus formats")

@@ -68,6 +68,18 @@ function M.display_name(gamemode, options)
 	if f then return f .. "v" .. f end
 	return L("k_" .. tostring(key), tostring(key))
 end
+--- Versus subtitle: "Duel" for 1v1, "Team Battle" for 2v2-4v4, nil for other modes
+function M.subtitle(gamemode, options)
+	local key = M.key(gamemode)
+	if key == "duel" then return L("k_duel_sub", "Duel") end
+	if key == "teams" and M.teams_format(options or (MP.LOBBY and MP.LOBBY.config)) then return L("k_teams_sub", "Team Battle") end
+	return nil
+end
+--- "2v2 Team Battle" / "1v1 Duel" / "Attrition"
+function M.full_name(gamemode, options)
+	local n, s = M.display_name(gamemode, options), M.subtitle(gamemode, options)
+	return s and (n .. " " .. s) or n
+end
 
 --- "2 players" / "4 players" / "2-8 players" for a mode (Versus formats: exactly 2 x format)
 function M.players_label(key, format)
