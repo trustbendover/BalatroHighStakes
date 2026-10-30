@@ -46,6 +46,7 @@ function S.tick(D, dt, t)
 		S.step = 3
 		if D.role == "host" then
 			D.write_code(MP.LOBBY.code)
+			if os.getenv("HS_DEV_NO_ROUND_DEATH") == "1" then MP.LOBBY.config.death_on_round_loss = false; MP.ACTIONS.lobby_options(); D.log("scenario: no life loss on failed normal rounds (reach PvP)") end
 			if D.scenario == "elimination" then MP.LOBBY.config.starting_lives = 1; MP.ACTIONS.lobby_options() end
 		end
 		S.lobby_t = t

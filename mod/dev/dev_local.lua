@@ -34,6 +34,8 @@ D.persona = env("HS_DEV_PERSONA")      -- aggressive | conservative | shopper | 
 D.lang = env("HS_DEV_LANG")              -- e.g. nl: switch the test profile language once at start
 D.seed = tonumber(env("HS_DEV_SEED", "")) -- bot decision seed (default from name+persona)
 
+-- box only: LuaJIT on the headless box segfaults now and then (libluajit, always mid-play); HS_DEV_NOJIT=1 turns the JIT off
+if env("HS_DEV_NOJIT") == "1" and jit and jit.off then jit.off(); jit.flush() end
 local function log(m) if sendInfoMessage then sendInfoMessage(m, "HS-DEV") end end
 D.log = log
 if not D.dir then
