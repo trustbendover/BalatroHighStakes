@@ -525,7 +525,17 @@ local function action_start_blind(p)
 		e.hands = 4
 	end
 	if MP.THREEP then MP.THREEP.refresh_hud() end
+	-- 0.6.8: the host broadcasts startBlind to the whole lobby; a player who is already out (game over /
+	-- spectating) has no blind to start (logged "No next blind context" as an ERROR before)
+	if MP.player_is_out and MP.player_is_out() then return end
 	MP.UI.start_pvp_countdown(begin_pvp_blind)
+end
+
+--- true once this player's own run is over in a running match (eliminated / game over / watching others)
+function MP.player_is_out()
+	if G and G.STATE and G.STATES and G.STATE == G.STATES.GAME_OVER then return true end
+	if MP.SPECTATE and MP.SPECTATE.watching and MP.SPECTATE.watching() then return true end
+	return false
 end
 
 local function action_enemy_info(p)
