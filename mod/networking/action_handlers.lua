@@ -451,7 +451,8 @@ local function action_start_game(p)
 	-- reconstruct it deterministically later. Uses the resolved seed.
 	MP.RLOG.begin_run({
 		seed = seed,
-		stake = stake,
+		-- Steam P2P startGame carries no stake (the run uses the lobby config): record that one
+		stake = stake or tonumber(MP.LOBBY.deck and MP.LOBBY.deck.stake) or tonumber(MP.LOBBY.config.stake) or 1,
 		deck = MP.LOBBY.config.back,
 		sleeve = MP.LOBBY.config.sleeve,
 		challenge = MP.LOBBY.config.challenge,
