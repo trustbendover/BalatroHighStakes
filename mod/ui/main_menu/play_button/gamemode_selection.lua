@@ -248,7 +248,7 @@ function MP.UI.gamemode_card_nodes(gamemode, tab_type)
 	end
 	local nodes = {
 		text_row(MP.UI.gamemode_entry_label(entry), 0.75, G.C.WHITE),
-		MP.UI.gamemode_entry_sub(entry) and text_row(MP.UI.gamemode_entry_sub(entry), 0.35, G.C.UI.TEXT_INACTIVE) or { n = G.UIT.R, config = { minh = 0.01 } },
+		MP.UI.gamemode_entry_sub(entry) and text_row(MP.UI.gamemode_entry_sub(entry), 0.4, G.C.UI.TEXT_LIGHT) or { n = G.UIT.R, config = { minh = 0.01 } },
 		{ n = G.UIT.R, config = { align = "cm", padding = 0.05 }, nodes = {
 			{ n = G.UIT.C, config = { align = "cm", colour = G.C.BLUE, r = 0.1, padding = 0.08 }, nodes = {
 				{ n = G.UIT.T, config = { text = MP.MODES.players_label(key, fmt), scale = 0.4, colour = G.C.WHITE } } } } } },
