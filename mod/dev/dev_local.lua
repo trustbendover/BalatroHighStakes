@@ -30,6 +30,8 @@ D.scenario = env("HS_DEV_SCENARIO", "full_match")
 D.capture = env("HS_DEV_CAPTURE")
 D.shot_every = tonumber(env("HS_DEV_SHOT_EVERY", "0")) or 0
 D.speed = tonumber(env("HS_DEV_SPEED", "4")) or 4
+D.persona = env("HS_DEV_PERSONA")      -- aggressive | conservative | shopper | saver | random (default by name)
+D.seed = tonumber(env("HS_DEV_SEED", "")) -- bot decision seed (default from name+persona)
 
 local function log(m) if sendInfoMessage then sendInfoMessage(m, "HS-DEV") end end
 D.log = log
