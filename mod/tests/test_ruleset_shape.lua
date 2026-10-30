@@ -47,6 +47,8 @@ SMODS = {
 
 function sendDebugMessage() end
 
+CardArea = CardArea or { update = function() end } -- layers/shared_pockets.lua hooks these at load
+UIElement = UIElement or { update_text = function() end }
 G = {
 	P_CENTER_POOLS = { Ruleset = {} },
 	localization = { descriptions = { Ruleset = {} } },

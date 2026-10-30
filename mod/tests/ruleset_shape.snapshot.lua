@@ -89,7 +89,11 @@ return {
       "c_justice",
     },
     ["banned_enhancements"] = {},
-    ["banned_jokers"] = {},
+    ["banned_jokers"] = {
+      "j_mp_conjoined_joker",
+      "j_mp_defensive_joker",
+      "j_mp_speedrun",
+    },
     ["banned_silent"] = {
       "c_ouija",
       "j_bloodstone",
@@ -136,6 +140,9 @@ return {
     ["banned_enhancements"] = {},
     ["banned_jokers"] = {
       "j_hanging_chad",
+      "j_mp_conjoined_joker",
+      "j_mp_defensive_joker",
+      "j_mp_speedrun",
     },
     ["banned_silent"] = {
       "c_ouija",
@@ -175,7 +182,6 @@ return {
       "m_glass",
     },
     ["reworked_jokers"] = {
-      "j_mp_alloy_sandbox",
       "j_mp_ambrosia_sandbox",
       "j_mp_bloodstone",
       "j_mp_bobby_sandbox",
@@ -232,100 +238,6 @@ return {
     ["reworked_vouchers"] = {},
     ["spectral_banned_enhancements"] = {},
     ["standard"] = true,
-  },
-  ["experimental"] = {
-    ["_has_functions"] = {
-      ["create_info_menu"] = true,
-      ["force_lobby_options"] = true,
-      ["is_disabled"] = true,
-    },
-    ["banned_blinds"] = {},
-    ["banned_consumables"] = {
-      "c_justice",
-    },
-    ["banned_enhancements"] = {
-      "m_glass",
-    },
-    ["banned_jokers"] = {
-      "j_mp_speedrun",
-    },
-    ["banned_silent"] = {
-      "c_ouija",
-      "j_bloodstone",
-      "j_hanging_chad",
-      "j_idol",
-      "j_selzer",
-      "j_ticket",
-      "j_todo_list",
-    },
-    ["banned_tags"] = {},
-    ["banned_vouchers"] = {},
-    ["forced_gamemode"] = "gamemode_mp_attrition",
-    ["key"] = "experimental",
-    ["multiplayer_content"] = true,
-    ["reworked_blinds"] = {},
-    ["reworked_consumables"] = {
-      "c_mp_ouija_standard",
-    },
-    ["reworked_enhancements"] = {
-      "m_glass",
-      "m_gold",
-    },
-    ["reworked_jokers"] = {
-      "j_mp_bloodstone",
-      "j_mp_hanging_chad",
-      "j_mp_idol_rare",
-      "j_mp_seltzer",
-      "j_mp_ticket_experimental",
-      "j_mp_todo_list",
-    },
-    ["reworked_tags"] = {},
-    ["reworked_vouchers"] = {},
-    ["spectral_banned_enhancements"] = {},
-    ["standard"] = true,
-  },
-  ["experimental_legacy"] = {
-    ["_has_functions"] = {
-      ["create_info_menu"] = true,
-      ["force_lobby_options"] = true,
-      ["is_disabled"] = true,
-    },
-    ["banned_blinds"] = {},
-    ["banned_consumables"] = {
-      "c_justice",
-      "c_mp_asteroid",
-    },
-    ["banned_enhancements"] = {},
-    ["banned_jokers"] = {},
-    ["banned_silent"] = {
-      "j_hanging_chad",
-      "j_mp_conjoined_joker",
-      "j_mp_defensive_joker",
-      "j_mp_pacifist",
-      "j_mp_penny_pincher",
-      "j_mp_pizza",
-      "j_mp_skip_off",
-      "j_mp_speedrun",
-      "j_mp_taxes",
-    },
-    ["banned_tags"] = {},
-    ["banned_vouchers"] = {},
-    ["forced_gamemode"] = "gamemode_mp_attrition",
-    ["forced_lobby_options"] = true,
-    ["key"] = "experimental_legacy",
-    ["multiplayer_content"] = true,
-    ["reworked_blinds"] = {},
-    ["reworked_consumables"] = {},
-    ["reworked_enhancements"] = {
-      "m_glass",
-    },
-    ["reworked_jokers"] = {
-      "j_mp_hanging_chad",
-      "j_mp_lets_go_gambling",
-    },
-    ["reworked_tags"] = {},
-    ["reworked_vouchers"] = {},
-    ["spectral_banned_enhancements"] = {},
   },
   ["legacy_ranked"] = {
     ["_has_functions"] = {
@@ -451,7 +363,6 @@ return {
       "m_glass",
     },
     ["reworked_jokers"] = {
-      "j_mp_alloy_sandbox",
       "j_mp_ambrosia_sandbox",
       "j_mp_bobby_sandbox",
       "j_mp_candynecklace_sandbox",
@@ -514,7 +425,11 @@ return {
       "c_justice",
     },
     ["banned_enhancements"] = {},
-    ["banned_jokers"] = {},
+    ["banned_jokers"] = {
+      "j_mp_conjoined_joker",
+      "j_mp_defensive_joker",
+      "j_mp_speedrun",
+    },
     ["banned_silent"] = {
       "c_ouija",
       "j_bloodstone",
@@ -557,7 +472,11 @@ return {
       "c_justice",
     },
     ["banned_enhancements"] = {},
-    ["banned_jokers"] = {},
+    ["banned_jokers"] = {
+      "j_mp_conjoined_joker",
+      "j_mp_defensive_joker",
+      "j_mp_speedrun",
+    },
     ["banned_silent"] = {
       "c_ouija",
       "j_bloodstone",
@@ -601,7 +520,11 @@ return {
       "c_justice",
     },
     ["banned_enhancements"] = {},
-    ["banned_jokers"] = {},
+    ["banned_jokers"] = {
+      "j_mp_conjoined_joker",
+      "j_mp_defensive_joker",
+      "j_mp_speedrun",
+    },
     ["banned_silent"] = {
       "c_ouija",
       "j_bloodstone",
@@ -648,6 +571,9 @@ return {
     ["banned_enhancements"] = {},
     ["banned_jokers"] = {
       "j_mp_conjoined_joker",
+      "j_mp_conjoined_joker",
+      "j_mp_defensive_joker",
+      "j_mp_speedrun",
       "j_mp_speedrun",
     },
     ["banned_silent"] = {
@@ -701,5 +627,39 @@ return {
     ["reworked_jokers"] = {},
     ["reworked_tags"] = {},
     ["reworked_vouchers"] = {},
+  },
+  ["wsob"] = {
+    ["_has_functions"] = {
+      ["create_info_menu"] = true,
+      ["force_lobby_options"] = true,
+      ["is_disabled"] = true,
+    },
+    ["banned_blinds"] = {},
+    ["banned_consumables"] = {
+      "c_justice",
+    },
+    ["banned_enhancements"] = {},
+    ["banned_jokers"] = {},
+    ["banned_silent"] = {
+      "j_bloodstone",
+      "j_hanging_chad",
+    },
+    ["banned_tags"] = {},
+    ["banned_vouchers"] = {},
+    ["forced_lobby_options"] = true,
+    ["key"] = "wsob",
+    ["multiplayer_content"] = false,
+    ["reworked_blinds"] = {},
+    ["reworked_consumables"] = {},
+    ["reworked_enhancements"] = {
+      "m_glass",
+    },
+    ["reworked_jokers"] = {
+      "j_mp_bloodstone",
+      "j_mp_hanging_chad",
+    },
+    ["reworked_tags"] = {},
+    ["reworked_vouchers"] = {},
+    ["spectral_banned_enhancements"] = {},
   },
 }
