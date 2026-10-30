@@ -71,11 +71,11 @@ end
 --- Versus subtitle: "Duel" for 1v1, "Team Battle" for 2v2-4v4, nil for other modes
 function M.subtitle(gamemode, options)
 	local key = M.key(gamemode)
-	if key == "duel" then return L("k_duel_sub", "Duel") end
-	if key == "teams" and M.teams_format(options or (MP.LOBBY and MP.LOBBY.config)) then return L("k_teams_sub", "Team Battle") end
+	if key == "duel" then return L("k_duel_sub", "Duels") end
+	if key == "teams" and M.teams_format(options or (MP.LOBBY and MP.LOBBY.config)) then return L("k_teams_sub", "Duels") end
 	return nil
 end
---- "2v2 Team Battle" / "1v1 Duel" / "Attrition"
+--- "2v2 Duels" / "1v1 Duels" / "Attrition"
 function M.full_name(gamemode, options)
 	local n, s = M.display_name(gamemode, options), M.subtitle(gamemode, options)
 	return s and (n .. " " .. s) or n
