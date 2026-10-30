@@ -711,6 +711,7 @@ function pseudorandom_element(_t, seed, args)
 				return a.v.mp_shuffleval > b.v.mp_shuffleval
 			end)
 
+			if not keys[1] then return orig_pseudorandom_element(_t, seed, args) end -- empty pool (e.g. All-in-Jest The Journey)
 			local key = keys[1].k
 			return _t[key], key
 		end
