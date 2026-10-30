@@ -1,0 +1,34 @@
+name: Bug report
+description: Something broke in Balatro High Stakes (use the in-game "Report a bug" button to prefill this)
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks! The in-game **Report a bug** button (main menu / lobby) fills this in and saves a full,
+        cleaned-up report file in your Balatro save folder under `bug_reports/`. Please drag that file in below.
+        Do not post Steam IDs, lobby codes or other personal data.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What did you do, what did you expect, what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Mod / Balatro / Steamodded / Lovely versions, gamemode and lobby settings, installed mods.
+      render: text
+  - type: textarea
+    id: log
+    attributes:
+      label: Log tail
+      description: Last lines of the Lovely log (the full log is in the report file).
+      render: text
+  - type: textarea
+    id: report
+    attributes:
+      label: Report file
+      description: Drag the bug_report_*.txt file from the folder the game opened.

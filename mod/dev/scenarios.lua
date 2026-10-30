@@ -28,6 +28,28 @@ end
 S.MODES = { "attrition", "duel", "showdown", "koth", "teams", "deathmatch", "survival" }
 function S.tick(D, dt, t)
 	if S.step == 0 then S.setup(D); S.step = 1 end
+	-- bug_report: main menu button, the form, then a submit with the browser/folder opening stubbed out
+	if D.scenario == "bug_report" then
+		if G.STAGE ~= G.STAGES.MAIN_MENU or t < 8 then return end
+		local BR = MP.BUG_REPORT
+		S.br = S.br or { phase = 0, at = t }
+		if t < S.br.at or not BR then return end
+		local ph = S.br.phase
+		if ph == 0 then D.shot("bugreport_menu_button"); S.br.phase, S.br.at = 1, t + 1.5
+		elseif ph == 1 then
+			BR.form.title = "Lobby froze"; BR.form.desc = "Clicked ready twice in 3v3"
+			G.FUNCS.mp_bug_report_open(); S.br.phase, S.br.at = 2, t + 2
+		elseif ph == 2 then D.shot("bugreport_form"); S.br.phase, S.br.at = 3, t + 1
+		elseif ph == 3 then
+			local real = love.system.openURL
+			love.system.openURL = function(u) D.log("scenario: bug report would open " .. tostring(u):sub(1, 120) .. " (len " .. #tostring(u) .. ")") end
+			local okk, err = pcall(G.FUNCS.mp_bug_report_submit)
+			love.system.openURL = real
+			D.log("scenario: bug report submit " .. tostring(okk) .. " " .. tostring(err or "") .. " file=" .. tostring(BR.last and BR.last.fname))
+			S.br.phase, S.br.at = 4, t + 1.5
+		elseif ph == 4 then D.shot("bugreport_saved"); S.br.phase = 5; D.log("scenario: bug_report done") end
+		return
+	end
 	-- modes_info: open the Gamemodes menu, select every entry, screenshot its Overview and Info (rules) tab
 	if D.scenario == "modes_info" then
 		if G.STAGE ~= G.STAGES.MAIN_MENU or t < 8 then return end

@@ -367,7 +367,7 @@ PN.MENU_STACK_FALLBACK = 1.2 -- 4 lines x 0.3, if no box can be measured
 function PN.menu_stack_bottom(boxes, root, self_box)
 	local bottom
 	for _, b in ipairs(boxes or {}) do
-		local al, role = b ~= self_box and b.alignment, b.role
+		local al, role = b ~= self_box and b ~= (G and G.MP3P_BUGREPORT_UI) and b.alignment, b.role
 		if al and al.type == "tri" and role and role.major == root then
 			local y = ((al.offset and al.offset.y) or 0) + ((b.T and b.T.h) or 0)
 			if not bottom or y > bottom then bottom = y end
@@ -390,6 +390,7 @@ function PN.add_menu_button()
 		})
 		PN.menu_button_y = y
 	end)
+	if MP.BUG_REPORT and MP.BUG_REPORT.add_menu_button then MP.BUG_REPORT.add_menu_button() end -- sits right under this one
 end
 
 --- Environment for can_auto_show, read from the game

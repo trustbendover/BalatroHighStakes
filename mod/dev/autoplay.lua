@@ -255,7 +255,7 @@ function A.tick(D, dt, t)
 	if t < A.next_at then return end
 	A.next_at = t + A.gap
 	-- the patch-notes pop-up / other overlays on the main menu would block the bot: close them
-	if G.OVERLAY_MENU and G.STAGE == G.STAGES.MAIN_MENU and not (MP.LOBBY and MP.LOBBY.code) and D.scenario ~= "modes_info" then G.FUNCS.exit_overlay_menu(); return end
+	if G.OVERLAY_MENU and G.STAGE == G.STAGES.MAIN_MENU and not (MP.LOBBY and MP.LOBBY.code) and D.scenario ~= "modes_info" and D.scenario ~= "bug_report" then G.FUNCS.exit_overlay_menu(); return end
 	if not A.persona_ready then A.persona_ready = true; A.setup_persona(D.name, D.persona, D.seed); D.log("autoplay: persona " .. A.persona .. " seed " .. A.seed) end
 	if G.STATE ~= G.STATES.SHOP then A.shop_bought = false end
 	if G.STATE ~= G.STATES.SELECTING_HAND then A.intent = nil end
