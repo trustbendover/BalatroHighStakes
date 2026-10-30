@@ -51,8 +51,8 @@ MP.Gamemode({
 					{
 						n = G.UIT.T,
 						config = {
-							text = MP.UTILS.wrapText(localize("k_koth_description"), 70),
-							scale = 0.6,
+							text = select(1, MP.UTILS.mode_desc("k_koth_description")),
+							scale = select(2, MP.UTILS.mode_desc("k_koth_description")),
 							colour = G.C.UI.TEXT_LIGHT,
 						},
 					},
