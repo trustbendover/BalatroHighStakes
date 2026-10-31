@@ -511,5 +511,18 @@ do
 	ok(not (ps[1].r.dropped or {})[ps[3].name], "B2: host no longer treats it as dropped")
 end
 
+-- 0.6.8 final (B3): the whole machine/every game hitches at once for 40 s (2 and 3 players):
+-- nobody may drop anybody, no migration, no "Lost connection" on wake-up
+for _, n in ipairs({ 2, 3 }) do
+	local ps = setup(n, "attrition")
+	start(ps); clear(ps)
+	T = T + 40 -- nobody ran for 40 s
+	run(10)
+	local hosts = 0
+	for _, p in ipairs(ps) do if p.r.mode == "host" then hosts = hosts + 1 end end
+	ok(hosts == 1 and ps[1].r.mode == "host" and not ps[2].last("hostMigrationFailed") and not ps[2].last("hostMigrating")
+		and not (ps[1].r.dropped or {})[ps[2].name], "B3: everyone frozen 40 s at once (" .. n .. "p): no drop, no migration")
+end
+
 print(string.format("info: largest snapshot after a migration %.1f KB", (SNAPMAX or 0) / 1024))
 print("PASS: host migration tests")

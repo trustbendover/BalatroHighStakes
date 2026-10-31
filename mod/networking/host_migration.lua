@@ -196,6 +196,9 @@ function M.attach(ctx)
 
 	--- The P2P heartbeat to the host timed out. Returns true while handled (migrating or waiting),
 	--- false when the caller should fall back.
+	--- We (not the peers) were frozen: stale "silent" votes from before the freeze don't count.
+	function H.self_stalled() R.votes, H.vote_t, H.vote_last = {}, nil, nil end
+
 	function H.host_timeout()
 		if R.mode ~= "guest" then return false end
 		local mem, me = members(), B.my_id()

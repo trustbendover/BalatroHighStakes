@@ -20,6 +20,7 @@ local M = {}
 M.CHANNEL = 7
 M.HEARTBEAT = 3
 M.TIMEOUT = 20
+M.SELF_STALL = 8 -- our own update gap this long counts as "we were frozen"
 M.JOIN_ACTIONS = { version = true, username = true, joinLobby = true, rejoinLobby = true, connected = true, keepAlive = true }
 M.LOBBY_KEY = "mp3p_code" -- protocol key, kept for compatibility with earlier builds
 -- Steam lobby member limit. Star topology: every guest talks only to the host, which runs the
@@ -603,6 +604,15 @@ function M.new_router(o)
 			start_join(r.code, r.msg, r.attempt)
 		end
 		local t = now()
+		-- 0.6.8 final: WE were frozen (game hitch, alt-tab, slow PC): silence that piled up while we
+		-- were not running is not the peers' fault. Restart their timeout clocks instead of
+		-- dropping them / abandoning the host on the first frame after waking up.
+		if R.last_tick and t - R.last_tick >= M.SELF_STALL then
+			log(string.format("we were frozen for %.0f s: peer timeouts restarted", t - R.last_tick))
+			for _, p in pairs(R.peers) do p.seen = math.max(p.seen or t, t) end
+			if HM and HM.self_stalled then HM.self_stalled(t) end
+		end
+		R.last_tick = t
 		for _, m in ipairs(B.receive()) do
 			local p = R.peers[m.peer]
 			if R.mode == "host" and not p then p = peer(m.peer) end
