@@ -44,7 +44,9 @@ function S.tick(D, dt, t)
 		elseif ph == 1 then
 			BR.tl.text, BR.ml.text = "", ""; BR.focus(nil)
 			G.FUNCS.mp_bug_report_open(); S.br.phase, S.br.at = 1.2, t + 2
-		elseif ph == 1.2 then D.shot("bugreport_form_empty"); S.br.phase, S.br.at = 1.5, t + 1
+		elseif ph == 1.2 then D.shot("bugreport_form_empty"); S.br.phase, S.br.at = 1.3, t + 1
+		elseif ph == 1.3 then G.FUNCS.mp_bug_report_submit(); S.br.phase, S.br.at = 1.4, t + 0.6 -- no title yet
+		elseif ph == 1.4 then D.shot("bugreport_need_title"); BR.tl.error_until = 0; BR.focus(nil); S.br.phase, S.br.at = 1.5, t + 1
 		elseif ph == 1.5 then
 			-- type through the real keyboard hooks: click title, type, Enter jumps to the description
 			G.FUNCS.mp_bug_title_focus(); love.textinput("Lobby froze"); love.keypressed("return")
@@ -64,13 +66,13 @@ function S.tick(D, dt, t)
 	end
 	-- modes_info: open the Gamemodes menu, select every entry, screenshot its Overview and Info (rules) tab
 	if D.scenario == "modes_info" then
-		if G.STAGE ~= G.STAGES.MAIN_MENU or t < 8 then return end
+		if G.STAGE ~= G.STAGES.MAIN_MENU or t < 20 then return end
 		local entries = { "duel", "teams2", "teams3", "teams4", "attrition", "showdown", "koth", "deathmatch", "survival" }
 		S.mi = S.mi or { i = 0, at = t, phase = "open" }
 		if t < S.mi.at then return end
 		if S.mi.phase == "open" then
 			G.FUNCS.overlay_menu({ definition = G.UIDEF.gamemode_selection_tabs() })
-			S.mi.phase, S.mi.at = "next", t + 2
+			S.mi.phase, S.mi.at = "next", t + 4 -- let the menu zoom finish before the first shot
 		elseif S.mi.phase == "next" then
 			if not G.OVERLAY_MENU then S.mi.phase = "open"; return end
 			S.mi.i = S.mi.i + 1
@@ -86,8 +88,19 @@ function S.tick(D, dt, t)
 			D.shot("mode_" .. entries[S.mi.i] .. "_overview")
 			S.mi.phase, S.mi.at = "switch", t + 1
 		elseif S.mi.phase == "switch" then
-			local a = MP.UI.last_gamemode_tabs
-			local okk, err = pcall(function() if a then G.FUNCS.gamemode_switch_tabs({ to_key = 2, cycle_config = { opt_args = a } }) end end)
+			-- press the real ">" arrow of the Overview/Info cycle (so its label + pips update like a click)
+			local okk, err = pcall(function()
+				local found
+				local function walk(n)
+					if found or not n then return end
+					if n.config and n.config.button == "option_cycle" and n.config.ref_value == "r" and n.config.ref_table
+						and n.config.ref_table.opt_callback == "gamemode_switch_tabs" then found = n; return end
+					for _, c in ipairs(n.children or {}) do walk(c) end
+				end
+				walk(G.OVERLAY_MENU and G.OVERLAY_MENU.UIRoot)
+				if found then G.FUNCS.option_cycle(found)
+				else local a = MP.UI.last_gamemode_tabs; if a then G.FUNCS.gamemode_switch_tabs({ to_key = 2, cycle_config = { opt_args = a } }) end end
+			end)
 			if not okk then D.log("scenario: rules tab failed: " .. tostring(err)) end
 			S.mi.phase, S.mi.at = "rules", t + 1.5
 		elseif S.mi.phase == "rules" then

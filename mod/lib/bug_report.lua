@@ -256,6 +256,33 @@ function BR.ml_lines(text, cursor, cols, rows, show_cursor)
 	return res
 end
 -- one blink clock for both fields
+function BR.clock() return (love and love.timer and love.timer.getTime()) or os.clock() end
+--- Split text into lines of at most `cols` characters on word boundaries (pure).
+function BR.wrap(text, cols)
+	local out, line = {}, ""
+	for w in tostring(text or ""):gmatch("%S+") do
+		if #line > 0 and #line + 1 + #w > cols then out[#out + 1] = line; line = w else line = (#line > 0 and line .. " " or "") .. w end
+	end
+	if #line > 0 then out[#out + 1] = line end
+	return out
+end
+--- Readable message on the home menu: a dark framed panel above the menu buttons (not over the logo).
+function BR.toast(text, secs)
+	pcall(function()
+		if G.MP3P_BR_TOAST then G.MP3P_BR_TOAST:remove(); G.MP3P_BR_TOAST = nil end
+		local rows = {}
+		for _, l in ipairs(BR.wrap(text, 52)) do
+			rows[#rows + 1] = { n = G.UIT.R, config = { align = "cm", padding = 0.02 }, nodes = { { n = G.UIT.T, config = { text = l, scale = 0.36, colour = G.C.WHITE } } } }
+		end
+		G.MP3P_BR_TOAST = UIBox({
+			definition = { n = G.UIT.ROOT, config = { align = "cm", padding = 0.15, r = 0.1, colour = G.C.BLACK, outline = 1.2, outline_colour = G.C.GREEN, emboss = 0.05 }, nodes = rows },
+			config = { align = "cm", offset = { x = 0, y = 1.6 }, major = G.ROOM_ATTACH, bond = "Weak" },
+		})
+		local box = G.MP3P_BR_TOAST
+		G.E_MANAGER:add_event(Event({ trigger = "after", delay = secs or 7, blocking = false, blockable = false, timer = "REAL",
+			func = function() if G.MP3P_BR_TOAST == box then box:remove(); G.MP3P_BR_TOAST = nil end return true end }))
+	end)
+end
 local function blink_on() return math.floor(((love and love.timer and love.timer.getTime()) or 0) * 2) % 2 == 0 end
 --- Refresh a field's display rows + placeholder (pure; testable). rows/cols default to the description box.
 function BR.field_refresh(st, cols, nrows, placeholder, blink)
@@ -270,7 +297,9 @@ end
 function BR.ml_refresh()
 	local b = blink_on()
 	BR.field_refresh(BR.ml, BR.DESC_COLS, BR.DESC_ROWS, BR.T("ph_desc"), b)
-	BR.field_refresh(BR.tl, BR.DESC_COLS, 1, BR.T("ph_title"), b)
+	local err = (BR.tl.error_until or 0) > BR.clock()
+	BR.field_refresh(BR.tl, BR.DESC_COLS, 1, err and BR.T("need_title") or BR.T("ph_title"), b)
+	if err and BR.tl.text == "" then BR.tl.ph = BR.T("need_title") end
 	BR.form.title = BR.tl.text
 end
 function BR.focused() return (BR.tl.active and BR.tl) or (BR.ml.active and BR.ml) or nil end
@@ -329,12 +358,13 @@ end
 local function label_row(text)
 	return { n = G.UIT.R, config = { align = "cm", padding = 0.04 }, nodes = {
 		{ n = G.UIT.C, config = { align = "cl", minw = 9 }, nodes = { { n = G.UIT.T, config = { text = text, scale = 0.35, colour = G.C.UI.TEXT_LIGHT } } } },
-		{ n = G.UIT.C, config = { align = "cr", minw = 3 }, nodes = { { n = G.UIT.T, config = { text = BR.T("hint"), scale = 0.26, colour = BR.FIELD.ph } } } } } }
+		{ n = G.UIT.C, config = { align = "cr", minw = 3 }, nodes = { { n = G.UIT.T, config = { text = BR.T("hint"), scale = 0.3, colour = G.C.UI.TEXT_LIGHT } } } } } }
 end
 local function style(e, st)
 	if not (e and e.config) then return end
 	e.config.colour = st.active and BR.FIELD.bg_focus or BR.FIELD.bg
-	e.config.outline_colour = st.active and G.C.BLUE or BR.FIELD.border
+	local err = st == BR.tl and (st.error_until or 0) > BR.clock()
+	e.config.outline_colour = err and G.C.RED or (st.active and G.C.BLUE or BR.FIELD.border)
 	e.config.outline = st.active and 2 or 1.2
 end
 function BR.title_box_node()
@@ -382,7 +412,8 @@ function G.FUNCS.mp_bug_report_submit()
 	if not BR.allowed() then return end
 	BR.form.title = BR.tl.text
 	if (BR.form.title or ""):gsub("%s", "") == "" then
-		if attention_text then attention_text({ scale = 0.6, text = BR.T("need_title"), hold = 2, align = "cm", offset = { x = 0, y = -2.5 }, major = G.ROOM_ATTACH }) end
+		-- missing title: the title field itself turns red and says so (no floating text over the form)
+		BR.tl.error_until = BR.clock() + 2.5; BR.focus("title")
 		return
 	end
 	BR.focus(nil)
@@ -391,7 +422,7 @@ function G.FUNCS.mp_bug_report_submit()
 	BR.ml.text, BR.ml.cursor = "", 0
 	BR.tl.text, BR.tl.cursor = "", 0
 	G.FUNCS.exit_overlay_menu()
-	if attention_text then attention_text({ scale = 0.45, text = BR.T("saved"), hold = 6, align = "cm", offset = { x = 0, y = -2.5 }, major = G.ROOM_ATTACH }) end
+	BR.toast(BR.T("saved"))
 end
 
 --- Small button under the Patch notes button (main menu and lobby screen; the run never shows it)

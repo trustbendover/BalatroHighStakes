@@ -68,4 +68,6 @@ ok(not BR.ml_key(tl, "return"), "Enter in title is not inserted")
 BR.ml_insert(tl, string.rep("x", 100)); ok(#tl.text == 60, "title capped at 60")
 BR.field_refresh(tl, 64, 1, "ph", true); ok(tl.ph == "", "no placeholder with text")
 ok(BR.TEXT.nl.ph_title == "Typ een korte titel..." and BR.TEXT.en.ph_desc == "Describe what happened..." and BR.TEXT.nl.hint, "EN/NL placeholders")
+for _, l in ipairs(BR.wrap(BR.TEXT.en.saved, 52)) do ok(#l <= 52, "saved message line fits: " .. l) end
+ok(#BR.wrap(BR.TEXT.nl.saved, 52) >= 2 and table.concat(BR.wrap("a b  c", 52), " ") == "a b c", "wrap keeps all words")
 print("PASS: bug report")
