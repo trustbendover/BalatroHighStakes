@@ -342,7 +342,19 @@ end
 function Server:check_game_over_inner(L)
 	-- Deathmatch: a player at 0 lives during a PvP blind dies when that PvP resolves, so players
 	-- who die in the same PvP die together (simultaneous final deaths -> highest score wins).
+	-- 0.6.8 final: same for every mode. Two players losing their last life in the same PvP (e.g. both
+	-- PvP timers run out) are judged together when that PvP resolves, never by message order.
 	if L.gameMode == "deathmatch" and L.blindActive then return false end
+	if L.blindActive then
+		local dying_any, playing = false, false
+		for _, p in ipairs(L.players) do
+			if not p.eliminated and not p.spectator then
+				if (p.lives or 0) <= 0 then dying_any = true
+				elseif not p.sitOut and not p.pvpDone and (p.handsLeft or 1) >= 1 then playing = true end
+			end
+		end
+		if dying_any and playing then return false end
+	end
 	local dying = {}
 	for _, p in ipairs(L.players) do
 		if not p.eliminated and p.lives <= 0 then dying[#dying + 1] = p end

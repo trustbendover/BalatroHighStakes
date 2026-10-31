@@ -681,6 +681,14 @@ class Lobby {
 		// Deathmatch: a player at 0 lives during a PvP blind dies when that PvP resolves, so players
 		// who die in the same PvP die together (simultaneous final deaths -> highest score wins).
 		if (this.gameMode === "deathmatch" && this.blindActive) return false;
+		// 0.6.8 final: every mode. A last life lost while others still play the same PvP is judged when
+		// that PvP resolves, so two players dying on the same tick never depend on message order.
+		if (this.blindActive) {
+			const live = this.players.filter((p) => !p.eliminated);
+			const dyingAny = live.some((p) => p.lives <= 0);
+			const playing = live.some((p) => p.lives > 0 && !p.sitOut && !p.pvpDone && p.handsLeft >= 1);
+			if (dyingAny && playing) return false;
+		}
 		const dying = this.players.filter((p) => !p.eliminated && p.lives <= 0);
 		const survivors = this.players.filter((p) => !p.eliminated && p.lives > 0).length + this.awayAlive().length;
 		const spared = new Set<Client>();
