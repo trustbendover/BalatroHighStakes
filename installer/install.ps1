@@ -13,7 +13,10 @@ param(
     [ValidateSet('', 'ask', 'tested', 'keep')]
     [string]$DepsPolicy = "",   # newer Steamodded/Lovely already installed: ask (default) | tested | keep (default with -NoPrompt)
     [switch]$KeepOtherMultiplayer, # keep the official Balatro Multiplayer mods in Mods (not recommended, they clash)
-    [switch]$DryRun             # only print what would happen (pins) and change nothing
+    [switch]$DryRun,            # only print what would happen (pins) and change nothing
+    [string]$AllInJest = "",    # optional All-in-Jest 0.7.2: yes | no (default: ask; No with -NoPrompt)
+    [string]$AllInJestOverwrite = "", # an existing All-in-Jest: yes = replace (backed up) | no (default)
+    [string]$AijZip = ""        # test hook: local zip instead of downloading
 )
 $ErrorActionPreference = 'Stop'
 function J([string]$base, [string]$rel) { $p = $base; foreach ($s in $rel.Split('\')) { if ($s) { $p = Join-Path $p $s } }; return $p }
@@ -333,6 +336,41 @@ Copy-Item -LiteralPath (Join-Path $Payload $OurModName) -Destination $ModsRoot -
 $ModDir = Join-Path $ModsRoot $OurModName
 $manifest.installedPaths += $ModDir
 Say "  High Stakes -> $ModDir" Green
+
+# 4b. Optional: All-in-Jest (downloaded from its author's GitHub, never bundled; default No)
+$AijPin = if ($Compat -and $Compat.allinjest) { $Compat.allinjest.pin } else { $null }
+if ($AijPin) {
+    $aijChoice = $AllInJest
+    if (-not $aijChoice) {
+        if ($NoPrompt -or $DryRun) { $aijChoice = 'no' }
+        else {
+            Say ""
+            Say "Optional: All-in-Jest $($AijPin.version) adds 600+ jokers (a separate mod by its own author)." Cyan
+            Say "  It works in High Stakes lobbies. It is downloaded from the author's GitHub." Cyan
+            $aijChoice = Read-Host "Install All-in-Jest $($AijPin.version)? [y/N]"
+        }
+    }
+    $aijExisting = Find-AijFolders $ModsRoot
+    $overArg = if ($AllInJestOverwrite) { $AllInJestOverwrite } elseif ($NoPrompt -or $DryRun) { 'no' } else { $null }
+    $aijDec = Resolve-AijAction $aijChoice $aijExisting ([string]$AijPin.version) $overArg
+    if ($aijDec.action -eq 'ask_overwrite') {
+        $ans = Read-Host "All-in-Jest $(@($aijExisting)[0].version) is already installed. Replace it with $($AijPin.version)? (yours is backed up) [y/N]"
+        $aijDec = Resolve-AijAction $aijChoice $aijExisting ([string]$AijPin.version) ([string]$ans)
+    }
+    Say "PIN allinjest action=$($aijDec.action) ($($aijDec.why))" DarkGray
+    if ($DryRun) { }
+    elseif ($aijDec.action -eq 'install' -or $aijDec.action -eq 'replace') {
+        try {
+            if ($aijDec.action -eq 'replace') { foreach ($e in @($aijExisting)) { Backup-Item $e.path 'allinjest' } }
+            $aijDir = Install-AijPin $AijPin $ModsRoot (Join-Path $env:TEMP 'BalatroHighStakes-aij') $AijZip
+            $manifest.installedPaths += $aijDir
+            Say "  All-in-Jest $($AijPin.version) -> $aijDir" Green
+        } catch {
+            Say "  All-in-Jest was not installed: $($_.Exception.Message). High Stakes works without it." Yellow
+        }
+    } elseif ($aijDec.action -eq 'keep' -or $aijDec.action -eq 'same') { Say "  All-in-Jest -> kept ($(@($aijExisting)[0].version))" Green }
+    $manifest.deps.allinjest = [ordered]@{ action = $aijDec.action; pin = [string]$AijPin.version }
+}
 
 # 5. Settings (.env): Steam peer-to-peer only
 Say ""

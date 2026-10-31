@@ -17,6 +17,12 @@ Bundled, unmodified:
 - Lovely 0.10.0 (winmm.dll) - Ethan Green and contributors (MIT, payload\LOVELY_LICENSE.txt)
   https://github.com/ethangreen-dev/lovely-injector
 
+Optional download (not bundled):
+- All-in-Jest 0.7.2 - by its author survovoaneend, https://github.com/survovoaneend/All-In-Jest
+  The installer can download it (only if you say yes) straight from the author's official GitHub,
+  pinned to 0.7.2 with a checksum. Done with the author's permission. All-in-Jest is the author's
+  own work and is not part of, or covered by the license of, Balatro High Stakes.
+
 License: the mod is GPL-3.0 (LICENSE.txt). If you publish/distribute this, GPL-3.0 requires
 you to also make the corresponding source available: the source zip of the same release
 (https://github.com/trustbendover/BalatroHighStakes/releases).

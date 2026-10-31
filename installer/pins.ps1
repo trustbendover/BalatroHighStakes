@@ -107,3 +107,59 @@ function Read-DepChoice([string]$name, [string]$installed, [string]$tested) {
     if ([string]::IsNullOrWhiteSpace($a)) { return 'enter' }
     return $a.Trim()
 }
+
+# ---------------------------------------------------------------- optional All-in-Jest (0.6.8)
+# Never bundled: downloaded from the author's official GitHub (with permission), pinned by sha256 in
+# compat.json. Default No. An existing All-in-Jest is never replaced without asking.
+
+# All-in-Jest folders in Mods: any folder whose metadata.json has "id": "allinjest"
+function Find-AijFolders([string]$modsRoot) {
+    $out = @()
+    if (-not $modsRoot -or -not (Test-Path -LiteralPath $modsRoot)) { return ,$out }
+    foreach ($d in Get-ChildItem -LiteralPath $modsRoot -Directory -ErrorAction SilentlyContinue) {
+        $m = Join-Path $d.FullName 'metadata.json'
+        if (Test-Path -LiteralPath $m) {
+            try { $j = Get-Content -LiteralPath $m -Raw | ConvertFrom-Json -ErrorAction Stop } catch { continue }
+            if ([string]$j.id -eq 'allinjest') { $out += [pscustomobject]@{ path = $d.FullName; version = [string]$j.version } }
+        }
+    }
+    return ,$out
+}
+
+# choice: the answer to "Install All-in-Jest?" (y/yes/j/ja = yes; anything else / empty = No)
+# overwrite: the answer to "Replace your All-in-Jest X?" (same rule; empty = No)
+# -> @{ action = skip|install|same|keep|ask_overwrite|replace ; why = ... }
+function Resolve-AijAction([string]$choice, $existing, [string]$pinVersion, $overwrite = $null) {
+    $yes = { param($a) return ($a -and ($a.Trim().ToLower() -match '^(y|yes|j|ja)$')) }
+    if (-not (& $yes $choice)) { return @{ action = 'skip'; why = 'not chosen (default No)' } }
+    if (-not $existing -or @($existing).Count -eq 0) { return @{ action = 'install'; why = 'not installed' } }
+    $v = [string](@($existing)[0].version)
+    if ($v -and (Compare-ModVersion $v $pinVersion) -eq 0) { return @{ action = 'same'; why = "All-in-Jest $v already installed" } }
+    if ($null -eq $overwrite) { return @{ action = 'ask_overwrite'; why = "All-in-Jest $v is installed" } }
+    if (& $yes $overwrite) { return @{ action = 'replace'; why = "replace $v (backed up)" } }
+    return @{ action = 'keep'; why = "kept your All-in-Jest $v" }
+}
+
+# Download (or take $localZip, test hook), check the pinned sha256, extract to Mods\<folder>.
+# Returns the installed folder; throws on a hash mismatch (nothing is written then).
+function Install-AijPin($pin, [string]$modsRoot, [string]$tmpDir, [string]$localZip = '') {
+    New-Item -ItemType Directory -Path $tmpDir -Force | Out-Null
+    $zip = Join-Path $tmpDir 'all-in-jest.zip'
+    if ($localZip) { Copy-Item -LiteralPath $localZip -Destination $zip -Force }
+    else {
+        [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+        Invoke-WebRequest -Uri ([string]$pin.url) -OutFile $zip -UseBasicParsing
+    }
+    $h = Get-FileSha256 $zip
+    if ($h -ne ([string]$pin.sha256).ToLower()) { Remove-Item -LiteralPath $zip -Force; throw "All-in-Jest download does not match the pinned sha256 (got $h)" }
+    $x = Join-Path $tmpDir 'aij_x'
+    if (Test-Path -LiteralPath $x) { Remove-Item -LiteralPath $x -Recurse -Force }
+    Expand-Archive -LiteralPath $zip -DestinationPath $x -Force
+    $inner = Get-ChildItem -LiteralPath $x -Directory | Select-Object -First 1
+    $src = if ($inner -and -not (Test-Path -LiteralPath (Join-Path $x 'metadata.json'))) { $inner.FullName } else { $x }
+    $dest = Join-Path $modsRoot ([string]$pin.folder)
+    Move-Item -LiteralPath $src -Destination $dest -Force
+    Remove-Item -LiteralPath $x -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $zip -Force -ErrorAction SilentlyContinue
+    return $dest
+}

@@ -56,7 +56,8 @@ function Reset-Sandbox([string]$smodsVer, [string]$lovelyVer) {
 function Run-Installer([string[]]$extra) {
     $args2 = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $inst 'install.ps1'),
         '-GameDir', $game, '-ModsRoot', $mods, '-Mode', 'steam', '-NoPrompt', '-NoPause', '-SkipProcessCheck', '-SkipConnectionTest') + $extra
-    $out = & powershell @args2 2>&1 | Out-String
+    $ps = if (Get-Command powershell -ErrorAction SilentlyContinue) { "powershell" } else { "pwsh" }
+    $out = & $ps @args2 2>&1 | Out-String
     return @{ code = $LASTEXITCODE; out = $out }
 }
 function Snapshot { return ((Get-ChildItem -LiteralPath $root -Recurse -Force | ForEach-Object { $_.FullName + '|' + $_.Length }) -join "`n") }
