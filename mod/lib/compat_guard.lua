@@ -498,7 +498,7 @@ function CG.definition(view)
 			{ n = G.UIT.C, config = { align = "cl" }, nodes = rows },
 		} },
 		{ n = G.UIT.R, config = { align = "cm", padding = 0.03 }, nodes = { T_node(body, 0.4, G.C.UI.TEXT_LIGHT) } },
-		{ n = G.UIT.R, config = { align = "cm", padding = 0.03 }, nodes = { T_node(body2, 0.36, G.C.UI.TEXT_INACTIVE or G.C.UI.TEXT_LIGHT) } },
+		{ n = G.UIT.R, config = { align = "cm", padding = 0.03 }, nodes = { T_node(body2, 0.36, G.C.UI.TEXT_LIGHT) } },
 	}
 	local buttons
 	if skip then -- only a skipped companion mod: nothing to decide, OK remembers it like "Play anyway"
