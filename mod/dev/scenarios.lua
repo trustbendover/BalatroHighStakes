@@ -96,9 +96,11 @@ function S.tick(D, dt, t)
 					if n.config and n.config.button == "option_cycle" and n.config.ref_value == "r" and n.config.ref_table
 						and n.config.ref_table.opt_callback == "gamemode_switch_tabs" then found = n; return end
 					for _, c in ipairs(n.children or {}) do walk(c) end
+					local obj = n.config and n.config.object
+					if obj and obj.UIRoot then walk(obj.UIRoot) end -- nested UIBoxes (the mode panel)
 				end
 				walk(G.OVERLAY_MENU and G.OVERLAY_MENU.UIRoot)
-				if found then G.FUNCS.option_cycle(found)
+				if found then G.FUNCS.option_cycle(found); D.log("scenario: pressed the Info arrow")
 				else local a = MP.UI.last_gamemode_tabs; if a then G.FUNCS.gamemode_switch_tabs({ to_key = 2, cycle_config = { opt_args = a } }) end end
 			end)
 			if not okk then D.log("scenario: rules tab failed: " .. tostring(err)) end
