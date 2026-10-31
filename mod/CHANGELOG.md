@@ -47,7 +47,7 @@
 - **Ouija** — Destroys 3 cards instead of converting all cards to a single suit and reducing hand size.
 - **Judgment** — Now draws from its own queue (vanilla behavior) on Orange Stake and above. Still uses the shop queue on lower stakes.
 
-## 0.6.8 (in development - not released yet) - host migration
+## 0.6.8 - host migration
 
 - **Start waits for Ready.** The host's Start button stays greyed out ("WAITING FOR / 2 PLAYERS") with a line
   "Waiting for 2 players to ready up" until every guest has pressed Ready; the host now also refuses a start
