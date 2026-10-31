@@ -262,6 +262,8 @@ function M.attach(ctx)
 		B.send(id, "J" .. json.encode({ action = "rejoinLobby", code = a.code or (R.snap and R.snap.state and R.snap.state.code) or R.code,
 			reconnectToken = R.token }))
 		replay_to(id)
+		-- 0.6.8 final: that rejoin can be lost (link blip right then): retry until the new host answers
+		R.follow_retry = { id = id, code = a.code or (R.snap and R.snap.state and R.snap.state.code) or R.code, next_t = now() + 4, until_t = now() + M.REJOIN_FOR }
 		if owner() == me and id ~= me and B.set_owner then pcall(B.set_owner, R.lobby, id) end
 		log("host migration: following new host " .. id .. " (epoch " .. tostring(R.epoch) .. ")")
 	end

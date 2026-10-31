@@ -47,7 +47,14 @@ log("DEV LOCAL TEST MODE: " .. D.name .. " (" .. D.role .. ") dir=" .. D.dir .. 
 local FB = MP.load_mp_file("dev/file_backend.lua")
 function D.new_backend()
 	if not FB then return nil, "dev/file_backend.lua failed to load" end
-	return FB.new({ dir = D.dir, me = D.name, peers = D.peers, log = log })
+	local b = FB.new({ dir = D.dir, me = D.name, peers = D.peers, log = log })
+	-- HS_DEV_CHAOS="lat=150,jit=100,loss=0.05,cut_every=90,cut_for=12": test-only network chaos
+	local spec = os.getenv("HS_DEV_CHAOS")
+	if b and spec and spec ~= "" then
+		local CH = MP.load_mp_file("dev/chaos_backend.lua")
+		if CH then math.randomseed(os.time() + D.index * 7919); b = CH.wrap(b, spec, { log = log }); log("DEV chaos transport: " .. spec) end
+	end
+	return b
 end
 
 -- username = instance name (in-memory; the test profile is separate from the real one anyway)

@@ -613,11 +613,25 @@ function M.new_router(o)
 			if HM and HM.self_stalled then HM.self_stalled(t) end
 		end
 		R.last_tick = t
+		local fr = R.follow_retry
+		if fr then
+			if R.mode ~= "guest" or R.host ~= fr.id or t > fr.until_t then R.follow_retry = nil
+			elseif t >= fr.next_t then
+				fr.next_t = t + 4
+				log("rejoin to the new host " .. tostring(fr.id) .. " not answered yet: retrying")
+				for _, k in ipairs({ "version", "username" }) do if R.cached and R.cached[k] then B.send(fr.id, "J" .. json.encode(R.cached[k])) end end
+				B.send(fr.id, "J" .. json.encode({ action = "rejoinLobby", code = fr.code, reconnectToken = R.token }))
+			end
+		end
 		for _, m in ipairs(B.receive()) do
 			local p = R.peers[m.peer]
 			if R.mode == "host" and not p then p = peer(m.peer) end
 			if p then p.seen = t end
 			local tag = m.data:sub(1, 1)
+			-- 0.6.8 final: any sign of life (also plain heartbeats) from a guest we timed out: ask it to
+			-- rejoin with its token (an idle guest would otherwise never be re-attached)
+			if R.mode == "host" and R.dropped and R.dropped[m.peer] and p and not p.conn and tag ~= "J" and tag ~= "Q"
+				and t - R.dropped[m.peer] >= 2 then R.dropped[m.peer] = t; B.send(m.peer, "R") end
 			if HM and (tag == "S" or tag == "A" or tag == "L" or tag == "V") then
 				HM.on_frame(m.peer, m.data)
 			elseif p then
@@ -649,6 +663,7 @@ function M.new_router(o)
 							if seq then p.ack = math.max(p.ack or 0, seq) end
 							if HM then HM.mark_dirty() end
 						elseif R.mode == "guest" and m.peer == R.host and msg.action ~= "connected" then
+							if msg.action == "rejoinedLobby" or msg.action == "joinedLobby" or msg.action == "hostMigrated" then R.follow_retry = nil end
 							push(msg)
 						end
 					end
