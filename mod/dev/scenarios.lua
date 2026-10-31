@@ -64,6 +64,21 @@ function S.tick(D, dt, t)
 		elseif ph == 4 then D.shot("bugreport_saved"); S.br.phase = 5; D.log("scenario: bug_report done") end
 		return
 	end
+	-- compat_notice: the start-up compatibility notice (e.g. a skipped All-in-Jest), screenshot it
+	if D.scenario == "compat_notice" then
+		if G.STAGE ~= G.STAGES.MAIN_MENU or t < 20 then return end
+		S.cn = S.cn or { phase = 0, at = t }
+		if t < S.cn.at then return end
+		local CG = MP.COMPAT_GUARD
+		if S.cn.phase == 0 then
+			if not (CG and CG.is_open and CG.is_open()) and CG and CG.open then CG.open() end
+			S.cn.phase, S.cn.at = 1, t + 2
+		elseif S.cn.phase == 1 then
+			D.log("scenario: compat notice skipped=" .. tostring(CG and CG.result and CG.result.skipped) .. " status=" .. tostring(CG and CG.result and CG.result.status))
+			D.shot("compat_notice"); S.cn.phase = 2; D.log("scenario: compat_notice done")
+		end
+		return
+	end
 	-- modes_info: open the Gamemodes menu, select every entry, screenshot its Overview and Info (rules) tab
 	if D.scenario == "modes_info" then
 		if G.STAGE ~= G.STAGES.MAIN_MENU or t < 20 then return end

@@ -249,4 +249,15 @@ do
 	ok(#live == 1 and live[1].id == "MultiplayerPvP" and table.concat(logs, "\n"):find("another Multiplayer mod is loaded: MultiplayerPvP", 1, true), "CG.clashes() reads SMODS.Mods and logs a warning")
 	SMODS.Mods.MultiplayerPvP = nil
 end
+-- 0.6.8 final: a companion mod Steamodded refused (All-in-Jest 0.7.4 needs Steamodded >= 26.1002)
+do
+	local sk = CG.find_skipped({ allinjest = { can_load = false, version = "0.7.4" }, other = { can_load = false } })
+	ok(#sk == 1 and sk[1].name == "All-in-Jest" and sk[1].version == "0.7.4", "skipped: refused All-in-Jest found, unrelated mods ignored")
+	ok(#CG.find_skipped({ allinjest = { can_load = true, version = "0.7.2" } }) == 0, "skipped: a loaded All-in-Jest 0.7.2 is fine")
+	local compat = { balatro = { tested = { "1.0.1o" } }, steamodded = { tested = { "1.0.0~BETA-1620a" } }, lovely = { tested = { "0.9.0" } } }
+	local r = CG.check({ balatro = "1.0.1o", steamodded = "1.0.0~BETA-1620a", lovely = "0.9.0" }, compat, {}, {}, sk)
+	ok(r.skipped and r.only_skipped and r.status == "untested" and CG.decide(r, nil) == "warn", "skipped: notice shown once")
+	ok(CG.decide(r, r.signature) == "ok", "skipped: OK remembers it for this exact version")
+	ok(CG.TEXT.nl.skip_title and CG.TEXT.en.skip_body2:find("0.7.2", 1, true), "skipped: EN/NL texts")
+end
 print("all compat guard tests passed")

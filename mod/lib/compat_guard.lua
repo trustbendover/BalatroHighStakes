@@ -29,6 +29,9 @@ CG.TEXT = {
 		clash = "CLASH", clash_title = "Heads up: another Multiplayer mod",
 		clash_body = "These mods clash with Balatro High Stakes (same id/prefix).",
 		clash_body2 = "Move them out of the Mods folder (Install.bat can do it).",
+		skipped = "SKIPPED", skip_title = "Heads up: a mod was skipped",
+		skip_body = "This mod needs a newer Steamodded than High Stakes uses, so it was not loaded.",
+		skip_body2 = "Multiplayer works without it. All-in-Jest 0.7.2 works with this version.",
 	},
 	nl = {
 		title = "Let op: niet-geteste versies",
@@ -44,12 +47,29 @@ CG.TEXT = {
 		clash = "BOTSING", clash_title = "Let op: nog een Multiplayer-mod",
 		clash_body = "Deze mods botsen met Balatro High Stakes (zelfde id/prefix).",
 		clash_body2 = "Haal ze uit de Mods-map (Install.bat kan dat doen).",
+		skipped = "OVERGESLAGEN", skip_title = "Let op: een mod is overgeslagen",
+		skip_body = "Deze mod heeft een nieuwere Steamodded nodig dan High Stakes, dus hij is niet geladen.",
+		skip_body2 = "Multiplayer werkt zonder. All-in-Jest 0.7.2 werkt wel met deze versie.",
 	},
 }
 -- 0.6.8: the official Balatro Multiplayer (legacy id "Multiplayer", 1.0 platform: MultiplayerPvP with the
 -- same "mp" prefix, MultiplayerAPI, MultiplayerSPDRN) clashes with this fork
 CG.CLASH_IDS = { Multiplayer = true, MultiplayerPvP = true, MultiplayerAPI = true, MultiplayerSPDRN = true }
-CG.STATE_COLOUR = { tested = "GREEN", untested = "FILTER", unknown = "FILTER", blocked = "RED", clash = "RED" }
+CG.STATE_COLOUR = { tested = "GREEN", untested = "FILTER", unknown = "FILTER", blocked = "RED", clash = "RED", skipped = "FILTER" }
+-- 0.6.8 final: companion mods we support; when Steamodded refuses one (e.g. All-in-Jest 0.7.4 needs
+-- Steamodded >= 26.1002) the player gets a clear notice instead of silently missing jokers
+CG.COMPANIONS = { allinjest = "All-in-Jest" }
+function CG.find_skipped(mods)
+	local out = {}
+	for id, name in pairs(CG.COMPANIONS) do
+		local m = mods and mods[id]
+		if type(m) == "table" and m.can_load == false and not m.disabled then
+			out[#out + 1] = { id = id, name = name, version = m.version }
+		end
+	end
+	table.sort(out, function(a, b) return a.id < b.id end)
+	return out
+end
 
 ----------------------------------------------------------------------------- pure logic (tested)
 --- Strip build tags the games/loaders add: "1.0.1o-FULL" -> "1.0.1o", "...-STEAMODDED" -> "...", "v0.10.0" -> "0.10.0"
@@ -164,7 +184,7 @@ end
 
 --- versions: { balatro=, steamodded=, lovely= }; load_errors: { {file=, err=} }; clashes: CG.find_clashes()
 --- -> { status = "ok"|"untested"|"blocked", items = {...}, failed = {files}, clash = bool, signature = "..." }
-function CG.check(versions, compat, load_errors, clashes)
+function CG.check(versions, compat, load_errors, clashes, skipped)
 	local r = { status = "ok", items = {}, failed = {} }
 	local sig = {}
 	for _, k in ipairs(CG.COMPONENTS) do
@@ -188,6 +208,16 @@ function CG.check(versions, compat, load_errors, clashes)
 		sig[#sig + 1] = "clash=" .. tostring(c.id)
 		r.clash = true
 		if r.status == "ok" then r.status = "untested" end -- warn with Play anyway / Disable multiplayer
+	end
+	for _, k in ipairs(skipped or {}) do
+		r.items[#r.items + 1] = { component = "skipped", label = tostring(k.name), version = k.version, state = "skipped" }
+		sig[#sig + 1] = "skipped=" .. tostring(k.id) .. "@" .. tostring(k.version)
+		r.skipped = true
+		if r.status == "ok" then r.status = "untested" end -- shows the notice (Play anyway = OK)
+	end
+	if r.skipped then
+		r.only_skipped = not r.clash
+		for _, it in ipairs(r.items) do if it.state ~= "tested" and it.state ~= "skipped" then r.only_skipped = false end end
 	end
 	r.signature = table.concat(sig, ";")
 	return r
@@ -290,6 +320,12 @@ function CG.mod_version()
 	return (tostring(v):gsub("~.*$", ""))
 end
 
+function CG.skipped()
+	local ok, list = pcall(CG.find_skipped, SMODS and SMODS.Mods)
+	if not ok then return {} end
+	for _, k in ipairs(list) do warn(k.name .. " " .. tostring(k.version) .. " was not loaded by Steamodded (needs a newer Steamodded): skipped") end
+	return list
+end
 --- Running versions, read defensively
 function CG.clashes()
 	local ok, list = pcall(CG.find_clashes, SMODS and SMODS.Mods, SMODS and SMODS.Mods and SMODS.Mods["Multiplayer"])
@@ -375,7 +411,7 @@ end
 function CG.startup()
 	local ok, err = pcall(function()
 		CG.load_compat()
-		CG.result = CG.check(CG.versions(), CG.compat, MP.LOAD_ERRORS, CG.clashes())
+		CG.result = CG.check(CG.versions(), CG.compat, MP.LOAD_ERRORS, CG.clashes(), CG.skipped())
 		local c = config()
 		CG.action = CG.decide(CG.result, c and c.compat_ack)
 		local parts = {}
@@ -406,7 +442,7 @@ function CG.apply_remote(raw)
 	CG.compat = merged
 	if CG.result and not MP.SAFE_MODE then
 		local before = CG.action
-		CG.result = CG.check(CG.versions(), CG.compat, MP.LOAD_ERRORS, CG.clashes())
+		CG.result = CG.check(CG.versions(), CG.compat, MP.LOAD_ERRORS, CG.clashes(), CG.skipped())
 		CG.action = CG.decide(CG.result, c and c.compat_ack)
 		if before == "warn" and CG.action == "ok" then
 			CG.pending = false
@@ -451,12 +487,13 @@ function CG.definition(view)
 	for _, it in ipairs(view.result.items) do rows[#rows + 1] = item_row(it, T) end
 	local failed = (view.result.failed and #view.result.failed > 0) or (MP.HOOK_ERRORS and #MP.HOOK_ERRORS > 0)
 	local clash = view.result.clash and not view.safe
-	local body = view.safe and (failed and T.failed_body or T.blocked_body) or (clash and T.clash_body) or T.body
-	local body2 = view.safe and T.blocked_body2 or (clash and T.clash_body2) or T.body2
+	local skip = view.result.skipped and not view.safe and not clash and view.result.only_skipped
+	local body = view.safe and (failed and T.failed_body or T.blocked_body) or (clash and T.clash_body) or (skip and T.skip_body) or T.body
+	local body2 = view.safe and T.blocked_body2 or (clash and T.clash_body2) or (skip and T.skip_body2) or T.body2
 	local logo = (MP.PATCH_NOTES and MP.PATCH_NOTES.logo_node) and MP.PATCH_NOTES.logo_node() or nil
 	local contents = {
 		logo,
-		{ n = G.UIT.R, config = { align = "cm", padding = 0.04 }, nodes = { T_node(view.safe and T.blocked_title or (clash and T.clash_title) or T.title, 0.6, view.safe and colour("RED") or colour("FILTER")) } },
+		{ n = G.UIT.R, config = { align = "cm", padding = 0.04 }, nodes = { T_node(view.safe and T.blocked_title or (clash and T.clash_title) or (skip and T.skip_title) or T.title, 0.6, view.safe and colour("RED") or colour("FILTER")) } },
 		{ n = G.UIT.R, config = { align = "cl", padding = 0.2, r = 0.1, colour = G.C.BLACK, minw = 11, emboss = 0.05 }, nodes = {
 			{ n = G.UIT.C, config = { align = "cl" }, nodes = rows },
 		} },
@@ -464,7 +501,9 @@ function CG.definition(view)
 		{ n = G.UIT.R, config = { align = "cm", padding = 0.03 }, nodes = { T_node(body2, 0.36, G.C.UI.TEXT_INACTIVE or G.C.UI.TEXT_LIGHT) } },
 	}
 	local buttons
-	if view.safe then
+	if skip then -- only a skipped companion mod: nothing to decide, OK remembers it like "Play anyway"
+		buttons = { UIBox_button({ label = { T.ok }, button = "mp3p_compat_play", colour = G.C.GREEN, minw = 4, minh = 0.8, scale = 0.6 }) }
+	elseif view.safe then
 		buttons = { UIBox_button({ label = { T.ok }, button = "mp3p_compat_ok", colour = G.C.GREEN, minw = 4, minh = 0.8, scale = 0.6 }) }
 	else
 		buttons = {
@@ -485,7 +524,7 @@ end
 
 function CG.open()
 	if not CG.result then
-		local ok, r = pcall(CG.check, CG.versions(), CG.compat or CG.load_compat(), MP.LOAD_ERRORS, CG.clashes())
+		local ok, r = pcall(CG.check, CG.versions(), CG.compat or CG.load_compat(), MP.LOAD_ERRORS, CG.clashes(), CG.skipped())
 		if not ok then return false end
 		CG.result = r
 	end
