@@ -351,6 +351,9 @@ function Server:check_game_over_inner(L)
 	-- disconnected seat is still held, the final-score rule decides (nobody wins by being away).
 	local survivors = #filter(L.players, function(p) return not p.eliminated and p.lives > 0 end)
 	local spared = {}
+	-- 0.6.8 final: while a seat is still held nobody is declared winner or knocked out by the
+	-- final-score rule; decide once the seat rejoins (it is then the survivor) or its grace expires.
+	if survivors == 0 and #dying > 0 and #self:away_alive(L) > 0 then return false end
 	if survivors == 0 and #dying > 0 and not self:teams_active(L) then
 		-- nobody left standing: the highest score among those dying now wins (ties: all of them)
 		local best = nil

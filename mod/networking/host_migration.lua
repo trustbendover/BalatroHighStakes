@@ -132,7 +132,7 @@ function M.attach(ctx)
 		R.outbox, R.seq, R.snap = {}, 0, nil
 		R.announce = { until_t = now() + M.ANNOUNCE_FOR, last = -1, code = state.code }
 		-- a frozen old host is still in the Steam lobby: keep telling it to step down once it wakes up
-		R.watch_old = mig.old and { id = mig.old, code = state.code, last = -1 } or nil
+		R.watch_old = mig.old and { id = mig.old, code = state.code, last = -1, until_t = now() + M.REJOIN_FOR } or nil
 		R.votes = {}
 		pcall(B.set_data, R.lobby, "mp3p_host", B.my_id())
 		-- Steam lobby data can only be written by the owner (maybe the frozen old host): also tag
@@ -388,8 +388,24 @@ function M.attach(ctx)
 		if w and R.mode == "host" and R.lobby and t - w.last >= M.WATCH_EVERY then
 			w.last = t
 			local p = R.peers[w.id]
-			if not contains(members(), w.id) or (p and p.conn) then R.watch_old = nil -- gone, or rejoined as guest
+			-- 0.6.8 final: a frozen host can drop out of the member list while frozen (Steam / dev
+			-- transport) and come back; keep telling it for REJOIN_FOR s, stop only once it rejoined
+			if (p and p.conn) or t > (w.until_t or 0) then R.watch_old = nil
 			else send(w.id, "A", { epoch = R.epoch, host = B.my_id(), code = w.code }) end
+		end
+		if R.mode == "host" and R.lobby and B.get_member_data and t - (H.epoch_check_t or -99) >= M.WATCH_EVERY then
+			-- 0.6.8 final: we froze, the others promoted a new host (higher epoch in its member data)
+			-- and nobody reached us: step down and follow it (no two hosts at once)
+			H.epoch_check_t = t
+			local best, who = R.epoch or 0, nil
+			for _, id in ipairs(members()) do
+				if id ~= B.my_id() then
+					local okd, v = pcall(B.get_member_data, R.lobby, id, "mp3p_host")
+					local e = okd and tonumber(v) or nil
+					if e and e > best then best, who = e, id end
+				end
+			end
+			if who then log("host migration: " .. who .. " is host at epoch " .. best .. " (ours " .. tostring(R.epoch) .. ")"); follow(who, { epoch = best, code = R.code }); return end
 		end
 		if R.mode == "host" and R.lobby then
 			-- we lost everyone and Steam gave the lobby to somebody else: we were cut off and the

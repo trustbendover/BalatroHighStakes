@@ -20,6 +20,7 @@ local M = {}
 M.CHANNEL = 7
 M.HEARTBEAT = 3
 M.TIMEOUT = 20
+M.JOIN_ACTIONS = { version = true, username = true, joinLobby = true, rejoinLobby = true, connected = true, keepAlive = true }
 M.LOBBY_KEY = "mp3p_code" -- protocol key, kept for compatibility with earlier builds
 -- Steam lobby member limit. Star topology: every guest talks only to the host, which runs the
 -- server core and relays, so traffic grows linearly with players (8 is light).
@@ -620,7 +621,14 @@ function M.new_router(o)
 				if body then
 					local ok, msg = pcall(json.decode, body)
 					if ok and type(msg) == "table" then
-						if R.mode == "host" then
+						local resync = R.mode == "host" and not p.conn and R.dropped and R.dropped[m.peer]
+							and not M.JOIN_ACTIONS[msg.action]
+						if resync then
+							-- 0.6.8 final: a guest we timed out (seat held) is alive again and still
+							-- playing: ask it to rejoin with its token instead of dropping its messages
+							if t - (R.dropped[m.peer] or 0) >= 2 then R.dropped[m.peer] = t; B.send(m.peer, "R") end
+						elseif R.mode == "host" then
+							if msg.action == "rejoinLobby" and R.dropped then R.dropped[m.peer] = nil end
 							if not p.conn then
 								local id, gen = m.peer, R.gen
 								p.conn = core:connect(function(x) if R.gen == gen then B.send(id, "J" .. json.encode(x)) end end,
@@ -634,6 +642,10 @@ function M.new_router(o)
 							push(msg)
 						end
 					end
+				elseif m.data == "R" and R.mode == "guest" and m.peer == R.host then
+					log("host asked us to rejoin (we timed out); rejoining with our token")
+					for _, k in ipairs({ "version", "username" }) do if R.cached and R.cached[k] then B.send(m.peer, "J" .. json.encode(R.cached[k])) end end
+					B.send(m.peer, "J" .. json.encode({ action = "rejoinLobby", code = R.code, reconnectToken = R.token }))
 				elseif m.data == "K" and R.mode == "guest" and m.peer == R.host then
 					to_local(); push({ action = "disconnected" })
 				end
@@ -664,6 +676,7 @@ function M.new_router(o)
 				elseif R.mode == "migrating" then
 					R.peers[id] = nil
 				else
+					if R.mode == "host" then R.dropped = R.dropped or {}; R.dropped[id] = 0 end
 					drop_peer(id)
 				end
 			end

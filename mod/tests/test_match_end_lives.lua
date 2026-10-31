@@ -49,6 +49,16 @@ ok(g.got("winGame") and h.got("winGame") and not g.eliminated and not h.eliminat
 -- the absent player does not win by being away and the match does not end without a winner
 local x, y = pl("x", 1, "900"), pl("y", 1, "100")
 L = lobby({ x, y }); L.slots = { { old = { id = "gone", username = "gone", lives = 2 } } }
-S:lose_life(x); S:lose_life(y); S:check_game_over(L)
-ok(x.got("winGame") and y.got("loseGame") and L.winnerId == "x" and not L.isInGame, "all connected die, away seat held: final score decides")
+S:lose_life(x); S:lose_life(y)
+ok(not S:check_game_over(L) and L.isInGame and not x.got("winGame") and not y.eliminated, "all connected die, seat still held: no winner yet (0.6.8 final)")
+L.slots[1].old.eliminated, L.slots[1].old.lives = true, 0 -- grace ran out
+S:check_game_over(L)
+ok(x.got("winGame") and y.got("loseGame") and L.winnerId == "x" and not L.isInGame, "held seat expired: final score decides")
+-- same, but the held player comes back alive: it is the survivor, the two at 0 lives are out
+local x2, y2, z2 = pl("x2", 1, "900"), pl("y2", 1, "100"), pl("z2", 2, "50")
+L = lobby({ x2, y2 }); L.slots = { { old = z2 } }
+S:lose_life(x2); S:lose_life(y2); S:check_game_over(L)
+L.slots = {}; table.insert(L.players, z2); z2.lobby = L
+S:check_game_over(L)
+ok(z2.got("winGame") and x2.eliminated and y2.eliminated and L.winnerId == "z2", "rejoined held seat wins, nobody won while it was away")
 print("PASS: match end lives")

@@ -478,5 +478,38 @@ do
 	ok(ps[1].r.mode == "guest" and ps[1].r.host == ps[2].name and ps[1].last("rejoinedLobby"), "2p: the old host steps down and joins the guest once the link is back")
 end
 
+-- 0.6.8 final (B1): the frozen host also drops out of the member list while frozen (dev transport /
+-- Steam timing), stays frozen past the old watch window, then comes back: it must step down
+do
+	local ps = setup(4, "attrition")
+	start(ps); clear(ps)
+	local l = ps[1].r.lobby
+	freeze(ps[1]); remove(NET.lobbies[l].members, ps[1].name)
+	local rest = { ps[2], ps[3], ps[4] }
+	until_migrated(rest, 40)
+	local nh = host_of(rest)
+	ok(nh and nh ~= ps[1], "B1: a guest took over from the frozen host")
+	run(60)
+	table.insert(NET.lobbies[l].members, ps[1].name); ps[1].alive = true
+	run(8)
+	local hosts = 0
+	for _, p in ipairs(ps) do if p.r.mode == "host" then hosts = hosts + 1 end end
+	ok(hosts == 1 and ps[1].r.mode == "guest" and ps[1].r.host == nh.name, "B1: old host back after 60 s steps down (no split brain)")
+end
+
+-- 0.6.8 final (B2): a guest freezes past the P2P timeout (host holds its seat), then wakes up and
+-- keeps playing: the host asks it to rejoin with its token, it gets its seat back
+do
+	local ps = setup(3, "attrition")
+	start(ps); clear(ps)
+	freeze(ps[3]); run(28)
+	ok(ps[1].r.dropped and ps[1].r.dropped[ps[3].name], "B2: host timed the frozen guest out (seat held)")
+	ps[3].alive = true
+	ps[3].send({ action = "setLocation", location = "loc_shop" })
+	run(6)
+	ok(ps[3].last("rejoinedLobby") and ps[3].r.mode == "guest" and ps[3].r.host == ps[1].name, "B2: woken guest re-attached by token")
+	ok(not (ps[1].r.dropped or {})[ps[3].name], "B2: host no longer treats it as dropped")
+end
+
 print(string.format("info: largest snapshot after a migration %.1f KB", (SNAPMAX or 0) / 1024))
 print("PASS: host migration tests")
