@@ -167,7 +167,8 @@ function RJ.restore(p)
 	G.FUNCS.start_run(nil, { savetext = chk.run })
 	if MP.MATCH_STATS then MP.MATCH_STATS.on_resume(p) end
 	if lives then MP.GAME.lives = lives end
-	local ante = tonumber(chk.meta.ante) or tonumber(p.ante) or 1
+	-- 0.6.9: never behind the match: the host sends the match's current ante
+	local ante = math.max(tonumber(chk.meta.ante) or 1, tonumber(p.ante) or 1)
 	MP.ACTIONS.set_ante(ante)
 	Client.send({ action = "resumeRestarted" })
 	pcall(MP.UI.UTILS.overlay_message, L("k_rj_restored", "Rejoined! Your run is restored (ante #1#)", { ante }))

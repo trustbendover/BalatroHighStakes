@@ -487,6 +487,40 @@ function Server:try_start_blind(L)
 	return true
 end
 
+--- 0.6.9 anti-abuse: the ante the match is at now (highest ante of the connected players still in).
+--- A rejoining seat resumes there, so leaving never freezes your run while the others play on.
+function Core.match_ante(players, except)
+	local a = 1
+	for _, p in ipairs(players or {}) do
+		if p ~= except and not p.eliminated and not p.spectator then a = math.max(a, tonumber(p.ante) or 1) end
+	end
+	return a
+end
+
+--- 0.6.9 anti-abuse: seats held (left / disconnected) when a PvP resolves count as the lowest score
+--- and lose a life (not during host migration; Teams has its own team rules).
+function Server:absent_seats(L)
+	if L.migration or self:teams_active(L) then return {} end
+	return filter(L.slots, function(s) return not s.migration and not s.old.eliminated and not s.old.spectator and (s.old.lives or 0) > 0 end)
+end
+function Server:penalize_absent(L, absent)
+	for _, sl in ipairs(absent) do
+		local o = sl.old
+		o.lives = math.max(0, (o.lives or 1) - 1)
+		local b = self.book_entry and self:book_entry(L, o)
+		if b then b.livesLost = (b.livesLost or 0) + 1 end
+		self.log("Player " .. tostring(o.username) .. " absent at PvP: -1 life (" .. o.lives .. " left)")
+		if o.lives <= 0 then
+			o.eliminated = true
+			L.elimOrder = L.elimOrder or {}
+			L.elimOrder[#L.elimOrder + 1] = o.id
+			self:broadcast(L, { action = "playerEliminated", playerId = o.id, username = o.username, reason = "absent" })
+		end
+		self:broadcast(L, self:enemy_info(o, true))
+	end
+	if #absent > 0 then self:deathmatch_broadcast(L) end
+end
+
 function Server:try_resolve_pvp(L)
 	if not L.isInGame or not L.blindActive or L.migration then return end
 	local alive = self:participants(L)
@@ -494,7 +528,10 @@ function Server:try_resolve_pvp(L)
 	if not every(alive, function(p) return p.pvpDone or p.handsLeft < 1 end) then return end
 	L.blindActive = false
 	for _, p in ipairs(L.players) do p.inPvp = false end
+	local absent = self:absent_seats(L)
 	if #alive == 1 then
+		self:penalize_absent(L, absent)
+		if #absent > 0 and self:check_game_over(L) then return end
 		local p = alive[1]
 		p.firstReady, p.pvpDone, p.pvpTimerFailed = false, false, false
 		sendA(p, { action = "endPvP", lost = false, loserIds = {}, opponentsAway = true })
@@ -511,12 +548,18 @@ function Server:try_resolve_pvp(L)
 		local lose = {}
 		for _, id in ipairs(ids) do lose[id] = true end
 		roundLosers = filter(alive, function(p) return lose[p.id] end)
+		-- 0.6.9: absent seats are the lowest scores; they take the losing places first
+		if #absent > 0 and Core.PVP then
+			local k = Core.PVP.loser_count(#alive + #absent)
+			if #absent >= k then roundLosers = {} end
+		end
 	end
 	local koth_ev = self:koth_resolve(L, alive, roundLosers)
 	if koth_ev and koth_ev.shieldedId then
 		roundLosers = filter(roundLosers, function(p) return p.id ~= koth_ev.shieldedId end)
 	end
 	for _, p in ipairs(roundLosers) do self:lose_life(p, "round") end
+	self:penalize_absent(L, absent)
 	do
 		local lost = {}
 		for _, p in ipairs(roundLosers) do lost[p] = true end
@@ -987,6 +1030,8 @@ function Server:reclaim(L, c, slot)
 		-- panel keep pointing at the same seat (no stale "disconnected" ghost entry)
 		c.id = o.id or c.id
 		table.insert(L.players, math.min(slot.index, #L.players + 1), c)
+		-- 0.6.9 anti-abuse: time kept running while you were away: resume at the match's ante
+		if L.isInGame then c.ante = math.max(tonumber(c.ante) or 1, Core.match_ante(L.players, c)) end
 	end
 	c.lobby = L
 	if slot.migration then return self:migration_reclaimed(L, c) end

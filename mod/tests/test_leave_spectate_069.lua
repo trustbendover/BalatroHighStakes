@@ -205,6 +205,33 @@ do
 	ok(e and e.playerId == A.id and e.reason == "disconnected", "expiry: held seat eliminated after grace (client shows 'X left')")
 end
 
+-- 5. anti-abuse: absent at PvP loses a life (lowest score), can be eliminated; rejoin resumes at the match ante
+do
+	local ps, code = setup(4, "deathmatch", { starting_lives = "2" })
+	local A = ps[4]; local t = tok(A)
+	start(ps); clear(ps)
+	A.send({ action = "leaveLobby" }); pump(8)
+	local rest = { ps[1], ps[2], ps[3] }
+	local res = blind(rest, { 10, 20, 30 })
+	ok(res[ps[1]] and res[ps[1]].lost == false, "absent: the lowest connected player is spared (absent seat is lowest)")
+	local info; for _, m in ipairs(ps[2].msgs) do if m.action == "enemyInfo" and m.playerId == A.id then info = m end end
+	ok(info and info.lives == 1, "absent: held seat lost a life")
+	for _, p in ipairs(rest) do p.send({ action = "setAnte", ante = 3 }) end; pump(4)
+	res = blind(rest, { 10, 20, 30 })
+	local e = ps[2].last("playerEliminated")
+	ok(e and e.playerId == A.id and e.reason == "absent", "absent: eliminated at 0 lives while away")
+	-- second seat: rejoin after the others moved on resumes at the match ante
+	local ps2, code2 = setup(3, "attrition", {})
+	local B = ps2[3]; local tb = tok(B)
+	start(ps2); clear(ps2)
+	B.send({ action = "leaveLobby" }); pump(8)
+	for i = 1, 2 do ps2[i].send({ action = "setAnte", ante = 4 }) end; pump(4)
+	clear(ps2)
+	B.send({ action = "rejoinLobby", code = code2, reconnectToken = tb }); pump(8); run(2)
+	local r = B.last("resumeGame")
+	ok(r and r.ante >= 4, "rejoin: resumes at the match ante (" .. tostring(r and r.ante) .. "), not where it left")
+end
+
 -- 4. pure client parts
 MP = MP or {}; MP.LOBBY = MP.LOBBY or {}; MP.GAME = { enemies = { old = { username = "stale" } } }
 G = G or {}; G.FUNCS = G.FUNCS or {}

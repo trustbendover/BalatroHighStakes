@@ -717,7 +717,7 @@ local function action_player_eliminated(p)
 	MP.GAME.enemies = MP.GAME.enemies or {}
 	local e = MP.GAME.enemies[p.playerId]
 	if e then e.eliminated = true; e.lives = 0 end
-	if (p.reason == "disconnected" or p.reason == "left") and MP.REJOIN then MP.REJOIN.on_expired(p) end
+	if (p.reason == "disconnected" or p.reason == "left" or p.reason == "absent") and MP.REJOIN then MP.REJOIN.on_expired(p) end
 	MP.GAME.elim_order = MP.GAME.elim_order or {}
 	table.insert(MP.GAME.elim_order, p.playerId)
 	MP.GAME.enemy_focus_id = nil

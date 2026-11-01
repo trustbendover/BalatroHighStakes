@@ -292,7 +292,7 @@ for _, n in ipairs({ 3, 5, 8 }) do
 		local sc = {}
 		for i = 1, #rest do sc[i] = i * 10 end
 		local res = blind(rest, sc)
-		assert(res[rest[1]].lost == true, "successor leaves " .. n .. "p: game continues")
+		assert(res[rest[1]] and res[rest[1]].lost == false, "successor leaves " .. n .. "p: game continues (0.6.9: the 2 held seats take the loss)")
 	end
 	print("ok: host quits, the new host leaves right after -> seat 3 takes over (" .. n .. " players)")
 
