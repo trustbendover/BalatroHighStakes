@@ -143,13 +143,16 @@ async function main() {
   A.send({ action: 'startGame' })
   for (const c of all) await c.waitAction('startGame')
   C.send({ action: 'leaveLobby' })
-  for (const c of [A, B]) await c.waitAction('playerLeft')
+  // 0.6.8.1: the in-game Lua host holds the seat of an in-game leaver (like a disconnect); the TS reference still sends playerLeft
+  for (const c of [A, B]) await c.wait((m) => m.action === 'playerLeft' || (m.action === 'enemyDisconnected' && m.held), 'playerLeft / seat held')
   await sleep(100)
   assert.ok(![A, B].some((c) => c.has('stopGame')), 'game continues after leave')
   for (const c of [A, B]) { c.send({ action: 'newRound' }); c.send({ action: 'readyBlind' }) }
   for (const c of [A, B]) await c.waitAction('startBlind')
   A.send({ action: 'playHand', score: '500', handsLeft: 0 }); B.send({ action: 'playHand', score: '10', handsLeft: 0 })
-  assert.equal((await B.waitAction('endPvP')).lost, true); assert.equal((await A.waitAction('endPvP')).lost, false)
+  // 0.6.8.1 Lua host: the leaver's held seat counts as the lowest score and takes the loss (anti-abuse)
+  const luaHost = !!process.env.SERVER_ENTRY
+  assert.equal((await B.waitAction('endPvP')).lost, !luaHost); assert.equal((await A.waitAction('endPvP')).lost, false)
   console.log('ok: leaver removed, remaining 2 continue')
 
   // PvP timer failure costs a life to that player only

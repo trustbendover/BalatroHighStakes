@@ -67,6 +67,8 @@ const clear = (cs) => { for (const c of cs) c.msgs = [] }
 async function startBlind(cs) { clear(cs); for (const c of cs) { c.send({ action: 'newRound' }); c.send({ action: 'readyBlind' }) } for (const c of cs) await c.waitAction('startBlind') }
 const kill = async (c) => { c.sock.destroy(); await sleep(150) }
 
+// 0.6.8.1 Lua host anti-abuse: a held (away) seat counts as the lowest score at PvP and loses a life
+const luaHost = !!process.env.SERVER_ENTRY
 async function main() {
   for (let i = 0; i < 50; i++) { try { await new Promise((r, j) => { const s = net.connect(PORT, '127.0.0.1', () => { s.destroy(); r() }); s.on('error', j) }); break } catch { await sleep(100) } }
 
@@ -78,11 +80,11 @@ async function main() {
     await A.waitAction('enemyDisconnected'); await B.waitAction('enemyDisconnected')
     await startBlind([A, B])
     A.send({ action: 'playHand', score: '500', handsLeft: 0 }); B.send({ action: 'playHand', score: '100', handsLeft: 0 })
-    assert.equal((await B.waitAction('endPvP')).lost, true); assert.equal((await A.waitAction('endPvP')).lost, false)
+    assert.equal((await B.waitAction('endPvP')).lost, !luaHost); assert.equal((await A.waitAction('endPvP')).lost, false)
     console.log('ok: PvP resolved without the disconnected player')
     const C2 = await connect('Cas'); C2.send({ action: 'rejoinLobby', code, reconnectToken: C.token })
     await C2.waitAction('rejoinedLobby')
-    const r = await C2.waitAction('resumeGame'); assert.equal(r.lateJoin, false); assert.equal(r.ante, 3); assert.equal(r.lives, 3); assert.ok(r.seed)
+    const r = await C2.waitAction('resumeGame'); assert.equal(r.lateJoin, false); assert.equal(r.ante, 3); assert.equal(r.lives, luaHost ? 2 : 3); assert.ok(r.seed)
     assert.ok(!C2.has('endPvP'), 'not in a missed blind')
     await A.waitAction('enemyReconnected')
     await startBlind([A, B, C2])
@@ -97,11 +99,11 @@ async function main() {
     A.send({ action: 'playHand', score: '300', handsLeft: 0 })
     await kill(B)
     C.send({ action: 'playHand', score: '200', handsLeft: 0 })
-    assert.equal((await C.waitAction('endPvP')).lost, true); assert.equal((await A.waitAction('endPvP')).lost, false)
+    assert.equal((await C.waitAction('endPvP')).lost, !luaHost); assert.equal((await A.waitAction('endPvP')).lost, false)
     console.log('ok: mid-blind disconnect does not block PvP resolution')
     const B2 = await connect('Bo'); B2.send({ action: 'joinLobby', code })
     await B2.waitAction('rejoinedLobby'); const r = await B2.waitAction('resumeGame')
-    assert.equal(r.lives, 3); assert.equal(r.inCurrentBlind, false)
+    assert.equal(r.lives, luaHost ? 2 : 3); assert.equal(r.inCurrentBlind, false)
     assert.equal((await B2.waitAction('endPvP')).lost, false)
     console.log('ok: rejoin by name after crash; missed blind is released with no life loss')
     // restarted client sits out nothing (no blind active) and joins the next blind
