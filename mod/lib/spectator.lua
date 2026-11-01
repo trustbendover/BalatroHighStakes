@@ -162,6 +162,7 @@ function SP.refresh()
 	local v = SP.lines(rows, SP.state.follow)
 	SP.view.title = L("k_sp_title", "Spectating")
 	SP.view.follow, SP.view.detail, SP.view.where = v.follow, v.detail, v.where
+	SP.view.rejoin = SP.rejoin_label(SP.state.held, love and love.timer and love.timer.getTime() or os.clock())
 	SP.colours = SP.colours or {}
 	for i = 1, SP.MAX_ROWS do
 		local c = v.cells[i]
@@ -213,9 +214,7 @@ function SP.ui()
 	SP.refresh()
 	local rows = {}
 	for i = 1, SP.MAX_ROWS do rows[#rows + 1] = SP.row_node(i) end
-	return create_UIBox_generic_options({
-		no_back = true,
-		contents = {
+	local contents = {
 			text("title", 0.6, G.C.GOLD),
 			line("follow", 0.5),
 			line("detail", 0.4),
@@ -226,9 +225,14 @@ function SP.ui()
 				{ n = G.UIT.C, config = { minw = 0.2 } },
 				UIBox_button({ button = "mp_sp_next", label = { L("b_sp_next", "Next >") }, minw = 2.2, minh = 0.6, scale = 0.4, col = true }),
 			} },
-			UIBox_button({ button = "mp_sp_back", label = { L("b_sp_back", "Back to lobby") }, colour = G.C.RED, minw = 4.6, minh = 0.7, scale = 0.45 }),
-		},
-	})
+	}
+	-- 0.6.9: you hold a seat in this match: take it back while the grace runs
+	if SP.state.held then contents[#contents + 1] = { n = G.UIT.R, config = { align = "cm", padding = 0.05 }, nodes = {
+				{ n = G.UIT.C, config = { button = "mp_sp_rejoin", colour = G.C.BLUE, r = 0.1, minw = 4.6, minh = 0.7,
+					align = "cm", hover = true, shadow = true }, nodes = {
+					{ n = G.UIT.T, config = { ref_table = SP.view, ref_value = "rejoin", scale = 0.45, colour = G.C.UI.TEXT_LIGHT } } } } } } end
+	contents[#contents + 1] = UIBox_button({ button = "mp_sp_back", label = { L("b_sp_back", "Back to lobby") }, colour = G.C.RED, minw = 4.6, minh = 0.7, scale = 0.45 })
+	return create_UIBox_generic_options({ no_back = true, contents = contents })
 end
 
 function SP.open()
@@ -255,6 +259,12 @@ function SP.register()
 	G.FUNCS.mp_sp_prev = function() follow_step(-1) end
 	G.FUNCS.mp_sp_next = function() follow_step(1) end
 	G.FUNCS.mp_sp_open = function() SP.open() end
+	G.FUNCS.mp_sp_rejoin = function()
+		local h = SP.state.held
+		if not h or not (MP.LOBBY and MP.LOBBY.code) then return end
+		SP.close()
+		MP.ACTIONS.rejoin_held(MP.LOBBY.code, h.token)
+	end
 	G.FUNCS.mp_sp_back = function()
 		SP.close()
 		-- out of a run (game-over screen): back to the lobby like "Return to lobby"
@@ -264,6 +274,7 @@ function SP.register()
 	-- Server: you joined a running match as spectator
 	MP.register_action("spectateStart", function(p)
 		SP.state.joined, SP.state.match = true, true
+		SP.on_spectate_start(p, love and love.timer and love.timer.getTime() or os.clock())
 		MP.GAME.lives = 0
 		pcall(sendWarnMessage, L("k_sp_joined", "You are watching the running match"), "MULTIPLAYER")
 		SP.open()
@@ -320,7 +331,26 @@ end
 
 --- Match state hooks (called from action_handlers)
 function SP.on_match_start() SP.state.match, SP.state.joined, SP.state.follow = true, false, nil end
+--- 0.6.9: spectateStart: drop the enemies of an earlier run (fresh enemyInfo follows) and remember a held seat.
+function SP.on_spectate_start(p, t)
+	if p and p.reset and MP.GAME then MP.GAME.enemies = {} end
+	SP.state.follow = nil
+	local h = p and p.heldSeat
+	SP.state.held = (type(h) == "table" and tonumber(h.left)) and { end_time = t + tonumber(h.left), token = h.token } or nil
+end
+
+--- Pure: label of the Rejoin button ("Rejoin (2:41)"), "" when there is no held seat.
+function SP.rejoin_label(held, t)
+	if not held then return "" end
+	local left = math.max(0, math.floor((held.end_time or 0) - t))
+	if left <= 0 then return L("b_sp_rejoin_gone", "Seat expired") end
+	return L("b_sp_rejoin", "Rejoin (#1#)", { string.format("%d:%02d", math.floor(left / 60), left % 60) })
+end
+
+function SP.on_rejoined() SP.state.joined, SP.state.held = false, nil; if SP.state.active then SP.close() end end
+
 function SP.on_match_end()
+	SP.state.held = nil
 	SP.state.match, SP.state.joined = false, false
 	if SP.state.active then SP.close() end
 end

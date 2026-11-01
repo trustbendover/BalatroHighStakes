@@ -56,7 +56,8 @@ end
 Core.MAX_SPECTATORS = 8
 -- what a spectator may send (everything else is ignored: spectators cannot affect the game)
 Core.SPECTATOR_OK = { username = true, version = true, leaveLobby = true, lobbyInfo = true, keepAlive = true,
-	keepAliveAck = true, stopGame = true, syncClient = true }
+	keepAliveAck = true, stopGame = true, syncClient = true,
+	rejoinLobby = true } -- 0.6.9: "Rejoin" while watching your own held seat
 -- relays an eliminated player may still send (end-of-game screens)
 Core.END_GAME_RELAYS = { getEndGameJokers = true, receiveEndGameJokers = true, getNemesisDeck = true,
 	receiveNemesisDeck = true, endGameStatsRequested = true, nemesisEndGameStats = true }
@@ -892,6 +893,12 @@ end
 function Server:leave(c)
 	local L = c.lobby
 	if not L then return end
+	-- 0.6.9: leaving a running match through the menu holds the seat exactly like a lost connection
+	-- (grace timer, rejoin by code / Steam / "Rejoin" in the spectator panel); expiry still eliminates
+	if L.isInGame and not c.spectator and not c.eliminated and not L.migration
+		and find(L.players, function(p) return p == c end) then
+		return self:disconnect(c)
+	end
 	local was = find(L.players, function(p) return p == c end)
 	remove_value(L.players, c)
 	local was_eliminated = c.eliminated
@@ -1008,6 +1015,12 @@ end
 
 function Server:rejoin(L, c, token)
 	local slot = find(L.slots, function(s) return s.reconnectToken == token end)
+	if slot and c.spectator and c.lobby == L then
+		-- 0.6.9: a seat holder watching the match takes its seat back
+		remove_value(L.players, c)
+		c.spectator, c.lobby = nil, nil
+		self:broadcast(L, { action = "spectatorLeft", playerId = c.id, username = c.username })
+	end
 	if not slot and L.isInGame then
 		local stale = find(L.players, function(p) return p.reconnectToken == token and p ~= c end)
 		if stale then slot = self:take_over(L, stale)
@@ -1059,12 +1072,23 @@ function Server:spectate(L, c)
 	if #self:spectators(L) >= Core.MAX_SPECTATORS then
 		return sendA(c, { action = "error", message = "Too many spectators in this lobby." })
 	end
+	-- 0.6.9: a seat holder may watch; its held seat must not be changed by the spectator flags
+	local held, held_tok = nil, false
+	for _, s in ipairs(L.slots) do
+		if s.old == c then s.old = copy({}, c) end
+		if s.old.reconnectToken == c.reconnectToken then held, held_tok = s, true
+		elseif not held and base_name(s.old.username) == base_name(c.username) then held = s end
+	end
 	c.spectator, c.eliminated, c.lives, c.isReady, c.sitOut, c.inPvp = true, true, 0, false, true, false
 	c.isReadyLobby, c.lobby = true, L
 	L.players[#L.players + 1] = c
 	sendA(c, { action = "joinedLobby", code = L.code, type = L.gameMode, reconnectToken = c.reconnectToken, spectator = true })
 	sendA(c, copy(copy({ gamemode = L.gameMode }, L.options), { action = "lobbyOptions" }))
-	sendA(c, { action = "spectateStart", code = L.code, gameMode = L.gameMode, blindActive = L.blindActive })
+	local grace = Core.rejoin_grace(L.options, L.gameMode)
+	local hold = (held and held.since and not held.old.eliminated) and math.max(0, math.floor(grace - (self.now() - held.since))) or nil
+	self:lobby_info(L) -- names first, so the panel shows them immediately
+	sendA(c, { action = "spectateStart", code = L.code, gameMode = L.gameMode, blindActive = L.blindActive, reset = true,
+		heldSeat = hold and { left = hold, token = held_tok and held.old.reconnectToken or nil } or nil })
 	for _, o in ipairs(L.players) do if o ~= c and not o.spectator then sendA(c, self:enemy_info(o, true)) end end
 	for _, s in ipairs(L.slots) do if not s.old.spectator then sendA(c, self:enemy_info(s.old, true)) end end
 	self:koth_broadcast(L)
@@ -1080,7 +1104,14 @@ function Server:join(L, c, want_spectate)
 	if L.isInGame then
 		local name = base_name(c.username)
 		local slot = find(L.slots, function(s) return base_name(s.old.username) == name end)
-		if slot then return self:reclaim(L, c, slot) end
+		if slot and not want_spectate then
+			if c.spectator and c.lobby == L then -- 0.6.9: watching your own held seat, now taking it back
+				remove_value(L.players, c); c.spectator, c.lobby = nil, nil
+				self:broadcast(L, { action = "spectatorLeft", playerId = c.id, username = c.username })
+			end
+			return self:reclaim(L, c, slot)
+		end
+		if slot then return self:spectate(L, c) end
 		local stale = find(L.players, function(p) return base_name(p.username) == name and p ~= c end)
 		if stale then
 			local s2 = self:take_over(L, stale)

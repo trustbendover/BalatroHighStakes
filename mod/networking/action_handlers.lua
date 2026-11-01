@@ -130,7 +130,9 @@ local function action_joinedLobby(p)
 	MP.LOBBY.type = type
 	MP.LOBBY.ready_to_start = false
 	-- Store reconnect info for potential future reconnection
-	if token then reconnectToken = token end
+	-- 0.6.9: watching a match where we hold a seat must not replace that seat's token
+	local keep = p.spectator and reconnectToken and lastLobbyCode == code
+	if token and not keep then reconnectToken = token end
 	lastLobbyCode = code
 	save_reconnect_info()
 	MP.ACTIONS.sync_client()
@@ -146,6 +148,7 @@ local function action_rejoinedLobby(p)
 	reconnectToken = token
 	lastLobbyCode = code
 	save_reconnect_info()
+	if MP.SPECTATE then MP.SPECTATE.on_rejoined() end
 	MP.self_reconnect_countdown = nil
 	MP.GAME.timer_started = false
 	MP.GAME.nemesis_timer_started = false
@@ -714,7 +717,7 @@ local function action_player_eliminated(p)
 	MP.GAME.enemies = MP.GAME.enemies or {}
 	local e = MP.GAME.enemies[p.playerId]
 	if e then e.eliminated = true; e.lives = 0 end
-	if p.reason == "disconnected" and MP.REJOIN then MP.REJOIN.on_expired(p) end
+	if (p.reason == "disconnected" or p.reason == "left") and MP.REJOIN then MP.REJOIN.on_expired(p) end
 	MP.GAME.elim_order = MP.GAME.elim_order or {}
 	table.insert(MP.GAME.elim_order, p.playerId)
 	MP.GAME.enemy_focus_id = nil
@@ -1482,6 +1485,17 @@ function MP.ACTIONS.create_lobby(gamemode)
 	})
 end
 
+--- 0.6.9: take a held seat back (Rejoin in the spectator panel)
+function MP.ACTIONS.rejoin_held(code, token)
+	token = token or (lastLobbyCode == code and reconnectToken) or nil
+	if token then Client.send({ action = "rejoinLobby", code = code, reconnectToken = token })
+	else Client.send({ action = "joinLobby", code = code }) end
+end
+
+function MP.ACTIONS.spectate_lobby(code)
+	Client.send({ action = "joinLobby", code = code, spectate = true })
+end
+
 function MP.ACTIONS.join_lobby(code)
 	Client.send({
 		action = "joinLobby",
@@ -1507,11 +1521,20 @@ function MP.ACTIONS.lobby_info()
 	})
 end
 
+--- 0.6.9: leaving a running match keeps the seat (the server holds it for the rejoin grace),
+--- so the reconnect info is kept too; outside a match (or as spectator / out) it is cleared as before.
+function MP.ACTIONS.keeps_seat_on_leave()
+	local SP = MP.SPECTATE
+	return (SP and SP.state.match and not SP.state.joined and MP.GAME and (MP.GAME.lives or 0) > 0) and true or false
+end
+
 function MP.ACTIONS.leave_lobby()
-	-- Clear reconnect state on voluntary leave
-	reconnectToken = nil
-	lastLobbyCode = nil
-	clear_reconnect_info()
+	if not MP.ACTIONS.keeps_seat_on_leave() then
+		reconnectToken = nil
+		lastLobbyCode = nil
+		clear_reconnect_info()
+	end
+	if MP.SPECTATE then MP.SPECTATE.state.joined = false end
 	Client.send({
 		action = "leaveLobby",
 	})

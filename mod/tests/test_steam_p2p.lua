@@ -244,12 +244,14 @@ end
 dmround(dm, { 100, 200, 300, 400, 500 })
 ok(dm[1].last("loseGame") and dm[2].last("endPvP"), "all 5 in one PvP: lowest (the host) is out, the match goes on")
 dm[5].send({ action = "leaveLobby" }); pump(10)
-local el = dm[2].last("playerEliminated")
-ok(el and el.username == "dm_5" and el.reason == "left", "a leaver is eliminated (reason left)")
+local hd = dm[2].last("enemyDisconnected")
+ok(hd and hd.username == "dm_5" and hd.held and dm[2].last("playerEliminated").username ~= "dm_5", "0.6.9: an in-game leaver keeps a held seat (not eliminated yet)")
 NET.dead = { dm_4 = true }
 for _ = 1, 40 do T = T + 1; pump(1) end
 NET.dead = nil
-el = dm[2].last("playerEliminated")
+local el = dm[2].last("playerEliminated")
+local n5 = 0; for _, m in ipairs(dm[2].msgs) do if m.action == "playerEliminated" and m.username == "dm_5" then n5 = n5 + 1 end end
+ok(n5 == 1, "0.6.9: the leaver's held seat is eliminated once its grace runs out")
 ok(el and el.username == "dm_4" and el.reason == "disconnected", "disconnect past timeout + grace is eliminated")
 for _, p in ipairs(dm) do p.msgs = {} end
 dm[1].send({ action = "stopGame" }); pump(10)
