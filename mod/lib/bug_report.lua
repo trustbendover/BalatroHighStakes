@@ -1,7 +1,8 @@
 -- Balatro High Stakes: in-game "Report a bug" (0.6.8). GPL-3.0.
 -- Main menu / lobby only (never during a match). Collects versions, lobby settings, mods and a log tail,
 -- strips personal data, saves the full report in <save dir>/bug_reports/ and opens a prefilled GitHub
--- "new issue" page in the browser. Nothing is ever sent automatically: no tokens, no network calls.
+-- "new issue" page in the browser. Since the Discord update a short sanitized copy also goes to the
+-- Discord #bug-reports channel (lib/discord_relay.lua); nothing else is sent.
 MP.BUG_REPORT = MP.BUG_REPORT or {}
 local BR = MP.BUG_REPORT
 
@@ -13,11 +14,11 @@ BR.LOG_LINES_URL = 25 -- issue body
 BR.DIR = "bug_reports"
 
 BR.TEXT = {
-	en = { button = "Report a bug", title = "Report a bug", f_title = "Short title", f_desc = "What happened? (what did you do, what did you expect)",
+	en = { discord = "Join our Discord", button = "Report a bug", title = "Report a bug", f_title = "Short title", f_desc = "What happened? (what did you do, what did you expect)",
 		submit = "Open bug report", cancel = "Cancel", need_title = "Please enter a short title", ph_title = "Type a short title...", ph_desc = "Describe what happened...", hint = "Click to type",
 		saved = "Report saved. Your browser opens GitHub; drag the report file from the opened folder into the issue.",
 		drag = "Full sanitized report: please drag the file %s (from the folder that just opened) into this issue." },
-	nl = { button = "Bug melden", title = "Bug melden", f_title = "Korte titel", f_desc = "Wat gebeurde er? (wat deed je, wat verwachtte je)",
+	nl = { discord = "Join onze Discord", button = "Bug melden", title = "Bug melden", f_title = "Korte titel", f_desc = "Wat gebeurde er? (wat deed je, wat verwachtte je)",
 		submit = "Bugmelding openen", cancel = "Annuleren", need_title = "Vul een korte titel in", ph_title = "Typ een korte titel...", ph_desc = "Beschrijf wat er gebeurde...", hint = "Klik om te typen",
 		saved = "Melding opgeslagen. Je browser opent GitHub; sleep het bestand uit de geopende map in de melding.",
 		drag = "Full sanitized report: please drag the file %s (from the folder that just opened) into this issue." },
@@ -31,6 +32,10 @@ function BR.T(k) local t = BR.TEXT[BR.lang()] or BR.TEXT.en; return t[k] or BR.T
 
 local function esc(s) return (tostring(s):gsub("([%^%$%(%)%%%.%[%]%*%+%-%?])", "%%%1")) end
 
+function BR.mod_version()
+	return tostring(MP.MOD_VERSION or (SMODS and SMODS.Mods and SMODS.Mods.Multiplayer and SMODS.Mods.Multiplayer.version) or "?")
+end
+
 --- Remove personal data. ctx.names / ctx.codes: extra literal strings (player names, lobby codes) to hide.
 function BR.sanitize(text, ctx)
 	text = tostring(text or "")
@@ -42,8 +47,15 @@ function BR.sanitize(text, ctx)
 	-- Steam IDs (64-bit, and [U:1:n] style)
 	text = text:gsub("7656119%d%d%d%d%d%d%d%d%d%d", "STEAMID")
 	text = text:gsub("%[U:%d:%d+%]", "[STEAMID]")
-	-- IPv4 (+ port)
+	-- IPv4 (+ port). 0.6.8.1: the mod's own 4-part version (e.g. 0.6.8.1) is not an IP address
+	local keep = {}
+	for _, v in ipairs({ ctx.version or BR.mod_version() }) do
+		v = tostring(v or ""):gsub("~.*$", "")
+		if v:match("^%d+%.%d+%.%d+%.%d+$") then keep[#keep + 1] = v end
+	end
+	for i, v in ipairs(keep) do text = text:gsub("%f[%d%.]" .. esc(v) .. "%f[^%d%.]", "\1VER" .. i .. "\1") end
 	text = text:gsub("%d+%.%d+%.%d+%.%d+", "IP")
+	for i, v in ipairs(keep) do text = text:gsub("\1VER" .. i .. "\1", v) end
 	-- tokens / secrets / hashes passed as key=value or key: value
 	for _, k in ipairs({ "token", "rejoin_token", "secret", "password", "encryptID", "serversideConnectionID", "hostHash", "guestHash", "auth" }) do
 		text = text:gsub("(" .. k .. "%s*[=:]%s*)[^%s,;%)\"']+", "%1REDACTED")
@@ -169,6 +181,8 @@ function BR.submit(title, desc)
 	local url = BR.build_url(BR.sanitize(title, ctx), body)
 	pcall(love.system.openURL, url)
 	BR.last = { fname = fname, url = url }
+	-- 0.6.8.1+: also post a short sanitized copy to the Discord #bug-reports channel (silent if offline / rate limited)
+	if MP.DISCORD_RELAY then pcall(MP.DISCORD_RELAY.send, data, ctx) end
 	return fname, url
 end
 
@@ -429,6 +443,7 @@ end
 function BR.add_menu_button()
 	pcall(function()
 		if G.MP3P_BUGREPORT_UI then G.MP3P_BUGREPORT_UI:remove(); G.MP3P_BUGREPORT_UI = nil end
+		if G.MP3P_DISCORD_UI then G.MP3P_DISCORD_UI:remove(); G.MP3P_DISCORD_UI = nil end
 		if not (BR.allowed() and G.ROOM_ATTACH) then return end
 		if MP.PATCH_NOTES and MP.PATCH_NOTES.menu_buttons_visible and not MP.PATCH_NOTES.menu_buttons_visible() then return end
 		local y = ((MP.PATCH_NOTES and MP.PATCH_NOTES.menu_button_y) or 1.3) + 0.65
@@ -437,6 +452,13 @@ function BR.add_menu_button()
 				UIBox_button({ label = { BR.T("button") }, button = "mp_bug_report_open", colour = G.C.RED, minw = 2.6, minh = 0.5, scale = 0.38 }),
 			} },
 			config = { align = "tri", bond = "Weak", offset = { x = 0, y = y }, major = G.ROOM_ATTACH },
+		})
+		-- Discord invite, right under Report a bug (Discord blurple)
+		G.MP3P_DISCORD_UI = UIBox({
+			definition = { n = G.UIT.ROOT, config = { align = "cm", colour = G.C.CLEAR }, nodes = {
+				UIBox_button({ label = { BR.T("discord") }, button = "mp_open_discord", colour = { 0.345, 0.396, 0.949, 1 }, minw = 2.6, minh = 0.5, scale = 0.38 }),
+			} },
+			config = { align = "tri", bond = "Weak", offset = { x = 0, y = y + 0.65 }, major = G.ROOM_ATTACH },
 		})
 	end)
 end

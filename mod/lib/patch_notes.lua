@@ -367,7 +367,7 @@ PN.MENU_STACK_FALLBACK = 1.2 -- 4 lines x 0.3, if no box can be measured
 function PN.menu_stack_bottom(boxes, root, self_box)
 	local bottom
 	for _, b in ipairs(boxes or {}) do
-		local al, role = b ~= self_box and b ~= (G and G.MP3P_BUGREPORT_UI) and b.alignment, b.role
+		local al, role = b ~= self_box and b ~= (G and G.MP3P_BUGREPORT_UI) and b ~= (G and G.MP3P_DISCORD_UI) and b.alignment, b.role
 		if al and al.type == "tri" and role and role.major == root then
 			local y = ((al.offset and al.offset.y) or 0) + ((b.T and b.T.h) or 0)
 			if not bottom or y > bottom then bottom = y end
@@ -387,12 +387,13 @@ function PN.remove_menu_buttons()
 	pcall(function()
 		if G.MP3P_PATCHNOTES_UI then G.MP3P_PATCHNOTES_UI:remove(); G.MP3P_PATCHNOTES_UI = nil end
 		if G.MP3P_BUGREPORT_UI then G.MP3P_BUGREPORT_UI:remove(); G.MP3P_BUGREPORT_UI = nil end
+		if G.MP3P_DISCORD_UI then G.MP3P_DISCORD_UI:remove(); G.MP3P_DISCORD_UI = nil end
 	end)
 end
 function PN.update_menu_buttons()
 	local want = PN.menu_buttons_visible()
 	if want and not G.MP3P_PATCHNOTES_UI then PN.add_menu_button()
-	elseif not want and (G.MP3P_PATCHNOTES_UI or G.MP3P_BUGREPORT_UI) then PN.remove_menu_buttons() end
+	elseif not want and (G.MP3P_PATCHNOTES_UI or G.MP3P_BUGREPORT_UI or G.MP3P_DISCORD_UI) then PN.remove_menu_buttons() end
 end
 
 function PN.add_menu_button()

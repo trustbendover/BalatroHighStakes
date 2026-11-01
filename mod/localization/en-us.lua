@@ -1254,6 +1254,7 @@ return {
 			k_hs_kofi = "Like it? Support the mod on Ko-fi",
 			b_hs_kofi = "Ko-fi",
 			b_hs_github = "GitHub",
+			b_hs_discord = "Join our Discord",
 			b_hs_original = "Original mod",
 			k_hs_based_on = "Based on Balatro Multiplayer by the Balatro Multiplayer team (GPL-3.0)",
 			k_hs_full_credits = "Full credits in CREDITS.md",

@@ -237,6 +237,7 @@ return {
 			k_hs_kofi = "Vind je hem leuk? Steun de mod op Ko-fi",
 			b_hs_kofi = "Ko-fi",
 			b_hs_github = "GitHub",
+			b_hs_discord = "Join onze Discord",
 			b_hs_original = "Originele mod",
 			k_hs_based_on = "Gebaseerd op Balatro Multiplayer van het Balatro Multiplayer-team (GPL-3.0)",
 			k_hs_full_credits = "Alle credits in CREDITS.md",

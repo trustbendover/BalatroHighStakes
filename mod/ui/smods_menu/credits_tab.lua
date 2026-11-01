@@ -10,6 +10,7 @@ CR.FALLBACK = {
 	k_hs_kofi = "Like it? Support the mod on Ko-fi",
 	b_hs_kofi = "Ko-fi",
 	b_hs_github = "GitHub",
+	b_hs_discord = "Join our Discord",
 	b_hs_original = "Original mod",
 	k_hs_based_on = "Based on Balatro Multiplayer by the Balatro Multiplayer team (GPL-3.0)",
 	k_hs_full_credits = "Full credits in CREDITS.md",
@@ -45,6 +46,7 @@ function MP.UI.create_credits_tab()
 				UIBox_button({ minw = 3, button = "open_kofi", label = { CR.text("b_hs_kofi") }, colour = G.C.RED, col = true }),
 				{ n = G.UIT.B, config = { w = 0.2, h = 0.1 } },
 				UIBox_button({ minw = 3, button = "bmp_github", label = { CR.text("b_hs_github") }, colour = G.C.CHIPS or G.C.BLUE, col = true }),
+				UIBox_button({ minw = 3, button = "mp_open_discord", label = { CR.text("b_hs_discord") }, colour = { 0.345, 0.396, 0.949, 1 }, col = true }),
 			}, 0.1),
 			-- the original mod, lightly: one small grey line (names are in CREDITS.md)
 			row({ T(CR.text("k_hs_based_on"), 0.3, grey) }, 0.02),
