@@ -292,7 +292,9 @@ for _, n in ipairs({ 3, 5, 8 }) do
 		local sc = {}
 		for i = 1, #rest do sc[i] = i * 10 end
 		local res = blind(rest, sc)
-		assert(res[rest[1]] and res[rest[1]].lost == false, "successor leaves " .. n .. "p: game continues (0.6.9: the 2 held seats take the loss)")
+		assert(res[rest[1]] and (res[rest[1]].lost or res[rest[1]].lost == false), "successor leaves " .. n .. "p: game continues (0.6.9: held seats count as lowest)")
+		local nl = 0; for _, p in ipairs(rest) do if res[p] and res[p].lost then nl = nl + 1 end end
+		assert(nl <= 1, "successor leaves " .. n .. "p: absent seats take losing places first")
 	end
 	print("ok: host quits, the new host leaves right after -> seat 3 takes over (" .. n .. " players)")
 
@@ -343,7 +345,7 @@ do
 	ok(hosts == 1 and ps[2].r.mode == "host" and ps[3].r.mode == "guest" and ps[4].r.host == ps[2].name, "split brain resolved: one host (seat 2)")
 	run(Core.MIGRATION_HOLD + 1)
 	local res = blind({ ps[2], ps[3], ps[4] }, { 10, 20, 30 })
-	ok(res[ps[2]].lost == true, "game continues after the split brain")
+	ok(res[ps[2]] and res[ps[2]].lost == false, "game continues after the split brain (0.6.9: the crashed host's held seat is lowest)")
 end
 
 -- ===== 7. a later guest join reaches the new host
@@ -419,9 +421,14 @@ for _, n in ipairs({ 2, 3, 5, 8 }) do
 		assert(NET.lobbies[ps[2].r.lobby].owner == ps[2].name, "unfreeze " .. n .. "p: old host handed Steam ownership to the new host")
 		if n >= 3 and phase == "shop" then
 			local sc = {}; for i = 1, n do sc[i] = 1000 - i end
+			local gone = {} -- 0.6.9: seats that lost their last life while away (absent = lowest)
+			for _, q in ipairs(ps) do for _, m in ipairs(q.msgs) do if m.action == "playerEliminated" and m.reason == "absent" then gone[m.playerId] = true end end end
 			local res = blind(ps, sc)
 			if os.getenv("DBG") then for _, p in ipairs(ps) do local acts = {} for _, m in ipairs(p.msgs) do acts[#acts+1] = m.action end print(p.name, p.r.mode, table.concat(acts, ",")) end end
-			for _, p in ipairs(ps) do assert(res[p], "unfreeze " .. n .. "p: " .. p.name .. " (incl. old host) plays the next PvP") end
+			for _, p in ipairs(ps) do
+				-- 0.6.9: a seat that was away at PvPs may have lost its last life meanwhile (absent = lowest)
+				assert(res[p] or gone[p.id], "unfreeze " .. n .. "p: " .. p.name .. " (incl. old host) plays the next PvP")
+			end
 		end
 	end
 	print("ok: frozen host (still in Steam) replaced in <= " .. FROZEN[n] .. " s, in the shop and mid-PvP; it steps down after unfreezing (" .. n .. " players)")

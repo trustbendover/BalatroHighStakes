@@ -501,7 +501,11 @@ end
 --- and lose a life (not during host migration; Teams has its own team rules).
 function Server:absent_seats(L)
 	if L.migration or self:teams_active(L) then return {} end
-	return filter(L.slots, function(s) return not s.migration and not s.old.eliminated and not s.old.spectator and (s.old.lives or 0) > 0 end)
+	local here = {}
+	for _, p in ipairs(L.players) do if p.id and not p.spectator then here[p.id] = true end end
+	-- a stale slot of a player who is back (same id) is not absent
+	return filter(L.slots, function(s) return not s.migration and not here[s.old.id] and not s.old.eliminated
+		and not s.old.spectator and (s.old.lives or 0) > 0 end)
 end
 function Server:penalize_absent(L, absent)
 	for _, sl in ipairs(absent) do
@@ -550,8 +554,16 @@ function Server:try_resolve_pvp(L)
 		roundLosers = filter(alive, function(p) return lose[p.id] end)
 		-- 0.6.9: absent seats are the lowest scores; they take the losing places first
 		if #absent > 0 and Core.PVP then
-			local k = Core.PVP.loser_count(#alive + #absent)
-			if #absent >= k then roundLosers = {} end
+			local k = Core.PVP.loser_count(#alive + #absent) - #absent
+			if k <= 0 then roundLosers = {}
+			else
+				-- only the k lowest connected scores still lose (ties at the cut are spared)
+				roundLosers = filter(alive, function(p)
+					local n = 0
+					for _, q in ipairs(alive) do if not s_gt(q.score, p.score) then n = n + 1 end end
+					return n <= k
+				end)
+			end
 		end
 	end
 	local koth_ev = self:koth_resolve(L, alive, roundLosers)
