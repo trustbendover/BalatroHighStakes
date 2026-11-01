@@ -1,14 +1,14 @@
 -- luajit tests/test_discord_relay.lua (run from mod/): Discord bug relay (payload, limits, rate limit,
 -- privacy) + the 4-part version exemption in the sanitizer. Never prints the webhook URL.
 local function ok(c, m) assert(c, m); print("ok: " .. m) end
-MP = { MOD_VERSION = "0.6.8.1", LOBBY = {} }
+MP = { MOD_VERSION = "0.6.8.2", LOBBY = {} }
 G = { FUNCS = {} }
 local BR = dofile("lib/bug_report.lua")
 local DR = dofile("lib/discord_relay.lua")
 
 -- sanitizer: own version kept, real IPs still removed
-local s = BR.sanitize("Mod 0.6.8.1 | v0.6.8.1~3P | host 10.0.0.12:5000 | 192.168.1.20")
-ok(s:find("0.6.8.1", 1, true) and not s:find("10.0.0.12", 1, true) and not s:find("192.168", 1, true), "own 4-part version kept, IPs removed")
+local s = BR.sanitize("Mod 0.6.8.2 | v0.6.8.2~3P | host 10.0.0.12:5000 | 192.168.1.20")
+ok(s:find("0.6.8.2", 1, true) and not s:find("10.0.0.12", 1, true) and not s:find("192.168", 1, true), "own 4-part version kept, IPs removed")
 
 -- relay URL only, no webhook anywhere
 local src = io.open("lib/discord_relay.lua"):read("*a")
@@ -21,7 +21,7 @@ local p = DR.payload(data, { names = { "Kevin" }, codes = {} }, { mode = "deathm
 local all = p.description .. p.version .. p.mode .. p.players .. p.log
 ok(#p.log <= 900, "log <= 900")
 for _, bad in ipairs({ "Kevin", "jdoe", "76561198012345678", "192.168", "abc123def", "Jane" }) do ok(not all:find(bad, 1, true), "no " .. bad .. " in payload") end
-ok(p.version == "0.6.8.1" and p.mode == "deathmatch" and p.players == "5", "version/mode/players")
+ok(p.version == "0.6.8.2" and p.mode == "deathmatch" and p.players == "5", "version/mode/players")
 ok(p.description:sub(-3) == "...", "long description cut")
 
 -- rate limit: 1 per 2 minutes, 5 per session; offline (no https) = silent false
