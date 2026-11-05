@@ -35,7 +35,7 @@ ok(#PN.pending("0.6.0", "0.7.20", many) == PN.MAX_VERSIONS, "many skipped versio
 
 -- real files
 local notes, versions = PN.load(function(p) return dofile(p) end)
-ok(notes["0.6.9"] and notes["0.6.8"] and notes["0.6.7"] and notes["0.6.8.1"] and versions[1] == "0.6.9", "loads patchnotes/0.6.9.lua and older notes from the index")
+ok(notes["0.6.9.1"] and notes["0.6.8"] and notes["0.6.7"] and notes["0.6.8.1"] and versions[1] == "0.6.9.1", "loads patchnotes/0.6.9.1.lua and older notes from the index")
 for _, v in ipairs(versions) do
 	for _, lang in ipairs({ "en", "nl" }) do
 		local n = 0

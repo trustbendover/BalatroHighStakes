@@ -153,6 +153,11 @@ const startGameAction = (client: Client) => {
 		client.sendAction({ action: "error", message: why });
 		return;
 	}
+	const waiting = lobby.players.slice(1).filter((p) => !p.isReadyLobby).length;
+	if (waiting > 0) {
+		client.sendAction({ action: "error", message: `Waiting for ${waiting} player(s) to ready up.` });
+		return;
+	}
 	lobby.startPlayers = lobby.players.length;
 
 	const lives = lobby.options.starting_lives
@@ -303,7 +308,7 @@ const setAnteAction = (
 };
 
 // TODO: Fix this
-const serverVersion = "0.6.9";
+const serverVersion = "0.6.9.1";
 /** Verifies the client version and allows connection if it matches the server's */
 const versionAction = (
 	{ version }: ActionHandlerArgs<ActionVersion>,

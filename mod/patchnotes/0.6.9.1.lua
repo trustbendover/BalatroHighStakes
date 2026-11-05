@@ -1,6 +1,6 @@
--- Patch notes for 0.6.9 (see patchnotes/README.md). Max 5 short one-line bullets in total.
+-- Patch notes for 0.6.9.1 (see patchnotes/README.md). Max 5 short one-line bullets in total.
 return {
-	version = "0.6.9",
+	version = "0.6.9.1",
 	en = {
 		new = {
 			"{C:green}Rematch{}: same lobby after the match, ready again",

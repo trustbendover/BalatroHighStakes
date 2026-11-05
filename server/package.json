@@ -1,5 +1,5 @@
 {
-	"version": "0.6.9",
+	"version": "0.6.9.1",
 	"scripts": {
 		"build": "tsc",
 		"test": "npm run build && node test/threePlayer.test.mjs && node test/rejoinLateJoin.test.mjs && node test/koth.test.mjs && node test/multiPlayer.test.mjs && node test/deathmatch.test.mjs && node test/rematch.test.mjs",
