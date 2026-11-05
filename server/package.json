@@ -3,7 +3,7 @@
 	"scripts": {
 		"build": "tsc",
 		"test": "npm run build && node test/threePlayer.test.mjs && node test/rejoinLateJoin.test.mjs && node test/koth.test.mjs && node test/multiPlayer.test.mjs && node test/deathmatch.test.mjs",
-		"test:lua": "SERVER_ENTRY=test/luaBridge.mjs node test/threePlayer.test.mjs && SERVER_ENTRY=test/luaBridge.mjs node test/rejoinLateJoin.test.mjs && SERVER_ENTRY=test/luaBridge.mjs node test/koth.test.mjs && SERVER_ENTRY=test/luaBridge.mjs node test/multiPlayer.test.mjs && node test/deathmatch.test.mjs"
+		"test:lua": "SERVER_ENTRY=test/luaBridge.mjs node test/threePlayer.test.mjs && SERVER_ENTRY=test/luaBridge.mjs node test/rejoinLateJoin.test.mjs && SERVER_ENTRY=test/luaBridge.mjs node test/koth.test.mjs && SERVER_ENTRY=test/luaBridge.mjs node test/multiPlayer.test.mjs && SERVER_ENTRY=test/luaBridge.mjs node test/deathmatch.test.mjs"
 	},
 	"dependencies": {
 		"better-sqlite3": "^12.10.0",

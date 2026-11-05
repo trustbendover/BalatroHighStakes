@@ -3,7 +3,7 @@ import { InsaneInt } from "./InsaneInt.js";
 import GameModes from "./GameMode.js";
 import { type KothEvent, type KothState, kothConfig, kothSnapshot, newKothState, resolveKoth } from "./koth.js";
 import { type Team, TEAM_LETTERS, assignTeams, resolveTeams, teamsPlan } from "./teams.js";
-import { pvpLosers } from "./pvpRules.js";
+import { loserCount, pvpLosers } from "./pvpRules.js";
 import type {
 	ActionLobbyInfo,
 	ActionServerToClient,
@@ -159,8 +159,18 @@ class Lobby {
 		return Lobbies.get(code);
 	};
 
-	/** Voluntary leave — no grace period */
+	/** Voluntary leave. In a Deathmatch the seat is held for the grace window, same as a drop.
+	 *  Expiry still eliminates; being away when a PvP resolves costs a life. */
 	leave = (client: Client) => {
+		if (
+			this.isInGame &&
+			this.gameMode === "deathmatch" &&
+			!client.eliminated &&
+			this.players.some((p) => p.id === client.id)
+		) {
+			this.disconnect(client);
+			return;
+		}
 		const wasMember = this.players.some((p) => p.id === client.id);
 		this.players = this.players.filter((p) => p.id !== client.id);
 		client.setLobby(null);
@@ -531,6 +541,34 @@ class Lobby {
 	/** Held seats of players who are away but still alive. */
 	awayAlive = () => this.disconnectedSlots.filter((s) => !s.old.eliminated && s.old.lives > 0);
 
+	/** Deathmatch only: a held seat is "absent" at PvP (Teams keeps its own team rules). */
+	private deathmatchAbsent = (): DisconnectedSlot[] => {
+		if (this.gameMode !== "deathmatch") return [];
+		const here = new Set(this.players.map((p) => p.id));
+		return this.disconnectedSlots.filter(
+			(s) => !here.has(s.old.id) && !s.old.eliminated && s.old.lives > 0,
+		);
+	};
+
+	private penalizeDeathmatchAbsent = (absent: DisconnectedSlot[]) => {
+		for (const sl of absent) {
+			const o = sl.old;
+			o.lives = Math.max(0, (o.lives || 1) - 1);
+			if (o.lives <= 0) {
+				o.eliminated = true;
+				this.elimOrder.push(o.id);
+				this.broadcastAction({
+					action: "playerEliminated",
+					playerId: o.id,
+					username: o.username,
+					reason: "absent",
+				});
+			}
+			this.broadcastAction(this.enemyInfoFor(o, true));
+		}
+		if (absent.length > 0) this.deathmatchBroadcast();
+	};
+
 	/** Players taking part in the current PvP blind (connected, alive, not sitting out). */
 	participants = (): Client[] => this.alivePlayers().filter((p) => !p.sitOut);
 
@@ -815,8 +853,11 @@ class Lobby {
 		if (!alive.every((p) => p.pvpDone || p.handsLeft < 1)) return;
 		this.blindActive = false;
 		for (const p of this.players) p.inPvp = false;
+		const absent = this.deathmatchAbsent();
 		if (alive.length === 1) {
-			// Opponents are away: nobody loses a life this blind
+			// The one player still here does not lose a life. An absent Deathmatch seat does.
+			this.penalizeDeathmatchAbsent(absent);
+			if (absent.length > 0 && this.checkGameOver()) return;
 			const p = alive[0];
 			p.firstReady = false;
 			p.pvpDone = false;
@@ -835,10 +876,23 @@ class Lobby {
 			// 2-5 players: the single lowest score; 6-8: the bottom two (pvpRules.ts)
 			const ids = new Set(pvpLosers(alive.map((p) => ({ id: p.id, score: p.score })), (a, b) => !a.greaterThan(b)));
 			roundLosers = alive.filter((p) => ids.has(p.id));
+			// Absent Deathmatch seats are the lowest scores and take the losing places first.
+			if (absent.length > 0) {
+				const k = loserCount(alive.length + absent.length) - absent.length;
+				if (k <= 0) roundLosers = [];
+				else {
+					roundLosers = alive.filter((p) => {
+						let n = 0;
+						for (const q of alive) if (!q.score.greaterThan(p.score)) n++;
+						return n <= k;
+					});
+				}
+			}
 		}
 		const kothEv = this.kothResolve(alive, roundLosers);
 		if (kothEv?.shieldedId) roundLosers = roundLosers.filter((p) => p.id !== kothEv.shieldedId);
 		for (const p of roundLosers) p.loseLife("round");
+		this.penalizeDeathmatchAbsent(absent);
 
 		for (const p of alive) {
 			p.firstReady = false;

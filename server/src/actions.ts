@@ -11,7 +11,7 @@ export type ActionRejoinFailed = { action: 'rejoinFailed'; message: string }
 export type ActionPlayerJoined = { action: 'playerJoined'; playerId: string; username: string }
 export type ActionResumeRestarted = { action: 'resumeRestarted' }
 export type ActionPlayerLeft = { action: 'playerLeft'; playerId: string; username: string }
-export type ActionPlayerEliminated = { action: 'playerEliminated'; playerId: string; username: string; reason?: 'left' | 'disconnected' }
+export type ActionPlayerEliminated = { action: 'playerEliminated'; playerId: string; username: string; reason?: 'left' | 'disconnected' | 'absent' }
 export type ActionLobbyInfo = {
 	action: 'lobbyInfo'
 	host: string

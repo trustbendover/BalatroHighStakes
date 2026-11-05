@@ -115,26 +115,59 @@ const dmBlind = (cs, all) => blind(cs, (c) => (all.indexOf(c) + 1) * 100)
 async function main() {
   for (let i = 0; i < 50; i++) { try { await new Promise((r, j) => { const s = net.connect(PORT, '127.0.0.1', () => { s.destroy(); r() }); s.on('error', j) }); break } catch { await sleep(100) } }
 
-  // ---- 3 players: a voluntary leave mid-match counts as eliminated, the match goes on
+  // ---- 3 players: in-game Leave holds the seat. Immediate rejoin works. Grace expiry
+  //      eliminates (not an instant "left"). The match then continues.
   {
-    const { cs } = await lobby(3, 'deathmatch', { starting_lives: '2' })
+    const { code, cs } = await lobby(3, 'deathmatch', { starting_lives: '2', deathmatch_grace: '1' })
     const [p1, p2, p3] = cs
     assert.equal(cs[0].last('lobbyInfo').maxPlayers, 8)
     await start(cs)
     let res = await dmBlind(cs, cs)
     assert.equal(res.get(p1).lost, true); assert.equal(res.get(p2).lost, false)
+    for (const c of cs) c.msgs = []
     p2.send({ action: 'leaveLobby' })
-    const el = await p1.wait((m) => m.action === 'playerEliminated' && m.playerId === p2.id, 'p2 eliminated')
-    assert.equal(el.reason, 'left')
-    await p3.wait((m) => m.action === 'playerLeft' && m.playerId === p2.id, 'p2 left')
-    const st = await p3.wait((m) => m.action === 'deathmatchUpdate' && m.alive.length === 2, 'standings after leave')
-    assert.equal(st.running, true); assert.deepEqual(st.out.map((o) => o.id), [p2.id]); assert.equal(st.out[0].place, 3)
+    const held = await p1.wait((m) => m.action === 'enemyDisconnected' && m.held && m.playerId === p2.id, 'p2 seat held')
+    assert.equal(held.held, true)
+    assert.ok(held.grace == null || held.grace > 0, 'grace is a countdown when the host sends one')
+    assert.ok(!p1.msgs.some((m) => m.action === 'playerEliminated' || m.action === 'playerLeft'), 'Leave does not eliminate on the spot')
+    p2.send({ action: 'rejoinLobby', code, reconnectToken: p2.token })
+    await p2.waitAction('rejoinedLobby')
+    await p1.wait((m) => m.action === 'enemyReconnected' && m.playerId === p2.id, 'p2 back at once')
+    for (const c of cs) c.msgs = []
+    p2.send({ action: 'leaveLobby' })
+    const el = await p1.wait((m) => m.action === 'playerEliminated' && m.playerId === p2.id, 'p2 grace expired', 6000)
+    assert.equal(el.reason, 'disconnected')
+    const st = await p3.wait((m) => m.action === 'deathmatchUpdate' && m.alive.length === 2, 'standings after expiry')
+    assert.equal(st.running, true)
+    assert.ok(st.out.some((o) => o.id === p2.id), 'expired seat is out')
     res = await dmBlind([p1, p3], cs)
     assert.equal(res.get(p1).action, 'loseGame'); assert.equal(res.get(p3).action, 'winGame')
     const fin = await p3.wait((m) => m.action === 'deathmatchUpdate' && !m.running, 'final standings')
     assert.equal(fin.winnerId, p3.id)
-    console.log('ok: deathmatch 3 players: leaver eliminated (place 3), match continues, last standing wins')
+    console.log('ok: deathmatch 3 players: Leave holds the seat, immediate rejoin, grace expiry, match continues')
     for (const c of cs) c.sock.destroy()
+  }
+
+  // ---- Absent at PvP loses a life (Deathmatch). The connected players are not the lowest.
+  {
+    const { cs } = await lobby(3, 'deathmatch', { starting_lives: '2', deathmatch_grace: '30' })
+    const [a, b, c] = cs
+    await start(cs)
+    for (const x of cs) x.msgs = []
+    c.send({ action: 'leaveLobby' })
+    await a.wait((m) => m.action === 'enemyDisconnected' && m.held && m.playerId === c.id, 'c held before PvP')
+    let res = await dmBlind([a, b], cs)
+    assert.equal(res.get(a).lost, false, 'lowest connected score is spared while a seat is absent')
+    assert.equal(res.get(b).lost, false)
+    const info = [...b.msgs].reverse().find((m) => m.action === 'enemyInfo' && m.playerId === c.id)
+    assert.equal(info && info.lives, 1, 'absent seat lost a life')
+    assert.ok(!a.msgs.some((m) => m.action === 'playerEliminated'), 'one life left: not eliminated yet')
+    res = await dmBlind([a, b], cs)
+    const gone = await a.wait((m) => m.action === 'playerEliminated' && m.playerId === c.id, 'absent eliminated')
+    assert.equal(gone.reason, 'absent')
+    assert.equal(res.get(a).lost, false)
+    console.log('ok: deathmatch: absent at PvP loses a life, then is eliminated; connected players are spared')
+    for (const x of cs) x.sock.destroy()
   }
 
   // ---- 5 players: disconnect + rejoin within grace, disconnect past grace = eliminated,
@@ -153,7 +186,11 @@ async function main() {
     await sleep(1500)
     assert.ok(!p2.msgs.some((m) => m.action === 'playerEliminated' && m.playerId === p4.id), 'p4 rejoined in time: not eliminated')
     const late = await connect('Latecomer'); late.send({ action: 'joinLobby', code })
-    assert.match((await late.waitAction('error')).message, /no late join/); late.sock.destroy()
+    // TS refuses with an error. The Lua host seats them as a spectator instead (Watch), never as a player.
+    const lateMsg = await late.wait((m) => m.action === 'error' || m.action === 'spectateStart' || m.action === 'resumeGame', 'no playing seat for a newcomer')
+    if (lateMsg.action === 'error') assert.match(lateMsg.message, /no late join/)
+    else assert.equal(lateMsg.action, 'spectateStart', 'a newcomer may watch, not take a Deathmatch seat')
+    late.sock.destroy()
     const order = [p1, p2, p3, back]
     res = await dmBlind(order, order)
     assert.equal(res.get(p1).action, 'loseGame'); assert.equal(res.get(back).lost, false)
@@ -187,6 +224,7 @@ async function main() {
     p8.send({ action: 'leaveLobby' })
     p7.sock.destroy()
     await cs[2].wait((m) => m.action === 'playerEliminated' && m.playerId === p7.id, 'p7 grace expired', 6000)
+    await cs[2].wait((m) => m.action === 'playerEliminated' && m.playerId === p8.id, 'p8 grace expired', 6000)
     await cs[0].wait((m) => m.action === 'deathmatchUpdate' && m.alive.length === 4, 'spectator sees 4 left')
     let alive = cs.slice(2, 6); let winner = null; let rounds = 0
     while (!winner && rounds++ < 10) {
