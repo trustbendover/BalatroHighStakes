@@ -66,6 +66,13 @@ function G.UIDEF.override_main_menu_play_button()
 					minh = 0.7,
 				}) or nil,
 				MP.LOBBY.connected and UIBox_button({
+					label = { localize("b_public_lobbies") },
+					colour = G.C.BLUE,
+					button = "mp_open_browser",
+					minw = 5,
+					minh = 0.7,
+				}) or nil,
+				MP.LOBBY.connected and UIBox_button({
 					label = { localize("b_join_lobby_clipboard") },
 					colour = G.C.PURPLE,
 					button = "join_from_clipboard",

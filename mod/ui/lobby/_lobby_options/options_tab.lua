@@ -127,7 +127,7 @@ function MP.UI.create_lobby_options_tab()
 							text = (function()
 								local s = localize("k_lobby_public_desc3")
 								if type(s) ~= "string" or s == "ERROR" then
-									return "On: a future lobby browser can list this lobby. The code is not a password."
+									return "On: the public lobby list can show this lobby. The code is not a password."
 								end
 								return s
 							end)(),

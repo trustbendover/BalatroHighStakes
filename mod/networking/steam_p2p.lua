@@ -27,8 +27,8 @@ M.LOBBY_KEY = "mp3p_code" -- protocol key, kept for compatibility with earlier b
 -- Invisible (3). Private (0) and Friends-only (1) are not searchable, so a 5-letter code
 -- could not find them. "Private" here is Invisible: hidden from the Steam friends list,
 -- still found by code search and by a direct invite. "Public" is type Public.
--- mp3p_discover is "1" only for public. A future lobby browser must filter on that key.
--- Absent or "0" (older lobbies, or the host never chose) means not listed. The code is
+-- mp3p_discover is "1" only for public. The lobby browser filters on that key, on
+-- mp3p_mod=hs and on this build's mp3p_version. Absent or "0" is not listed. The code is
 -- not a password: anyone who has it can still join a private lobby.
 M.STEAM_LOBBY_PUBLIC = 2
 M.STEAM_LOBBY_PRIVATE = 3
@@ -45,6 +45,22 @@ end
 
 function M.discoverable(value)
 	return value == "1" or value == 1 or value == true
+end
+
+do
+	local src = debug.getinfo(1, "S").source or ""
+	if src:sub(1, 1) == "@" then src = src:sub(2) end
+	local dir = src:match("^(.*)[/\\]")
+	local loaded
+	if dir then
+		local ok, mod = pcall(dofile, dir .. "/lobby_browser.lua")
+		if ok and type(mod) == "table" and mod.accept then loaded = mod end
+	end
+	if not loaded and type(MP) == "table" and MP.load_mp_file then
+		local mod = MP.load_mp_file("networking/lobby_browser.lua")
+		if type(mod) == "table" and mod.accept then loaded = mod end
+	end
+	M.BROWSER = loaded
 end
 -- Steam lobby member limit. Star topology: every guest talks only to the host, which runs the
 -- server core and relays, so traffic grows linearly with players (8 is light).
@@ -85,6 +101,8 @@ function M.new_ffi_backend()
 		bool SteamAPI_ISteamMatchmaking_SetLobbyType(void *self, uint64_t lobby, int eLobbyType);
 		void SteamAPI_ISteamMatchmaking_AddRequestLobbyListStringFilter(void *self, const char *k, const char *v, int cmp);
 		void SteamAPI_ISteamMatchmaking_AddRequestLobbyListDistanceFilter(void *self, int f);
+		void SteamAPI_ISteamMatchmaking_AddRequestLobbyListResultCountFilter(void *self, int cMaxResults);
+		bool SteamAPI_ISteamMatchmaking_RequestLobbyData(void *self, uint64_t lobby);
 		uint64_t SteamAPI_ISteamMatchmaking_RequestLobbyList(void *self);
 		uint64_t SteamAPI_ISteamMatchmaking_GetLobbyByIndex(void *self, int i);
 		bool SteamAPI_ISteamUtils_IsAPICallCompleted(void *self, uint64_t call, bool *failed);
@@ -163,19 +181,90 @@ function M.new_ffi_backend()
 			cb(id2s(ffi.cast("uint64_t*", buf + 8)[0]))
 		end)
 	end
+	-- One RequestLobbyList at a time. Filters added since the previous request belong to the next one,
+	-- and GetLobbyByIndex is only valid until the following request.
+	local mm_q, mm_lock = {}, false
+	local function mm_run(fn)
+		if mm_lock then mm_q[#mm_q + 1] = fn; return end
+		mm_lock = true
+		fn(function()
+			mm_lock = false
+			local nxt = table.remove(mm_q, 1)
+			if nxt then mm_run(nxt) end
+		end)
+	end
 	-- LobbyMatchList_t (510): uint32 count
 	function B.find_lobby(code, cb)
-		lib.SteamAPI_ISteamMatchmaking_AddRequestLobbyListStringFilter(mm, M.LOBBY_KEY, code, 0)
-		lib.SteamAPI_ISteamMatchmaking_AddRequestLobbyListDistanceFilter(mm, 3 --[[worldwide]])
-		local call = lib.SteamAPI_ISteamMatchmaking_RequestLobbyList(mm)
-		if B.log then B.log("RequestLobbyList call=" .. id2s(call)) end
-		await(call, 4, 510, function(buf)
-			if not buf then if B.log then B.log("RequestLobbyList failed") end return cb(nil) end
-			local n = ffi.cast("uint32_t*", buf)[0]
-			if B.log then B.log("RequestLobbyList matches=" .. tostring(n)) end
-			if n < 1 then return cb(nil) end
-			cb(id2s(lib.SteamAPI_ISteamMatchmaking_GetLobbyByIndex(mm, 0)))
+		mm_run(function(done)
+			lib.SteamAPI_ISteamMatchmaking_AddRequestLobbyListStringFilter(mm, M.LOBBY_KEY, code, 0)
+			lib.SteamAPI_ISteamMatchmaking_AddRequestLobbyListDistanceFilter(mm, 3 --[[worldwide]])
+			local call = lib.SteamAPI_ISteamMatchmaking_RequestLobbyList(mm)
+			if B.log then B.log("RequestLobbyList call=" .. id2s(call)) end
+			await(call, 4, 510, function(buf)
+				local found
+				if buf then
+					local n = ffi.cast("uint32_t*", buf)[0]
+					if B.log then B.log("RequestLobbyList matches=" .. tostring(n)) end
+					if n >= 1 then found = id2s(lib.SteamAPI_ISteamMatchmaking_GetLobbyByIndex(mm, 0)) end
+				elseif B.log then B.log("RequestLobbyList failed") end
+				done()
+				cb(found)
+			end)
 		end)
+	end
+	-- Public High Stakes lobbies only. String filters are AND, comparison 0 = k_ELobbyComparisonEqual.
+	-- Distance 3 = k_ELobbyDistanceFilterWorldwide. The result count keeps the list bounded.
+	function B.list_public(filters, keys, cap, cb)
+		mm_run(function(done)
+			local ncap = tonumber(cap) or 48
+			if ncap < 1 then ncap = 1 elseif ncap > 50 then ncap = 50 end
+			lib.SteamAPI_ISteamMatchmaking_AddRequestLobbyListDistanceFilter(mm, 3)
+			if type(filters) == "table" then
+				for _, f in ipairs(filters) do
+					if type(f) == "table" and type(f.key) == "string" and type(f.value) == "string" then
+						lib.SteamAPI_ISteamMatchmaking_AddRequestLobbyListStringFilter(mm, f.key, f.value, 0)
+					end
+				end
+			end
+			pcall(lib.SteamAPI_ISteamMatchmaking_AddRequestLobbyListResultCountFilter, mm, ncap)
+			local call = lib.SteamAPI_ISteamMatchmaking_RequestLobbyList(mm)
+			await(call, 4, 510, function(buf)
+				local rows, err = nil, "failed"
+				if buf then
+					rows, err = {}, nil
+					local n = tonumber(ffi.cast("uint32_t*", buf)[0]) or 0
+					if n > ncap then n = ncap end
+					for i = 0, n - 1 do
+						local id = id2s(lib.SteamAPI_ISteamMatchmaking_GetLobbyByIndex(mm, i))
+						local data = {}
+						if type(keys) == "table" then
+							for _, k in ipairs(keys) do
+								local r = lib.SteamAPI_ISteamMatchmaking_GetLobbyData(mm, s2id(id), k)
+								local s = r ~= nil and ffi.string(r) or ""
+								if #s > 64 then s = s:sub(1, 64) end
+								data[k] = s
+							end
+						end
+						rows[#rows + 1] = { id = id, data = data }
+					end
+				end
+				done()
+				cb(rows, err)
+			end)
+		end)
+	end
+	B.lobby_wait = {}
+	function B.refresh_lobby(id, cb)
+		if not B.cb_on and B.enable_join_callbacks then B.enable_join_callbacks() end
+		if not B.cb_on then cb(false); return false end
+		B.lobby_wait[id] = cb
+		local ok, res = pcall(lib.SteamAPI_ISteamMatchmaking_RequestLobbyData, mm, s2id(id))
+		if not ok or not res then
+			B.lobby_wait[id] = nil
+			cb(false)
+			return false
+		end
+		return true
 	end
 	-- LobbyEnter_t (504): uint64 lobby; uint32 perms; bool locked; uint32 response (1 = success)
 	function B.join_lobby(lobby, cb)
@@ -263,6 +352,14 @@ function M.new_ffi_backend()
 	function B.enable_join_callbacks()
 		if B.cb_on then return true end
 		B.cb_on = pcall(function()
+			-- LobbyDataUpdate_t (505): uint64 lobby; uint64 member; uint8 success.
+			-- sizeof is 24 on MSVC x64 (17 bytes, tail-padded to 8). Success is the byte at offset 16.
+			register(505, 24, function(p)
+				local id = id2s(ffi.cast("uint64_t*", p)[0])
+				local success = ffi.cast("uint8_t*", p)[16] ~= 0
+				local wait = B.lobby_wait and B.lobby_wait[id]
+				if wait then B.lobby_wait[id] = nil; wait(success) end
+			end)
 			-- GameLobbyJoinRequested_t (333): CSteamID lobby; CSteamID friend
 			register(333, 16, function(p)
 				B.events[#B.events + 1] = { lobby = id2s(ffi.cast("uint64_t*", p)[0]) }
@@ -329,7 +426,7 @@ end
 -- opts: backend, Core (p2p_server module), json {encode, decode}, push(str) -> UI,
 --       log(str), now() -> seconds, version (lobby data tag)
 function M.new_router(o)
-	local R = { backend = o.backend, mode = "local", peers = {}, cached = {}, lobby = nil, host = nil, joining = false }
+	local R = { backend = o.backend, mode = "local", peers = {}, cached = {}, lobby = nil, host = nil, joining = false, browser = M.BROWSER }
 	local B, json, now = o.backend, o.json, o.now or os.time
 	local log = o.log or function() end
 	local core = o.Core.new({ log = log, now = now })
@@ -391,17 +488,46 @@ function M.new_router(o)
 		end
 	end
 	R.want_public = false
+	local function sync_listing()
+		local Browser = M.BROWSER
+		if not Browser or R.mode ~= "host" or not R.lobby or not B.set_data then return end
+		local owned = not B.owner
+		if B.owner then
+			local ok_o, who = pcall(B.owner, R.lobby)
+			owned = ok_o and who == B.my_id()
+		end
+		if not owned then return end
+		local fields = Browser.publish(localConn and localConn.lobby, {
+			public = R.want_public,
+			version = o.version,
+			max_players = o.Core and o.Core.max_players,
+			max_spectators = o.Core and o.Core.MAX_SPECTATORS or 8,
+		})
+		local keys = {}
+		for k in pairs(fields) do keys[#keys + 1] = k end
+		table.sort(keys)
+		local parts = {}
+		for _, k in ipairs(keys) do parts[#parts + 1] = k .. "=" .. tostring(fields[k]) end
+		local sig = table.concat(parts, "\n")
+		if sig == R.list_sig then return end
+		R.list_sig = sig
+		for _, k in ipairs(keys) do pcall(B.set_data, R.lobby, k, fields[k]) end
+	end
 	local function publish_visibility()
 		if R.mode ~= "host" or not R.lobby then return end
 		local v = M.visibility(R.want_public)
-		if B.set_data then pcall(B.set_data, R.lobby, M.DISCOVER_KEY, v.discover) end
 		local owned = not B.owner
 		if B.owner then
-			local ok_o, o = pcall(B.owner, R.lobby)
-			owned = ok_o and o == B.my_id()
+			local ok_o, who = pcall(B.owner, R.lobby)
+			owned = ok_o and who == B.my_id()
 		end
+		-- Drop the discover flag before the type change when going private, and write it
+		-- only after the lobby is Public when going the other way.
+		if not v.public then R.list_sig = nil; sync_listing() end
+		if not M.BROWSER and B.set_data then pcall(B.set_data, R.lobby, M.DISCOVER_KEY, v.discover) end
 		if owned and B.set_lobby_type then pcall(B.set_lobby_type, R.lobby, v.lobby_type) end
 		if owned then R.applied_public = v.public end
+		if v.public then R.list_sig = nil; sync_listing() end
 		presence(R.lobby, v.public)
 	end
 	function R.apply_visibility(flag)
@@ -414,6 +540,7 @@ function M.new_router(o)
 		presence(nil)
 		for id in pairs(R.peers) do drop_peer(id) end
 		R.mode, R.lobby, R.host, R.joining, R.retry, R.invite_retry = "local", nil, nil, false, nil, nil
+		R.list_sig, R.browser_join, R.browser_fail, R.browser_ok, R.browser_reason = nil, nil, nil, nil, nil
 		if HM then HM.reset() end
 	end
 	R.to_local = to_local
@@ -451,9 +578,11 @@ function M.new_router(o)
 		end, created_as)
 	end
 
-	-- join a known Steam lobby id; first_msg nil => joinLobby with the lobby's published code
-	local function join_by_id(lobby, first_msg, attempt)
+	-- join a known Steam lobby id; first_msg nil => joinLobby with the lobby's published code.
+	-- gate(lobby) runs after Steam accepts the join and before any game message. False leaves immediately.
+	local function join_by_id(lobby, first_msg, attempt, gate)
 		attempt = attempt or 1
+		if not gate then R.browser_fail, R.browser_ok, R.browser_reason = nil, nil, nil end
 		log("invite: JoinLobby " .. lobby .. " (attempt " .. attempt .. ")")
 		B.join_lobby(lobby, function(ok, why)
 			log("invite: JoinLobby " .. lobby .. " -> " .. tostring(ok) .. " " .. tostring(why or ""))
@@ -463,7 +592,23 @@ function M.new_router(o)
 					return
 				end
 				R.joining = false
+				if R.browser_fail then
+					local f = R.browser_fail
+					R.browser_fail, R.browser_ok = nil, nil
+					f("closed")
+					return
+				end
 				if not R.quiet_join then push({ action = "error", message = "Could not join the Steam lobby (" .. tostring(why) .. ")" }) end
+				return
+			end
+			if gate and not gate(lobby) then
+				R.joining = false
+				pcall(function() B.leave_lobby(lobby) end)
+				local f = R.browser_fail
+				local why_not = R.browser_reason or "private"
+				R.browser_fail, R.browser_ok, R.browser_reason = nil, nil, nil
+				if f then f(why_not)
+				else push({ action = "error", message = "That lobby is no longer public." }) end
 				return
 			end
 			local owner = B.owner(lobby)
@@ -497,6 +642,9 @@ function M.new_router(o)
 			end
 			local sent = B.send(owner, "J" .. json.encode(msg))
 			log("invite/code join: sent " .. tostring(msg.action) .. " to host " .. owner .. " -> " .. tostring(sent))
+			local done = R.browser_ok
+			R.browser_ok, R.browser_fail = nil, nil
+			if done then done() end
 		end)
 	end
 
@@ -624,6 +772,100 @@ function M.new_router(o)
 		return true
 	end
 
+	local function read_lobby_data(id)
+		local data = {}
+		local Browser = M.BROWSER
+		if not Browser or not B.get_data then return data end
+		for _, k in ipairs(Browser.read_keys()) do
+			local okd, v = pcall(B.get_data, id, k)
+			data[k] = (okd and type(v) == "string") and v or ""
+		end
+		return data
+	end
+	local function browser_fail(reason, cb)
+		R.joining = false
+		R.browser_join, R.browser_fail, R.browser_ok, R.browser_reason = nil, nil, nil, nil
+		if cb then cb(false, reason)
+		else push({ action = "error", message = M.BROWSER and M.BROWSER.fail_text(reason) or reason }) end
+	end
+	function R.browse(cb)
+		local Browser = M.BROWSER
+		if not Browser or not B.list_public then cb("unavailable"); return end
+		if R.browse_busy then cb("busy"); return end
+		R.browse_busy = true
+		B.list_public(Browser.filters(o.version), Browser.read_keys(), Browser.LIST_CAP, function(rows, err)
+			R.browse_busy = false
+			if type(rows) ~= "table" then cb(err or "failed"); return end
+			local out = {}
+			for _, row in ipairs(rows) do
+				local id = type(row) == "table" and type(row.id) == "string" and row.id:match("^(%d+)$") or nil
+				if id and #id >= 3 and #id <= 20 and id ~= R.lobby and type(row.data) == "table" then
+					local card = Browser.accept(row.data, { version = o.version })
+					if card then
+						card.id = id
+						card.action, card.reason = Browser.action(card)
+						out[#out + 1] = card
+					end
+				end
+			end
+			Browser.sort(out)
+			cb(nil, out)
+		end)
+	end
+	function R.join_browser(id, how, cb)
+		local Browser = M.BROWSER
+		if not Browser or not B.refresh_lobby or not B.get_data then return browser_fail("unavailable", cb) end
+		id = tostring(id or ""):match("^(%d+)$")
+		if not id or #id < 3 or #id > 20 then return browser_fail("closed", cb) end
+		if how ~= "join" and how ~= "watch" then return browser_fail("closed", cb) end
+		if R.joining or R.mode ~= "local" or R.browser_join then
+			if cb then cb(false, "busy") else push({ action = "error", message = M.BROWSER.fail_text("busy") }) end
+			return
+		end
+		R.joining = true
+		R.browser_join = { id = id, how = how, until_t = now() + 8, cb = cb }
+		local function finish(ok)
+			local pending = R.browser_join
+			if not pending or pending.id ~= id then return end
+			R.browser_join = nil
+			if not ok then return browser_fail("unconfirmed", cb) end
+			local data = read_lobby_data(id)
+			local card = Browser.accept(data, { version = o.version })
+			if not card then return browser_fail("private", cb) end
+			local act, why = Browser.action(card)
+			if act ~= how then
+				if how == "join" and card.state == "play" then return browser_fail("playing", cb) end
+				return browser_fail(why or "closed", cb)
+			end
+			local code = Browser.lobby_code(data)
+			if not code then return browser_fail("closed", cb) end
+			local msg = { action = "joinLobby", code = code }
+			if how == "watch" then msg.spectate = true end
+			R.browser_reason = "private"
+			R.browser_fail = function(reason) browser_fail(reason, cb) end
+			R.browser_ok = function() if cb then cb(true) end end
+			join_by_id(id, msg, 1, function()
+				local data2 = read_lobby_data(id)
+				local card2 = Browser.accept(data2, { version = o.version })
+				if not card2 then R.browser_reason = "private"; return false end
+				local act2, why2 = Browser.action(card2)
+				if act2 ~= how then
+					R.browser_reason = (how == "join" and card2.state == "play") and "playing" or (why2 or "closed")
+					return false
+				end
+				local code2 = Browser.lobby_code(data2)
+				if not code2 then R.browser_reason = "closed"; return false end
+				msg.code = code2
+				msg.spectate = how == "watch" and true or nil
+				return true
+			end)
+		end
+		local started = B.refresh_lobby(id, finish)
+		if started == false and R.browser_join and R.browser_join.id == id then
+			browser_fail("unconfirmed", cb)
+		end
+	end
+
 	if B.enable_join_callbacks then log("Steam callbacks registered: " .. tostring(B.enable_join_callbacks())) end
 	if B.launch_args then
 		local args = tostring(B.launch_args())
@@ -660,6 +902,13 @@ function M.new_router(o)
 		if R.retry and now() >= R.retry.at then
 			local r = R.retry; R.retry = nil
 			start_join(r.code, r.msg, r.attempt)
+		end
+		local bj = R.browser_join
+		if bj and now() >= bj.until_t then
+			R.browser_join = nil
+			R.joining = false
+			if bj.cb then bj.cb(false, "unconfirmed")
+			else push({ action = "error", message = "Could not confirm this lobby is still public." }) end
 		end
 		local t = now()
 		-- 0.6.8 final: WE were frozen (game hitch, alt-tab, slow PC): silence that piled up while we
@@ -740,6 +989,7 @@ function M.new_router(o)
 			end
 		end
 		if R.mode == "host" and R.lobby and R.applied_public ~= R.want_public then publish_visibility() end
+		if R.mode == "host" and R.lobby then sync_listing() end
 		if R.mode == "host" and R.lobby and t ~= last_members then
 			last_members = t
 			local me = B.my_id()
