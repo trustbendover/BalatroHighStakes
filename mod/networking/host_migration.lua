@@ -139,6 +139,10 @@ function M.attach(ctx)
 		R.watch_old = mig.old and { id = mig.old, code = state.code, last = -1, until_t = now() + M.REJOIN_FOR } or nil
 		R.votes = {}
 		pcall(B.set_data, R.lobby, "mp3p_host", B.my_id())
+		if R.apply_visibility then
+			local opt = state.options or {}
+			pcall(R.apply_visibility, opt.lobby_public)
+		end
 		-- Steam lobby data can only be written by the owner (maybe the frozen old host): also tag
 		-- ourselves in our own member data so players joining by code find the real host
 		if B.set_member_data then pcall(B.set_member_data, R.lobby, "mp3p_host", tostring(R.epoch)) end

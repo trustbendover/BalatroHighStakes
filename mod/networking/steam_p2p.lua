@@ -23,6 +23,29 @@ M.TIMEOUT = 20
 M.SELF_STALL = 8 -- our own update gap this long counts as "we were frozen"
 M.JOIN_ACTIONS = { version = true, username = true, joinLobby = true, rejoinLobby = true, connected = true, keepAlive = true }
 M.LOBBY_KEY = "mp3p_code" -- protocol key, kept for compatibility with earlier builds
+-- Steam ELobbyType (ISteamMatchmaking). RequestLobbyList only returns Public (2) and
+-- Invisible (3). Private (0) and Friends-only (1) are not searchable, so a 5-letter code
+-- could not find them. "Private" here is Invisible: hidden from the Steam friends list,
+-- still found by code search and by a direct invite. "Public" is type Public.
+-- mp3p_discover is "1" only for public. A future lobby browser must filter on that key.
+-- Absent or "0" (older lobbies, or the host never chose) means not listed. The code is
+-- not a password: anyone who has it can still join a private lobby.
+M.STEAM_LOBBY_PUBLIC = 2
+M.STEAM_LOBBY_PRIVATE = 3
+M.DISCOVER_KEY = "mp3p_discover"
+
+function M.visibility(flag)
+	local public = flag == true or flag == "true" or flag == 1 or flag == "1"
+	return {
+		public = public,
+		lobby_type = public and M.STEAM_LOBBY_PUBLIC or M.STEAM_LOBBY_PRIVATE,
+		discover = public and "1" or "0",
+	}
+end
+
+function M.discoverable(value)
+	return value == "1" or value == 1 or value == true
+end
 -- Steam lobby member limit. Star topology: every guest talks only to the host, which runs the
 -- server core and relays, so traffic grows linearly with players (8 is light).
 M.MAX_MEMBERS = 16 -- 0.6.8: up to 8 players + room for spectators and rejoining players
@@ -59,6 +82,7 @@ function M.new_ffi_backend()
 		int SteamAPI_ISteamMatchmaking_GetNumLobbyMembers(void *self, uint64_t lobby);
 		uint64_t SteamAPI_ISteamMatchmaking_GetLobbyMemberByIndex(void *self, uint64_t lobby, int i);
 		bool SteamAPI_ISteamMatchmaking_SetLobbyJoinable(void *self, uint64_t lobby, bool joinable);
+		bool SteamAPI_ISteamMatchmaking_SetLobbyType(void *self, uint64_t lobby, int eLobbyType);
 		void SteamAPI_ISteamMatchmaking_AddRequestLobbyListStringFilter(void *self, const char *k, const char *v, int cmp);
 		void SteamAPI_ISteamMatchmaking_AddRequestLobbyListDistanceFilter(void *self, int f);
 		uint64_t SteamAPI_ISteamMatchmaking_RequestLobbyList(void *self);
@@ -130,8 +154,9 @@ function M.new_ffi_backend()
 	end
 	function B.my_id() return id2s(lib.SteamAPI_ISteamUser_GetSteamID(user)) end
 	-- LobbyCreated_t (513): int32 result; [pad]; uint64 lobby
-	function B.create_lobby(cb)
-		await(lib.SteamAPI_ISteamMatchmaking_CreateLobby(mm, 2 --[[public]], M.MAX_MEMBERS), 16, 513, function(buf)
+	function B.create_lobby(cb, lobby_type)
+		local typ = tonumber(lobby_type) or M.STEAM_LOBBY_PRIVATE
+		await(lib.SteamAPI_ISteamMatchmaking_CreateLobby(mm, typ, M.MAX_MEMBERS), 16, 513, function(buf)
 			if not buf then return cb(nil, "CreateLobby failed") end
 			local res = ffi.cast("int32_t*", buf)[0]
 			if res ~= 1 then return cb(nil, "CreateLobby result " .. res) end
@@ -167,6 +192,11 @@ function M.new_ffi_backend()
 		return r ~= nil and ffi.string(r) or ""
 	end
 	function B.set_joinable(lobby, j) lib.SteamAPI_ISteamMatchmaking_SetLobbyJoinable(mm, s2id(lobby), j) end
+	function B.set_lobby_type(lobby, t)
+		local ok, res = pcall(lib.SteamAPI_ISteamMatchmaking_SetLobbyType, mm, s2id(lobby), tonumber(t) or M.STEAM_LOBBY_PRIVATE)
+		if not ok and B.log then B.log("SetLobbyType unavailable: " .. tostring(res)) end
+		return ok and res and true or false
+	end
 	function B.owner(lobby) return id2s(lib.SteamAPI_ISteamMatchmaking_GetLobbyOwner(mm, s2id(lobby))) end
 	-- host migration: only the current owner can hand the lobby over
 	-- every member may tag itself (host migration: the real host while the owner is frozen)
@@ -347,9 +377,11 @@ function M.new_router(o)
 		if p.conn then core:disconnect(p.conn) end
 		B.close(id)
 	end
-	local function presence(lobby)
+	local function presence(lobby, public)
 		if not B.set_presence then return end
-		if lobby then
+		-- Private: do not publish a friends-list "Join game" string. Steam invites still
+		-- carry the lobby id, and the code search still finds an Invisible lobby.
+		if lobby and public then
 			B.set_presence("connect", "+connect_lobby " .. lobby)
 			B.set_presence("steam_player_group", lobby)
 			B.set_presence("steam_player_group_size", "3")
@@ -357,6 +389,25 @@ function M.new_router(o)
 		elseif B.clear_presence then
 			B.clear_presence()
 		end
+	end
+	R.want_public = false
+	local function publish_visibility()
+		if R.mode ~= "host" or not R.lobby then return end
+		local v = M.visibility(R.want_public)
+		if B.set_data then pcall(B.set_data, R.lobby, M.DISCOVER_KEY, v.discover) end
+		local owned = not B.owner
+		if B.owner then
+			local ok_o, o = pcall(B.owner, R.lobby)
+			owned = ok_o and o == B.my_id()
+		end
+		if owned and B.set_lobby_type then pcall(B.set_lobby_type, R.lobby, v.lobby_type) end
+		if owned then R.applied_public = v.public end
+		presence(R.lobby, v.public)
+	end
+	function R.apply_visibility(flag)
+		R.want_public = M.visibility(flag).public
+		R.applied_public = nil
+		publish_visibility()
 	end
 	local function to_local()
 		if R.lobby then B.leave_lobby(R.lobby) end
@@ -382,6 +433,7 @@ function M.new_router(o)
 
 	local function start_hosting()
 		R.mode = "host"
+		local created_as = M.visibility(R.want_public).lobby_type
 		B.create_lobby(function(lobby, err)
 			if not lobby then
 				log("Steam lobby creation failed: " .. tostring(err))
@@ -392,9 +444,11 @@ function M.new_router(o)
 			R.lobby = lobby
 			B.set_data(lobby, M.LOBBY_KEY, host_lobby_code())
 			B.set_data(lobby, "mp3p_version", o.version or "")
-			presence(lobby)
-			log("Steam lobby " .. lobby .. " published for code " .. host_lobby_code())
-		end)
+			publish_visibility()
+			log("Steam lobby " .. lobby .. " type " .. tostring(created_as)
+				.. " discover=" .. M.visibility(R.want_public).discover
+				.. " for code " .. host_lobby_code())
+		end, created_as)
 	end
 
 	-- join a known Steam lobby id; first_msg nil => joinLobby with the lobby's published code
@@ -435,7 +489,7 @@ function M.new_router(o)
 				msg = { action = "joinLobby", code = code }
 			end
 			R.mode, R.lobby, R.host, R.joining = "guest", lobby, owner, false
-			presence(lobby)
+			presence(lobby, false)
 			peer(owner)
 			-- the remote core needs our identity first, then the join itself
 			for _, k in ipairs({ "version", "username" }) do
@@ -538,6 +592,10 @@ function M.new_router(o)
 		end
 		core:receive(localConn, msg)
 		if HM then HM.mark_dirty() end
+		if R.mode == "host" and a == "lobbyOptions"
+			and (msg.lobby_public ~= nil or msg.match_settings == 1 or msg.match_settings == "1" or msg.match_settings == true) then
+			R.apply_visibility(msg.lobby_public)
+		end
 		if a == "createLobby" and host_lobby_code() then
 			start_hosting()
 		elseif R.mode == "host" and not host_lobby_code() then
@@ -664,6 +722,11 @@ function M.new_router(o)
 							if HM then HM.mark_dirty() end
 						elseif R.mode == "guest" and m.peer == R.host and msg.action ~= "connected" then
 							if msg.action == "rejoinedLobby" or msg.action == "joinedLobby" or msg.action == "hostMigrated" then R.follow_retry = nil end
+							if msg.action == "lobbyOptions" or msg.action == "rematch" or msg.action == "startGame" then
+								local flag = msg.lobby_public
+								if flag == nil and type(msg.config) == "table" then flag = msg.config.lobby_public end
+								if flag ~= nil or msg.action == "lobbyOptions" then presence(R.lobby, M.visibility(flag).public) end
+							end
 							push(msg)
 						end
 					end
@@ -676,6 +739,7 @@ function M.new_router(o)
 				end
 			end
 		end
+		if R.mode == "host" and R.lobby and R.applied_public ~= R.want_public then publish_visibility() end
 		if R.mode == "host" and R.lobby and t ~= last_members then
 			last_members = t
 			local me = B.my_id()

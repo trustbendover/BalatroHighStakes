@@ -49,6 +49,9 @@ M.FIELDS = {
 	teams_format = "num",
 	teams_size = "num",
 	disable_live_and_timer_hud = "bool",
+	-- Steam lobby listing. Off (default, also when an old host omits it): not marked for a
+	-- lobby browser. On: mp3p_discover=1. This does not change who may join with the code.
+	lobby_public = "bool",
 }
 
 M.DEFAULTS = {
@@ -88,6 +91,7 @@ M.DEFAULTS = {
 	teams_format = 0,
 	teams_size = 2,
 	disable_live_and_timer_hud = false,
+	lobby_public = false,
 }
 
 -- Nil means "mode default", which is not the same as an explicit 0.

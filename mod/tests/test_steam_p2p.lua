@@ -118,14 +118,16 @@ ok(P2P.parse_connect("Balatro.exe -foo +connect_lobby 109775241234567890") == "1
 ok(A.r.mode == "local" and next(NET.rp.alice) == nil, "rich presence cleared after host leaves")
 A.send({ action = "createLobby", gameMode = "attrition" }); pump()
 local lid = A.r.lobby
-ok(NET.rp.alice.connect == "+connect_lobby " .. lid and NET.rp.alice.steam_player_group == lid, "host sets rich presence connect + steam_player_group")
+ok(NET.rp.alice.connect == nil, "private default: no friends-list Join game rich presence")
 ok(A.r.invite() and NET.invited.lobby == lid, "Invite button opens overlay invite dialog for the lobby")
 -- bob accepts overlay invite (GameLobbyJoinRequested_t) without typing a code
 B.msgs = {}
 table.insert(NET.ev.bob, { lobby = lid }); pump()
 ok(B.r.mode == "guest" and B.last("joinedLobby") and B.last("joinedLobby").code == A.last("joinedLobby").code, "overlay invite join (no code typed)")
-ok(NET.rp.bob.steam_player_group == lid, "guest joins the steam_player_group")
--- carol uses friends list 'Join game' (GameRichPresenceJoinRequested_t with our connect string)
+ok(NET.rp.bob.connect == nil, "private guest does not publish a joinable rich presence")
+-- public: friends-list Join game uses the connect string
+A.send({ action = "lobbyOptions", match_settings = 1, lobby_public = true }); pump()
+ok(NET.rp.alice.connect == "+connect_lobby " .. lid and NET.rp.alice.steam_player_group == lid, "public lobby sets rich presence connect + steam_player_group")
 C.msgs = {}
 table.insert(NET.ev.carol, { connect = NET.rp.alice.connect }); pump()
 ok(C.r.mode == "guest" and C.last("joinedLobby"), "friends-list Join game (rich presence connect)")

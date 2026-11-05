@@ -19,7 +19,12 @@ function create_lobby_option_cycle(id, label_key, scale, options, current_option
 end
 
 -- Component for lobby options tab containing toggles and custom seed section
-function create_lobby_option_toggle(id, label_key, ref_value, callback)
+function create_lobby_option_toggle(id, label_key, ref_value, callback, label_text)
+	local label = label_text
+	if not label then
+		label = localize(label_key)
+		if type(label) ~= "string" or label == "" or label == "ERROR" or label == label_key then label = label_key end
+	end
 	return {
 		n = G.UIT.R,
 		config = {
@@ -31,7 +36,7 @@ function create_lobby_option_toggle(id, label_key, ref_value, callback)
 				id = id,
 				enabled_ref_table = MP.LOBBY,
 				enabled_ref_value = "is_host",
-				label = localize(label_key),
+				label = label,
 				ref_table = MP.LOBBY.config,
 				ref_value = ref_value,
 				callback = callback or send_lobby_options,
@@ -65,6 +70,74 @@ function MP.UI.create_lobby_options_tab()
 			colour = G.C.BLACK,
 		},
 		nodes = {
+			create_lobby_option_toggle("lobby_public_toggle", "b_lobby_public", "lobby_public", nil, (function()
+				local s = localize("b_lobby_public")
+				if type(s) == "string" and s ~= "" and s ~= "ERROR" and s ~= "b_lobby_public" then return s end
+				return (G.SETTINGS and G.SETTINGS.language == "nl") and "Openbare lobby" or "Public lobby"
+			end)()),
+			{
+				n = G.UIT.R,
+				config = { align = "cm", padding = 0.02 },
+				nodes = {
+					{
+						n = G.UIT.T,
+						config = {
+							text = (function()
+								local s = localize("k_lobby_public_desc1")
+								if type(s) ~= "string" or s == "ERROR" then
+									return "Off: hidden on your Steam friends list, not marked for a lobby browser."
+								end
+								return s
+							end)(),
+							scale = 0.28,
+							colour = G.C.UI.TEXT_LIGHT,
+							maxw = 9.2,
+						},
+					},
+				},
+			},
+			{
+				n = G.UIT.R,
+				config = { align = "cm", padding = 0.02 },
+				nodes = {
+					{
+						n = G.UIT.T,
+						config = {
+							text = (function()
+								local s = localize("k_lobby_public_desc2")
+								if type(s) ~= "string" or s == "ERROR" then
+									return "The lobby code and Steam invites still work either way."
+								end
+								return s
+							end)(),
+							scale = 0.28,
+							colour = G.C.UI.TEXT_LIGHT,
+							maxw = 9.2,
+						},
+					},
+				},
+			},
+			{
+				n = G.UIT.R,
+				config = { align = "cm", padding = 0.04 },
+				nodes = {
+					{
+						n = G.UIT.T,
+						config = {
+							text = (function()
+								local s = localize("k_lobby_public_desc3")
+								if type(s) ~= "string" or s == "ERROR" then
+									return "On: a future lobby browser can list this lobby. The code is not a password."
+								end
+								return s
+							end)(),
+							scale = 0.28,
+							colour = G.C.UI.TEXT_LIGHT,
+							maxw = 9.2,
+						},
+					},
+				},
+			},
 			create_lobby_option_cycle(
 				"starting_lives_option",
 				"b_opts_lives",

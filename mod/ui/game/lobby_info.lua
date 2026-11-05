@@ -58,6 +58,19 @@ function MP.UI.create_UIBox_settings() -- optimize this please
 					scale = 0.6,
 				}),
 			}),
+			MP.UI.UTILS.create_row({ align = "cm", padding = 0.05 }, {
+				MP.UI.UTILS.create_text_node((function()
+					local key = (MP.LOBBY.config.lobby_public and "k_lobby_public_on") or "k_lobby_public_off"
+					local s = localize(key)
+					if type(s) ~= "string" or s == "ERROR" or s == key then
+						return MP.LOBBY.config.lobby_public and "Public lobby" or "Private lobby"
+					end
+					return s
+				end)(), {
+					colour = G.C.UI.TEXT_LIGHT,
+					scale = 0.5,
+				}),
+			}),
 			MP.UI.UTILS.create_row({ padding = 0, align = "cr" }, {
 				Disableable_Toggle({
 					enabled_ref_table = MP.LOBBY,

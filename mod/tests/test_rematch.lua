@@ -32,7 +32,7 @@ local function lobby(mode, n, opts)
 	for i = 1, n do ps[i] = client(mode .. i) end
 	S:receive(ps[1].c, { action = "createLobby", gameMode = mode })
 	local code = ps[1].last("joinedLobby").code
-	local msg = { action = "lobbyOptions", match_settings = 1, starting_lives = 1, normal_bosses = true, pvp_start_round = 4 }
+	local msg = { action = "lobbyOptions", match_settings = 1, starting_lives = 1, normal_bosses = true, pvp_start_round = 4, lobby_public = true }
 	for k, v in pairs(opts or {}) do msg[k] = v end
 	S:receive(ps[1].c, msg)
 	for i = 2, n do
@@ -88,7 +88,7 @@ do
 	ps[2].c.isReadyLobby = true
 	S:receive(ps[1].c, { action = "rematch" })
 	local rm = ps[2].last("rematch")
-	ok(rm and rm.config and rm.config.normal_bosses == true and rm.config.pvp_start_round == 4, "rematch sends the same host settings")
+	ok(rm and rm.config and rm.config.normal_bosses == true and rm.config.pvp_start_round == 4 and rm.config.lobby_public == true, "rematch sends the same host settings, including public lobby")
 	ok(ps[1].c.lobby.options.normal_bosses == true and ps[1].c.lobby.code == code, "lobby and settings stay")
 	ok(not ps[2].c.isReadyLobby, "guests must ready again")
 	ok(ps[1].c.lives == 0 and ps[2].c.lives == 0 and ps[2].c.eliminated == false, "old lives and elimination are cleared")
