@@ -40,7 +40,8 @@ M.NO_REPLAY = { connect = true, version = true, username = true, joinLobby = tru
 	leaveLobby = true, createLobby = true, keepAlive = true, keepAliveAck = true, lobbyInfo = true,
 	-- A guest's lobbyOptions must not be replayed after they become host: the snapshot already
 	-- holds the old host's match settings, and replaying the guest's copy would replace them.
-	lobbyOptions = true }
+	lobbyOptions = true,
+	rematch = true }
 
 local function contains(t, x) for _, v in ipairs(t or {}) do if v == x then return true end end return false end
 local function index_of(t, x) for i, v in ipairs(t or {}) do if v == x then return i end end return nil end

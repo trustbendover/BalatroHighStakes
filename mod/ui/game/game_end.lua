@@ -1,3 +1,35 @@
+local function mp_text(key, fallback)
+	local s = localize(key)
+	if type(s) ~= "string" or s == "" or s == "ERROR" or s == key then return fallback end
+	return s
+end
+
+--- Host-only, and only once this match is actually over (not while others are still playing).
+function MP.UI.rematch_button()
+	local finished = MP.GAME and MP.GAME.match_finished
+	local dm_running = MP.DEATHMATCH and MP.DEATHMATCH.is_active and MP.DEATHMATCH.is_active()
+		and MP.DEATHMATCH.state and MP.DEATHMATCH.state() and MP.DEATHMATCH.state().running
+	if not (MP.LOBBY and MP.LOBBY.is_host and MP.LOBBY.code and finished and not dm_running) then
+		return { n = G.UIT.R, config = { align = "cm" }, nodes = {} }
+	end
+	local nl = G.SETTINGS and G.SETTINGS.language == "nl"
+	return UIBox_button({
+		id = "mp_rematch",
+		button = "mp_rematch",
+		label = { mp_text("b_rematch", nl and "Opnieuw" or "Rematch") },
+		colour = G.C.GREEN,
+		minw = 4,
+		maxw = 4,
+		minh = 0.75,
+		focus_args = { nav = "wide" },
+	})
+end
+
+function G.FUNCS.mp_rematch()
+	if not (MP.LOBBY and MP.LOBBY.is_host and MP.ACTIONS and MP.ACTIONS.rematch) then return end
+	MP.ACTIONS.rematch()
+end
+
 function MP.UI.create_UIBox_round_scores_row_nemesis()
     local label = localize({ type = "name_text", set = "Blind", key = "bl_mp_nemesis" })
     local score_tab = {}
@@ -427,6 +459,7 @@ function MP.UI.create_UIBox_mp_game_end(has_won)
 											-- 0.6.8: keep watching the remaining players
 											(MP.SPECTATE and MP.SPECTATE.end_button and MP.SPECTATE.end_button())
 												or { n = G.UIT.R, config = { align = "cm" }, nodes = {} },
+											MP.UI.rematch_button(),
 											UIBox_button({
 												id = "from_game_won",
 												button = "mp_return_to_lobby",

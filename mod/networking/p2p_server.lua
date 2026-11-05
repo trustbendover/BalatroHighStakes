@@ -292,6 +292,20 @@ function Server:lobby_info(L)
 	self:broadcast(L, { action = "handyMPExtensionLobbyEnabled", enabled = false })
 end
 
+--- Match is over: same lobby, same options (including teams), connected players stay.
+--- Per-match lives, scores, timers, elimination and held seats are cleared.
+--- Guests must Ready again. Does not start the next match.
+function Server:prepare_rematch(L)
+	self:reset_players(L)
+	L.koth, L.book, L.teamBook, L.lastStats, L.seed = nil, nil, nil, nil, nil
+	L.elimOrder, L.winnerId = nil, nil
+	for _, p in ipairs(L.players) do
+		p.runState, p.blindSeq = nil, 0
+		if not p.spectator then p.eliminated, p.lives = false, 0 end
+		if p ~= L.players[1] then p.isReadyLobby = false end
+	end
+end
+
 function Server:reset_players(L)
 	L.isInGame = false
 	for _, p in ipairs(L.players) do
@@ -383,11 +397,32 @@ function Server:check_game_over_inner(L)
 			for _, p in ipairs(dying) do if p.team == letter then spared[p] = true end end
 		end
 	end
+	local ending = false
+	if next(spared) then
+		ending = true
+	elseif self:teams_active(L) then
+		local left, n = {}, 0
+		for _, p in ipairs(L.players) do
+			if not p.eliminated and (p.lives or 0) > 0 and not spared[p] and p.team and not left[p.team] then
+				left[p.team] = true; n = n + 1
+			end
+		end
+		for _, sl in ipairs(self:away_alive(L)) do
+			if sl.old.team and not spared[sl.old] and not left[sl.old.team] then left[sl.old.team] = true; n = n + 1 end
+		end
+		ending = n <= 1
+	else
+		local living = 0
+		for _, p in ipairs(L.players) do
+			if not p.eliminated and (p.lives or 0) > 0 and not spared[p] then living = living + 1 end
+		end
+		ending = living + #self:away_alive(L) <= 1
+	end
 	for _, p in ipairs(dying) do
 		-- a player spared by the final-score tie rule wins: not eliminated, not in the elimination order
 		if not spared[p] then
 			p.eliminated = true
-			sendA(p, { action = "loseGame" })
+			sendA(p, { action = "loseGame", finished = ending or nil })
 			for _, o in ipairs(L.players) do
 				if o ~= p then sendA(o, { action = "playerEliminated", playerId = p.id, username = p.username }) end
 			end
@@ -932,7 +967,7 @@ function Server:koth_hill_win(L, winnerId)
 	for _, p in ipairs(L.players) do
 		if p ~= winner and not p.eliminated then
 			p.eliminated = true
-			sendA(p, { action = "loseGame", reason = "koth_hill" })
+			sendA(p, { action = "loseGame", reason = "koth_hill", finished = true })
 			for _, o in ipairs(L.players) do
 				if o ~= p then sendA(o, { action = "playerEliminated", playerId = p.id, username = p.username }) end
 			end
@@ -1424,6 +1459,23 @@ function H.readyLobby(S, c) c.isReadyLobby = true; if c.lobby then S:lobby_info(
 function H.unreadyLobby(S, c) c.isReadyLobby = false; if c.lobby then S:lobby_info(c.lobby) end end
 function H.keepAlive(S, c) sendA(c, { action = "keepAliveAck" }) end
 function H.keepAliveAck() end
+function H.rematch(S, c)
+	local L = c.lobby
+	if not L or L.players[1] ~= c then
+		return sendA(c, { action = "error", message = "Only the host can rematch." })
+	end
+	if L.migration then
+		return sendA(c, { action = "error", message = "Host migration in progress, try again in a moment." })
+	end
+	-- A host who is already out does not end a match that is still being played.
+	if L.isInGame then
+		return sendA(c, { action = "error", message = "A match is still running." })
+	end
+	S:prepare_rematch(L)
+	local config = Core.MATCH and Core.MATCH.complete(L.options, L.gameMode) or nil
+	S:broadcast(L, { action = "rematch", config = config })
+	S:lobby_info(L)
+end
 function H.startGame(S, c)
 	local L = c.lobby
 	if not L or L.players[1] ~= c then return end

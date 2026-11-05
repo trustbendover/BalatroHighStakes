@@ -447,6 +447,7 @@ end
 local function action_start_game(p)
 	-- Lock the host snapshot before the run reads any match modifier (boss effects, lives, timer, ...).
 	if type(p.config) == "table" then adopt_match_settings(p.config) end
+	MP.GAME.match_finished = false
 	local seed = p.seed
 	sendDebugMessage(string.format("Game starting — %s", os.date("%Y-%m-%dT%H:%M:%S%z")), "MULTIPLAYER")
 	-- Clear any stale practice/ghost state so it can't leak into real MP
@@ -842,6 +843,31 @@ local function action_player_left(p)
 	action_player_eliminated(p)
 end
 
+local function loc_or(key, fallback)
+	local s = localize(key)
+	if type(s) ~= "string" or s == "" or s == "ERROR" or s == key then return fallback end
+	return s
+end
+
+local function action_rematch(p)
+	-- Same Steam lobby and reconnect token. The old run checkpoint must not come back.
+	if type(p.config) == "table" then adopt_match_settings(p.config) end
+	MP.GAME.match_finished = false
+	if MP.REJOIN then MP.REJOIN.clear(); MP.REJOIN.reset() end
+	if MP.SPECTATE then MP.SPECTATE.on_match_end() end
+	MP.enemy_disconnect_countdown = nil
+	MP.reset_game_states()
+	if save_reconnect_info then save_reconnect_info() end
+	if G.STAGE ~= G.STAGES.MAIN_MENU then
+		G.FUNCS.go_to_menu()
+		if MP.UI and MP.UI.update_connection_status then MP.UI.update_connection_status() end
+	end
+	local host = MP.LOBBY and MP.LOBBY.is_host
+	local msg = host and loc_or("k_rematch_host", "Same lobby. Everyone must ready up again.")
+		or loc_or("k_rematch_guest", "Rematch. Press Ready when you want to play again.")
+	if MP.UI and MP.UI.UTILS and MP.UI.UTILS.overlay_message then pcall(MP.UI.UTILS.overlay_message, msg) end
+end
+
 local function action_stop_game()
 	clear_reconnect_info()
 	if MP.REJOIN then MP.REJOIN.clear(); MP.REJOIN.reset() end
@@ -919,6 +945,7 @@ local function action_win_game()
 	MP.end_game_jokers_received = false
 	MP.nemesis_deck_received = false
 	MP.GAME.won = true
+	MP.GAME.match_finished = true
 	clear_reconnect_info()
 	if MP.REJOIN then MP.REJOIN.clear(); MP.REJOIN.reset() end
 	if MP.SPECTATE then MP.SPECTATE.on_match_end() end
@@ -929,7 +956,8 @@ local function action_win_game()
 	win_game()
 end
 
-local function action_lose_game()
+local function action_lose_game(p)
+	MP.GAME.match_finished = p and p.finished and true or false
 	MP.end_game_jokers_payload = ""
 	MP.nemesis_deck_string = ""
 	MP.end_game_jokers_received = false
@@ -1544,6 +1572,11 @@ function MP.ACTIONS.stop_game()
 	})
 end
 
+function MP.ACTIONS.rematch()
+	if not (MP.LOBBY and MP.LOBBY.is_host) then return end
+	Client.send({ action = "rematch" })
+end
+
 function MP.ACTIONS.fail_round(hands_used)
 	if MP.LOBBY.config.no_gold_on_round_loss then G.GAME.blind.dollars = 0 end
 	if hands_used == 0 then return end
@@ -1890,6 +1923,7 @@ local HANDLERS = {
 	playerJoined = action_player_joined,
 	rejoinFailed = action_rejoin_failed,
 	stopGame = action_stop_game,
+	rematch = action_rematch,
 	endPvP = action_end_pvp,
 	playerInfo = action_player_info,
 	winGame = action_win_game,

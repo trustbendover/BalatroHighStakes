@@ -29,6 +29,7 @@ export type ActionLobbyInfo = {
 	inGame?: boolean
 }
 export type ActionStopGame = { action: 'stopGame' }
+export type ActionRematch = { action: 'rematch'; config?: { [key: string]: unknown } }
 export type ActionStartGame = {
 	action: 'startGame'
 	deck: string
@@ -125,6 +126,7 @@ export type ActionServerToClient =
 	| ActionEnemyReconnected
 	| ActionLobbyInfo
 	| ActionStopGame
+	| ActionRematch
 	| ActionStartGame
 	| ActionStartBlind
 	| ActionWinGame
@@ -171,6 +173,7 @@ export type ActionReadyLobby = { action: 'readyLobby' }
 export type ActionUnreadyLobby = { action: 'unreadyLobby' }
 export type ActionLobbyInfoRequest = { action: 'lobbyInfo' }
 export type ActionStopGameRequest = { action: 'stopGame' }
+export type ActionRematchRequest = { action: 'rematch' }
 export type ActionStartGameRequest = { action: 'startGame' }
 export type ActionReadyBlind = { action: 'readyBlind' }
 export type ActionUnreadyBlind = { action: 'unreadyBlind' }
@@ -234,6 +237,7 @@ export type ActionClientToServer =
 	| ActionUnreadyLobby
 	| ActionLobbyInfoRequest
 	| ActionStopGameRequest
+	| ActionRematchRequest
 	| ActionStartGameRequest
 	| ActionReadyBlind
 	| ActionPlayHand

@@ -508,6 +508,16 @@ class Lobby {
 		if (this.gameMode === "teams" && !this.isInGame && teamsAfter !== teamsBefore) this.broadcastLobbyInfo();
 	};
 
+	/** Finished match only. Same players, options and team order. Guests must ready again. */
+	prepareRematch = () => {
+		this.resetPlayers();
+		for (const p of this.players) {
+			p.eliminated = false;
+			p.lives = 0;
+			if (p.id !== this.host?.id) p.isReadyLobby = false;
+		}
+	};
+
 	resetPlayers = () => {
 		this.isInGame = false;
 		for (const p of this.players) {

@@ -246,6 +246,21 @@ const failPvPTimerAction = (client: Client) => {
 	lobby.tryResolvePvP();
 };
 
+const rematchAction = (client: Client) => {
+	const lobby = client.lobby;
+	if (!lobby || lobby.host?.id !== client.id) {
+		client.sendAction({ action: "error", message: "Only the host can rematch." });
+		return;
+	}
+	if (lobby.isInGame) {
+		client.sendAction({ action: "error", message: "A match is still running." });
+		return;
+	}
+	lobby.prepareRematch();
+	lobby.broadcastAction({ action: "rematch", config: { ...lobby.options, gamemode: lobby.gameMode } });
+	lobby.broadcastLobbyInfo();
+};
+
 const stopGameAction = (client: Client) => {
 	if (!client.lobby) {
 		return;
@@ -797,6 +812,7 @@ export const actionHandlers = {
 	unreadyBlind: unreadyBlindAction,
 	playHand: playHandAction,
 	stopGame: stopGameAction,
+	rematch: rematchAction,
 	gameInfo: gameInfoAction,
 	lobbyOptions: lobbyOptionsAction,
 	failRound: failRoundAction,
