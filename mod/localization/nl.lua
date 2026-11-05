@@ -456,6 +456,10 @@ return {
 			k_message9 = "Sorry, my WiFi is having an existential crisis",
 			-- Didn't translate the k_messages
 			k_lobby_options = "Lobby Opties",
+			k_lobby_general = "Algemeen",
+			k_lobby_gameplay = "Spelverloop",
+			k_lobby_modifiers = "Modifiers",
+			k_lobby_advanced = "Geavanceerd",
 			k_lobby_presets = "Presets",
 			k_wait_join = "Wachten tot er spelers joinen",
 			k_preset_builtin = "Ingebouwde presets",
