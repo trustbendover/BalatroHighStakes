@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.9 - host settings, rematch, public lobbies
+
+- **Host settings apply to everyone.** On join, at start, and on rejoin, every player uses the host's match settings. If the host does not send a key, it is off, not the guest's leftover value. Personal display and audio settings stay local. A guest cannot overwrite the host.
+- **Rematch.** After the match is actually over, the host can start the same lobby again (Rematch / Opnieuw). Team order and host settings stay, including public or private. Lives, scores, elimination and held seats are cleared. Guests must ready again. A guest cannot start it, and it is refused while a match is still running.
+- **Public or private lobby.** The host toggles this at the top of the general lobby options. Private is the default, including when an older host never sent the key. Private uses Steam's Invisible lobby type so a 5-letter code search and a Steam invite still work, and it is not marked for the lobby list. Public uses Steam's Public type and can appear in the list. The code is not a password either way.
+- **Public lobby list.** The multiplayer menu has Public lobbies / Openbare lobby's. It asks Steam for High Stakes lobbies of this version that the host marked public, and shows a cleaned host name, the mode, current/max players, and waiting or in progress. Join is only for a waiting lobby with room. Watch is only for a running match that still allows spectators. Full and unwatchable rows say so. The list is paged. Join and Watch re-read the lobby first; if it is no longer public, the client does not sit down. Code join, clipboard join and invites are unchanged.
+- **Deathmatch tests.** The Deathmatch leave suite now expects the 0.6.8 rule: an in-game Leave holds the seat for the grace window, an immediate rejoin works, and an absent seat loses a life at PvP. Instant elimination on Leave was not restored.
+- **Not checked on live Steam.** The lobby type, search filters and the list were exercised with the project's Steam stand-in and the real UI tree measured in tests. They were not run against Valve's network or drawn inside Balatro.
+
 ## Ranked Update 0.4.0
 
 ### Standard Ranked

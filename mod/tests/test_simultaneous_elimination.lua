@@ -63,7 +63,7 @@ local all
 local function player(name)
 	local P = { name = name, msgs = {}, alive = true }
 	P.b = backend(name)
-	P.r = P2P.new_router({ log = os.getenv("LOG") and function(s) print("[" .. T .. " " .. name .. "] " .. s) end or nil, backend = P.b, Core = Core, json = json, now = now, version = "0.6.8~3P", Migration = HMmod,
+	P.r = P2P.new_router({ log = os.getenv("LOG") and function(s) print("[" .. T .. " " .. name .. "] " .. s) end or nil, backend = P.b, Core = Core, json = json, now = now, version = "0.6.9", Migration = HMmod,
 		push = function(s) P.msgs[#P.msgs + 1] = json.decode(s) end })
 	P.send = function(t) P.r.send(t) end
 	P.last = function(a) for i = #P.msgs, 1, -1 do if P.msgs[i].action == a then return P.msgs[i] end end end
@@ -81,7 +81,7 @@ local function setup(n, mode, opts)
 	local ps = {}
 	for i = 1, n do ps[i] = player(mode:sub(1, 3) .. n .. "_" .. i) end
 	all = ps
-	for _, p in ipairs(ps) do p.send({ action = "connect" }); p.send({ action = "username", username = p.name, modHash = "t" }); p.send({ action = "version", version = "0.6.8~3P" }) end
+	for _, p in ipairs(ps) do p.send({ action = "connect" }); p.send({ action = "username", username = p.name, modHash = "t" }); p.send({ action = "version", version = "0.6.9" }) end
 	ps[1].send({ action = "createLobby", gameMode = mode }); pump()
 	local code = ps[1].last("joinedLobby").code
 	local o = { starting_lives = "2" }

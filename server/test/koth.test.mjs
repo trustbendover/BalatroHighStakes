@@ -74,7 +74,7 @@ class Fake {
 async function main() {
   for (let i = 0; i < 50; i++) { try { await new Promise((r, j) => { const s = net.connect(PORT, '127.0.0.1', () => { s.destroy(); r() }); s.on('error', j) }); break } catch { await sleep(100) } }
   const [A, B, C] = ['Alice', 'Bob', 'Carol'].map((n) => new Fake(n))
-  for (const c of [A, B, C]) { await c.connect(); await c.waitAction('connected'); c.send({ action: 'username', username: c.name, modHash: 'test' }); c.send({ action: 'version', version: '0.6.8~3P' }) }
+  for (const c of [A, B, C]) { await c.connect(); await c.waitAction('connected'); c.send({ action: 'username', username: c.name, modHash: 'test' }); c.send({ action: 'version', version: '0.6.9' }) }
   A.send({ action: 'createLobby', gameMode: 'koth' })
   const jl = await A.waitAction('joinedLobby'); assert.equal(jl.type, 'koth')
   B.send({ action: 'joinLobby', code: jl.code }); await B.waitAction('joinedLobby')

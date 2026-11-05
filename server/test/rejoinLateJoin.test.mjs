@@ -46,7 +46,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 async function connect(name) {
   const c = new Fake(name); await c.connect(); await c.waitAction('connected')
-  c.send({ action: 'username', username: name + '~3', modHash: 'test' }); c.send({ action: 'version', version: '0.6.8~3P' })
+  c.send({ action: 'username', username: name + '~3', modHash: 'test' }); c.send({ action: 'version', version: '0.6.9' })
   return c
 }
 async function lobbyOf(names, lives = '3') {

@@ -29,7 +29,7 @@ ok(type(nasty) == "string" and not nasty:find("\n", 1, true) and not nasty:find(
 ok(#Browser.sanitize_name(("W"):rep(80)) == Browser.NAME_MAX, "host name is capped")
 ok(Browser.sanitize_name("") == nil and Browser.sanitize_name(nil) == nil, "empty name is not a string we invent here")
 
-local ver = "0.6.8.2"
+local ver = "0.6.9"
 local filters = Browser.filters(ver)
 ok(filters[1].key == "mp3p_discover" and filters[1].value == "1" and filters[2].value == "hs" and filters[3].value == ver, "Steam filters are discover + this mod + this version")
 ok(Browser.version("0.6.8.2~3P") == "0.6.8.2~3P" and Browser.version("bad version") == "", "version filter is a single token")

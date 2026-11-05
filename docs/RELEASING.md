@@ -15,8 +15,8 @@ fallback path. Repo rename steps: `docs/REPO_RENAME_NL.md`.
 ## Steps
 
 1. Bump the version everywhere (all must match):
-   - `mod/Multiplayer.json` → `"version": "X.Y.Z~3P"`
-   - `mod/networking/p2p_server.lua` → `Core.SERVER_VERSION = "X.Y.Z-MULTIPLAYER3P"`
+   - `mod/Multiplayer.json` → `"version": "X.Y.Z"` (plain since 0.6.8; no `~3P`)
+   - `mod/networking/p2p_server.lua` → `Core.SERVER_VERSION = "X.Y.Z"` (plain; no `-MULTIPLAYER3P` suffix)
    - `server/src/actionHandlers.ts` → `serverVersion`, and `server/package.json` (+ `npm install` for the lock file)
    - version strings in `mod/tests/test_steam_p2p.lua` and `server/test/*.mjs`
    - `version.json` (`version` and `tag`) — fallback for the update check

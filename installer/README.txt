@@ -1,4 +1,4 @@
-Balatro High Stakes  v0.6.8.2  (unofficial fork of Balatro Multiplayer, by Trust Ben Dover)
+Balatro High Stakes  v0.6.9  (unofficial fork of Balatro Multiplayer, by Trust Ben Dover)
 =========================================================================================
 Balatro Multiplayer for 2 to 8 players: 1v1 Duel, Attrition, Showdown, King of the Hill and
 Teams (2v2, 3v3, 4v4, 2v2v2, 2v2v2v2). Everyone in the match needs this mod.
@@ -20,7 +20,7 @@ INSTALL
 3. The installer finds Balatro, installs Lovely (mod loader), Steamodded 1.0.0~BETA-1620a
    and the High Stakes mod, and backs up anything it replaces (see %APPDATA%\Balatro\MP3P-backup-*).
 4. Nothing to choose: the mod always plays over Steam (mode=steam).
-5. Start Balatro normally from Steam. Version 0.6.8.2 shows in the main menu.
+5. Start Balatro normally from Steam. Version 0.6.9 shows in the main menu.
 
 UPDATES (from 0.6.6 on)
 - When a new version is released, the main menu shows an "Update available: vX" button (top left).
