@@ -1015,10 +1015,30 @@ local SLOT_FIELDS = { "team", "lives", "score", "handsLeft", "ante", "skips", "f
 	"isReadyLobby", "roundLivesBlocker", "timerLivesBlocker", "location", "eliminated", "pvpDone",
 	"pvpTimerFailed", "playedThisBlind", "blindSeq", "inPvp", "sitOut", "modHash", "isCached", "spectator", "runState" }
 
+--- Host match settings for one client. A full snapshot (defaults filled) so a guest's
+--- leftover local value cannot survive join / rejoin. Does not write those defaults
+--- back onto L.options: the server still enforces only what the host actually sent.
+function Server:send_options(c)
+	local L = c and c.lobby
+	if not L then return end
+	if Core.MATCH then
+		local msg = Core.MATCH.complete(L.options, L.gameMode)
+		msg.action = "lobbyOptions"
+		sendA(c, msg)
+	else
+		local msg = {}
+		for k, v in pairs(L.options) do msg[k] = v end
+		msg.gamemode = L.gameMode
+		msg.action = "lobbyOptions"
+		sendA(c, msg)
+	end
+end
+
 function Server:send_resume(L, c, late)
+	local config = Core.MATCH and Core.MATCH.complete(L.options, L.gameMode) or nil
 	sendA(c, { action = "resumeGame", seed = L.seed, ante = math.max(1, c.ante), lives = c.lives, lateJoin = late,
 		eliminated = c.eliminated, blindActive = L.blindActive, runState = c.runState,
-		stats = L.book and L.book[c.id] or nil,
+		stats = L.book and L.book[c.id] or nil, config = config,
 		inCurrentBlind = (c.inPvp and L.blindActive and c.blindSeq == L.blindSeq) or false })
 	sendA(c, { action = "playerInfo", lives = c.lives })
 	for _, o in ipairs(L.players) do if o ~= c and not o.spectator then sendA(c, self:enemy_info(o, true)) end end
@@ -1050,7 +1070,7 @@ function Server:reclaim(L, c, slot)
 	local missed = c.inPvp and (not L.blindActive or c.blindSeq ~= L.blindSeq)
 	if missed then c.inPvp, c.pvpDone, c.isReady = false, false, false end
 	sendA(c, { action = "rejoinedLobby", code = L.code, type = L.gameMode, reconnectToken = c.reconnectToken })
-	sendA(c, copy(copy({ gamemode = L.gameMode }, L.options), { action = "lobbyOptions" }))
+	self:send_options(c)
 	self:send_resume(L, c, false)
 	self:koth_broadcast(L)
 	self:teams_broadcast(L)
@@ -1111,7 +1131,7 @@ function Server:late_join(L, c)
 	L.players[#L.players + 1] = c
 	c.lobby, c.isReadyLobby = L, true
 	sendA(c, { action = "joinedLobby", code = L.code, type = L.gameMode, reconnectToken = c.reconnectToken })
-	sendA(c, copy(copy({ gamemode = L.gameMode }, L.options), { action = "lobbyOptions" }))
+	self:send_options(c)
 	self:send_resume(L, c, true)
 	self:koth_broadcast(L)
 	for _, p in ipairs(L.players) do
@@ -1140,7 +1160,7 @@ function Server:spectate(L, c)
 	c.isReadyLobby, c.lobby = true, L
 	L.players[#L.players + 1] = c
 	sendA(c, { action = "joinedLobby", code = L.code, type = L.gameMode, reconnectToken = c.reconnectToken, spectator = true })
-	sendA(c, copy(copy({ gamemode = L.gameMode }, L.options), { action = "lobbyOptions" }))
+	self:send_options(c)
 	local grace = Core.rejoin_grace(L.options, L.gameMode)
 	local hold = (held and held.since and not held.old.eliminated) and math.max(0, math.floor(grace - (self.now() - held.since))) or nil
 	self:lobby_info(L) -- names first, so the panel shows them immediately
@@ -1185,7 +1205,7 @@ function Server:join(L, c, want_spectate)
 	L.players[#L.players + 1] = c
 	c.eliminated, c.lobby, c.isReadyLobby = false, L, false
 	sendA(c, { action = "joinedLobby", code = L.code, type = L.gameMode, reconnectToken = c.reconnectToken })
-	sendA(c, copy(copy({ gamemode = L.gameMode }, L.options), { action = "lobbyOptions" }))
+	self:send_options(c)
 	self:lobby_info(L)
 end
 
@@ -1293,7 +1313,7 @@ function Server:migration_reclaimed(L, c)
 	local host = L.players[1]
 	sendA(c, { action = "hostMigrated", code = L.code, type = L.gameMode, reconnectToken = c.reconnectToken, you = c.id,
 		hostId = host and host.id, hostName = host and host.username, oldHostName = m.oldHostName, inGame = L.isInGame })
-	sendA(c, copy(copy({ gamemode = L.gameMode }, L.options), { action = "lobbyOptions" }))
+	self:send_options(c)
 	if L.isInGame then
 		sendA(c, { action = "playerInfo", lives = c.lives })
 		for _, o in ipairs(L.players) do if o ~= c and not o.spectator then sendA(c, self:enemy_info(o, true)) end end
@@ -1425,7 +1445,8 @@ function H.startGame(S, c)
 	S:reset_players(L)
 	L.isInGame = true
 	local seated = S:seated(L)
-	for _, p in ipairs(seated) do sendA(p, { action = "startGame", deck = "c_multiplayer_1", seed = seed, playerCount = #seated }) end
+	local config = Core.MATCH and Core.MATCH.complete(L.options, L.gameMode) or nil
+	for _, p in ipairs(seated) do sendA(p, { action = "startGame", deck = "c_multiplayer_1", seed = seed, playerCount = #seated, config = config }) end
 	for _, p in ipairs(seated) do p.lives, p.eliminated = lives, false end
 	for _, p in ipairs(seated) do sendA(p, { action = "playerInfo", lives = lives }) end
 	for _, p in ipairs(S:spectators(L)) do
@@ -1500,16 +1521,22 @@ end
 function H.lobbyOptions(S, c, a)
 	local L = c.lobby
 	if not L then return end
-	local opts = {}
-	local teams_before = tostring(L.options.teams_order or "") .. "|" .. tostring(L.options.teams_size or "") .. "|" .. tostring(L.options.teams_format or "")
+	-- Only the host's copy counts. A guest's local settings must not change the match.
+	if L.players[1] ~= c then return end
+	local incoming = {}
 	for k, v in pairs(a) do
 		if k ~= "action" then
 			if v == "true" then v = true elseif v == "false" then v = false end
-			L.options[k] = v
-			opts[k] = a[k]
+			incoming[k] = v
 		end
 	end
-	for i = 2, #L.players do sendA(L.players[i], copy(copy({ gamemode = L.gameMode }, opts), { action = "lobbyOptions" })) end
+	local teams_before = tostring(L.options.teams_order or "") .. "|" .. tostring(L.options.teams_size or "") .. "|" .. tostring(L.options.teams_format or "")
+	if Core.MATCH then
+		L.options = Core.MATCH.store(L.options, incoming)
+	else
+		for k, v in pairs(incoming) do L.options[k] = v end
+	end
+	for i = 2, #L.players do S:send_options(L.players[i]) end
 	-- re-broadcast the team preview only on a real change (the host re-sends all options after each lobbyInfo)
 	local teams_after = tostring(L.options.teams_order or "") .. "|" .. tostring(L.options.teams_size or "") .. "|" .. tostring(L.options.teams_format or "")
 	if L.gameMode == "teams" and not L.isInGame and teams_after ~= teams_before then S:lobby_info(L) end
@@ -1618,6 +1645,16 @@ function Server:tick()
 		if #L.players == 0 and L.emptySince and now - L.emptySince > Core.EMPTY_LOBBY_TTL then
 			self:destroy(L)
 		end
+	end
+end
+
+do
+	local src = debug.getinfo(1, "S").source or ""
+	if src:sub(1, 1) == "@" then src = src:sub(2) end
+	local dir = src:match("^(.*)[/\\]")
+	if dir and not Core.MATCH then
+		local ok, m = pcall(dofile, dir .. "/match_settings.lua")
+		if ok and type(m) == "table" and m.store then Core.MATCH = m end
 	end
 end
 

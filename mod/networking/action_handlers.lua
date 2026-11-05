@@ -433,7 +433,20 @@ local function action_reconnecting()
 	end
 end
 
+local function adopt_match_settings(src)
+	if not (MP.MATCH and type(src) == "table" and MP.LOBBY and MP.LOBBY.config) then return end
+	local before = MP.LOBBY.config.different_decks
+	MP.MATCH.apply(MP.LOBBY.config, src)
+	if MP.modifiers_parse then MP.modifiers_parse(MP.LOBBY.config.modifier_layers or "") end
+	if before ~= MP.LOBBY.config.different_decks and G and G.FUNCS and G.FUNCS.exit_overlay_menu then
+		G.FUNCS.exit_overlay_menu()
+	end
+	if MP.ACTIONS and MP.ACTIONS.update_player_usernames then MP.ACTIONS.update_player_usernames() end
+end
+
 local function action_start_game(p)
+	-- Lock the host snapshot before the run reads any match modifier (boss effects, lives, timer, ...).
+	if type(p.config) == "table" then adopt_match_settings(p.config) end
 	local seed = p.seed
 	sendDebugMessage(string.format("Game starting — %s", os.date("%Y-%m-%dT%H:%M:%S%z")), "MULTIPLAYER")
 	-- Clear any stale practice/ghost state so it can't leak into real MP
@@ -784,6 +797,8 @@ MP.THREEP.restart_at_ante = restart_at_ante
 -- 0.6.8: our own checkpoint (lib/rejoin.lua) restores the run when it matches the lobby;
 -- otherwise restart_at_ante. Both wait until the lobby screen has settled after the rejoin.
 local function action_resume_game(p)
+	-- Rejoin / late join: host match settings before the run continues or restarts.
+	if type(p.config) == "table" then adopt_match_settings(p.config) end
 	local run_alive = G.STAGE == G.STAGES.RUN and not p.lateJoin and MP.GAME and (MP.GAME.lives or 0) > 0
 		and G.STATE ~= G.STATES.GAME_OVER
 	if run_alive then
@@ -930,66 +945,29 @@ local function action_lose_game()
 end
 
 local function action_lobby_options(options)
-	local different_decks_before = MP.LOBBY.config.different_decks
-	for k, v in pairs(options) do
-		if k == "ruleset" then
-			if not MP.Rulesets[v] then
-				G.FUNCS.lobby_leave(nil)
-				MP.UI.UTILS.overlay_message(localize({
-					type = "variable",
-					key = "k_failed_to_join_lobby",
-					vars = { localize("k_ruleset_not_found") },
-				}))
-				return
-			end
-			local disabled = MP.Rulesets[v].is_disabled()
-			if disabled then
-				G.FUNCS.lobby_leave(nil)
-				MP.UI.UTILS.overlay_message(
-					localize({ type = "variable", key = "k_failed_to_join_lobby", vars = { disabled } })
-				)
-				return
-			end
-			MP.LOBBY.config.ruleset = v
-			goto continue
+	local ruleset = options and options.ruleset
+	if ruleset and MP.Rulesets then
+		if not MP.Rulesets[ruleset] then
+			G.FUNCS.lobby_leave(nil)
+			MP.UI.UTILS.overlay_message(localize({
+				type = "variable",
+				key = "k_failed_to_join_lobby",
+				vars = { localize("k_ruleset_not_found") },
+			}))
+			return
 		end
-		if k == "gamemode" then
-			MP.LOBBY.config.gamemode = v
-			goto continue
+		local disabled = MP.Rulesets[ruleset].is_disabled()
+		if disabled then
+			G.FUNCS.lobby_leave(nil)
+			MP.UI.UTILS.overlay_message(
+				localize({ type = "variable", key = "k_failed_to_join_lobby", vars = { disabled } })
+			)
+			return
 		end
-		if k == "modifier_layers" then
-			MP.LOBBY.config.modifier_layers = v
-			MP.modifiers_parse(v)
-			goto continue
-		end
-
-		local parsed_v = v
-		if v == "true" then
-			parsed_v = true
-		elseif v == "false" then
-			parsed_v = false
-		end
-
-		if
-			k == "starting_lives"
-			or k == "pvp_start_round"
-			or k == "timer_base_seconds"
-			or k == "timer_increment_seconds"
-			or k == "showdown_starting_antes"
-			or k == "pvp_countdown_seconds"
-			or k == "timer_forgiveness"
-		then
-			parsed_v = tonumber(v)
-		end
-
-		MP.LOBBY.config[k] = parsed_v
-		if MP.UI.update_lobby_option_toggle then MP.UI.update_lobby_option_toggle(k) end
-		::continue::
 	end
-	if different_decks_before ~= MP.LOBBY.config.different_decks then
-		G.FUNCS.exit_overlay_menu() -- throw out guest from any menu.
-	end
-	MP.ACTIONS.update_player_usernames() -- render new DECK button state
+	-- Host snapshot wins, including keys the guest had set locally and this message
+	-- fills from the match defaults (PvP boss-blind effects and the rest).
+	adopt_match_settings(options)
 end
 
 local function action_send_phantom(p)
@@ -1638,13 +1616,14 @@ function MP.ACTIONS.play_hand(score, hands_left)
 end
 
 function MP.ACTIONS.lobby_options()
-	---@type table<string, any>
-	local msg = {
-		action = "lobbyOptions",
-	}
-	for k, v in pairs(MP.LOBBY.config) do
-		msg[tostring(k)] = v
+	-- Guests keep their personal preferences, but those must not become the match.
+	if not (MP.LOBBY and MP.LOBBY.is_host) then return end
+	local msg = (MP.MATCH and MP.MATCH.wire(MP.LOBBY.config)) or {}
+	if not MP.MATCH then
+		msg = {}
+		for k, v in pairs(MP.LOBBY.config) do msg[tostring(k)] = v end
 	end
+	msg.action = "lobbyOptions"
 	Client.send(msg)
 end
 

@@ -195,42 +195,23 @@ MP.load_mp_dir("overrides")
 
 function MP.reset_lobby_config(persist_ruleset_and_gamemode)
 	sendDebugMessage("Resetting lobby options", "MULTIPLAYER")
-	MP.LOBBY.config = {
-		gold_on_life_loss = true,
-		no_gold_on_round_loss = false,
-		death_on_round_loss = true,
-		different_seeds = false,
-		the_order = true,
-		starting_lives = 4,
-		pvp_start_round = 2,
-		timer_base_seconds = 150,
-		timer_increment_seconds = 60,
-		pvp_countdown_seconds = 3,
-		showdown_starting_antes = 3,
-		ruleset = persist_ruleset_and_gamemode and MP.LOBBY.config.ruleset or "ruleset_mp_blitz",
-		gamemode = persist_ruleset_and_gamemode and MP.LOBBY.config.gamemode or "gamemode_mp_attrition",
-		weekly = nil,
-		custom_seed = "random",
-		different_decks = false,
-		random_loadout = false,
-		back = "Red Deck",
-		sleeve = "sleeve_casl_none",
-		stake = 1,
-		challenge = "",
-		cocktail = "",
-		multiplayer_jokers = true,
-		timer = true,
-		timer_forgiveness = 0,
-		forced_config = false,
-		preview_disabled = false,
-		legacy_smallworld = false,
-		-- Baseline off; start_lobby sets it on for standard-layer rulesets.
-		hide_score_until_played = false,
-		enemy_location_disabled = false,
-		timer_display_threshold = 0,
-		rejoin_grace = 0, -- 0.6.8: seconds a dropped player's seat is held (0 = mode default: 3 min, Deathmatch 1 min)
+	local prev = MP.LOBBY.config or {}
+	-- Match keys live in networking/match_settings.lua (includes normal_bosses = false).
+	-- weekly is personal (which weekly ruleset this profile has already seen) and stays local.
+	local cfg = (MP.MATCH and MP.MATCH.fresh) and MP.MATCH.fresh() or {
+		normal_bosses = false,
+		ruleset = "ruleset_mp_blitz",
+		gamemode = "gamemode_mp_attrition",
 	}
+	if persist_ruleset_and_gamemode then
+		if prev.ruleset then cfg.ruleset = prev.ruleset end
+		if prev.gamemode then cfg.gamemode = prev.gamemode end
+	end
+	local weekly = prev.weekly
+	MP.LOBBY.config = cfg
+	MP.LOBBY.config.weekly = weekly
 end
+if not MP.MATCH then MP.MATCH = MP.load_mp_file("networking/match_settings.lua") end
 MP.reset_lobby_config()
 
 function MP.reset_game_states()
@@ -411,6 +392,7 @@ do
 		local P2P = MP.load_mp_file("networking/steam_p2p.lua")
 		local Core = MP.load_mp_file("networking/p2p_server.lua")
 		if not P2P or not Core then error("P2P modules failed to load") end
+		Core.MATCH = Core.MATCH or MP.MATCH -- host match settings (join / start / rejoin)
 		Core.KOTH = MP.load_mp_file("networking/koth_rules.lua") -- King of the Hill gamemode rules
 		Core.TEAMS = MP.load_mp_file("networking/teams_rules.lua") -- Teams gamemode rules
 		Core.PVP = MP.load_mp_file("networking/pvp_rules.lua") -- free-for-all life loss (2-8 players)

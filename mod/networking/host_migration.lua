@@ -37,7 +37,10 @@ M.WATCH_EVERY = 3   -- the new host keeps telling a frozen old host (still in St
 M.REJOIN_FOR = 180 -- a host that was cut off keeps trying to rejoin the new host this long
 -- messages that are not replayed to a new host (identity / lobby control)
 M.NO_REPLAY = { connect = true, version = true, username = true, joinLobby = true, rejoinLobby = true,
-	leaveLobby = true, createLobby = true, keepAlive = true, keepAliveAck = true, lobbyInfo = true }
+	leaveLobby = true, createLobby = true, keepAlive = true, keepAliveAck = true, lobbyInfo = true,
+	-- A guest's lobbyOptions must not be replayed after they become host: the snapshot already
+	-- holds the old host's match settings, and replaying the guest's copy would replace them.
+	lobbyOptions = true }
 
 local function contains(t, x) for _, v in ipairs(t or {}) do if v == x then return true end end return false end
 local function index_of(t, x) for i, v in ipairs(t or {}) do if v == x then return i end end return nil end
