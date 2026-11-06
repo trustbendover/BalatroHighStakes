@@ -1627,7 +1627,7 @@ return {
 			k_vanilla = "Vanilla",
 			k_vanilla_description = "The original Balatro experience.\n\nNo Multiplayer jokers, no balance changes.\nJust the base game as it was designed.\n\nMultiplayer features like the timer are still available\nbut can be disabled in Lobby Options.",
 			k_blitz = "High Stakes Multiplayer",
-			k_blitz_description = "The balanced Multiplayer ruleset.\n\nIncludes Multiplayer jokers and balance changes\nwith full control over your lobby settings.\n\n(See bans and reworks tabs for details)",
+			k_blitz_description = "Choose a High Stakes mode such as 1v1, Teams or Deathmatch.\n\nIncludes Multiplayer jokers and balance changes,\nwith full control over your lobby settings.",
 			k_experimental = "Experimental",
 			k_traditional = "Traditional",
 			k_traditional_description = "Multiplayer content without time pressure.\n\nIncludes Multiplayer jokers and balance changes,\nbut removes time-based mechanics for methodical play.\n\nTime-based jokers are banned.\nTimer is disabled.\n\n(See bans and reworks tabs for details)",

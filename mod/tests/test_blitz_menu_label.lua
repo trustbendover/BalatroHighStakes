@@ -14,6 +14,14 @@ local LABEL = "High Stakes Multiplayer"
 
 ok(en.k_blitz == LABEL, "English Custom-group entry is High Stakes Multiplayer")
 ok(nl.k_blitz == LABEL, "Dutch uses the same High Stakes Multiplayer label")
+local EN_DESC = "Choose a High Stakes mode such as 1v1, Teams or Deathmatch.\n\nIncludes Multiplayer jokers and balance changes,\nwith full control over your lobby settings."
+local NL_DESC = "Kies een High Stakes-modus zoals 1v1, Teams of Deathmatch.\n\nInclusief Multiplayer-jokers en balance-aanpassingen,\nmet volledige controle over je lobby-instellingen."
+ok(en.k_blitz_description == EN_DESC, "English Info text is the High Stakes mode description")
+ok(nl.k_blitz_description == NL_DESC, "Dutch Info text is the High Stakes mode description")
+ok(not en.k_blitz_description:find("bans", 1, true) and not en.k_blitz_description:find("reworks", 1, true), "English Info text does not mention bans or reworks")
+ok(en.k_traditional_description and en.k_traditional_description:find("Time-based jokers", 1, true), "Traditional description stays")
+ok(en.k_vanilla_description and en.k_vanilla_description:find("original Balatro", 1, true), "Vanilla description stays")
+ok(en.k_standard_ranked_description and en.k_standard_ranked_description:find("competitive", 1, true), "Standard Ranked description stays")
 ok(en.k_custom == "Custom", "Custom heading is unchanged")
 ok(nl.k_custom == nil, "Dutch does not replace the Custom heading")
 ok(en.k_standard == "Standard", "unrelated English Standard stays")
