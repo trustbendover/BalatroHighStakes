@@ -19,6 +19,20 @@ local function fill(key, a, b, fallback)
 	return (s:gsub("#1#", tostring(a)):gsub("#2#", tostring(b)))
 end
 
+local function detail_line(row)
+	local bits = {}
+	if row.fmt == "2" or row.fmt == "3" or row.fmt == "4" then bits[#bits + 1] = row.fmt .. "v" .. row.fmt end
+	if row.boss == true then bits[#bits + 1] = loc("k_browser_boss_on", "Boss effects on")
+	elseif row.boss == false then bits[#bits + 1] = loc("k_browser_boss_off", "Boss effects off")
+	else bits[#bits + 1] = loc("k_browser_boss_unknown", "Boss effects unknown") end
+	if type(row.lives) == "number" then bits[#bits + 1] = tostring(row.lives) .. " " .. loc("k_browser_lives", "lives") end
+	if type(row.pvp_at) == "number" then bits[#bits + 1] = loc("k_browser_pvp_ante", "PvP ante") .. " " .. tostring(row.pvp_at) end
+	if type(row.show_at) == "number" then bits[#bits + 1] = loc("k_browser_show_ante", "Showdown ante") .. " " .. tostring(row.show_at) end
+	if row.timer == true then bits[#bits + 1] = loc("k_browser_timer_on", "Timer on")
+	elseif row.timer == false then bits[#bits + 1] = loc("k_browser_timer_off", "Timer off") end
+	return table.concat(bits, " | ")
+end
+
 local function clip(text, scale, maxw)
 	text = tostring(text or "")
 	if MP.FIT and MP.FIT.ellipsize then return MP.FIT.ellipsize(text, scale, maxw) end
@@ -258,6 +272,21 @@ function G.UIDEF.mp_lobby_browser()
 					text_col(tostring(row.players) .. "/" .. tostring(row.max), 0.32, 1.3, 1.3),
 					text_col(MP.BROWSER.state_text(row), 0.32, 2.2, 2.2),
 					action_node,
+				},
+			}
+			body[#body + 1] = {
+				n = G.UIT.R,
+				config = { align = "cm", padding = 0.01 },
+				nodes = {
+					{
+						n = G.UIT.T,
+						config = {
+							text = clip(detail_line(row), 0.26, 10),
+							scale = 0.26,
+							colour = G.C.UI.TEXT_INACTIVE or G.C.UI.TEXT_LIGHT,
+							maxw = 10,
+						},
+					},
 				},
 			}
 		end
