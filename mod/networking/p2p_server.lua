@@ -254,7 +254,7 @@ function Server:enemy_info(p, with_score)
 		action = "enemyInfo", playerId = p.id, username = p.username, handsLeft = p.handsLeft,
 		score = with_score and (p.score.str or "0") or nil, noScore = (not with_score) or nil,
 		skips = p.skips, lives = p.lives, eliminated = p.eliminated, ante = p.ante,
-		away = (p.lobby == nil) or nil, spectator = p.spectator or nil,
+		away = (p.lobby == nil) or nil, spectator = p.spectator or nil, rejoining = p.rejoining or nil,
 	}
 end
 
@@ -271,7 +271,7 @@ function Server:lobby_info(L)
 	for i, p in ipairs(L.players) do
 		players[i] = { id = p.id, username = p.username, hash = p.modHash, cached = p.isCached, ready = p.isReadyLobby,
 			isHost = i == 1, lives = p.lives, eliminated = p.eliminated, team = preview and (p.team or preview[p.id]) or nil,
-			spectator = p.spectator or nil }
+			spectator = p.spectator or nil, rejoining = p.rejoining or nil }
 	end
 	local away = {}
 	local now, grace = self.now(), Core.rejoin_grace(L.options, L.gameMode)
@@ -498,7 +498,10 @@ function Server:expire_slot(L, slot)
 	end
 	self:deathmatch_broadcast(L)
 	self:teams_broadcast(L)
-	if self:check_game_over(L) then return end
+	if self:check_game_over(L) then
+		self:lobby_info(L)
+		return
+	end
 	self:try_start_blind(L)
 	self:try_resolve_pvp(L)
 	self:lobby_info(L)
@@ -801,6 +804,12 @@ function Server:stats_finish(L)
 		if not here then out[id] = true end -- left the match
 	end
 	if L.winnerId then out[L.winnerId] = nil end
+	local function stamp(p)
+		local b = self:book_entry(L, p)
+		if b and p.lives ~= nil then b.lives = p.lives end
+	end
+	for _, p in ipairs(L.players) do if not p.spectator then stamp(p) end end
+	for _, sl in ipairs(L.slots or {}) do if sl.old then stamp(sl.old) end end
 	local teams_mode = L.gameMode == "teams" and L.teamLives ~= nil
 	local rows, teams, awards = Core.match_table(L.book, out, L.elimOrder, teams_mode)
 	if teams then
@@ -1102,6 +1111,8 @@ function Server:reclaim(L, c, slot)
 	end
 	c.lobby = L
 	if slot.migration then return self:migration_reclaimed(L, c) end
+	-- Socket is back; the run is restored when the client sends resumeRestarted. Display only.
+	c.rejoining = true
 	local missed = c.inPvp and (not L.blindActive or c.blindSeq ~= L.blindSeq)
 	if missed then c.inPvp, c.pvpDone, c.isReady = false, false, false end
 	sendA(c, { action = "rejoinedLobby", code = L.code, type = L.gameMode, reconnectToken = c.reconnectToken })
@@ -1642,11 +1653,14 @@ function H.syncClient(S, c, a) c.isCached = a.isCached and true or false end
 function H.resumeRestarted(S, c)
 	local L = c.lobby
 	if not L then return end
+	c.rejoining = nil
 	if L.blindActive then
 		c.sitOut, c.inPvp = true, false
 		S:try_resolve_pvp(L)
 	end
 	c.isReady = false
+	S:lobby_info(L)
+	for _, p in ipairs(L.players) do if p ~= c then sendA(p, S:enemy_info(c, true)) end end
 end
 function H.moddedAction(S, c, a)
 	local L = c.lobby

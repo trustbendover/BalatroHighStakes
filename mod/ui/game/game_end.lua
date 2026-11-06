@@ -453,6 +453,9 @@ function MP.UI.create_UIBox_mp_game_end(has_won)
 											-- Deathmatch: live standings while you spectate (empty row otherwise)
 											(MP.DEATHMATCH and MP.DEATHMATCH.spectate_row and MP.DEATHMATCH.spectate_row())
 												or { n = G.UIT.R, config = { align = "cm" }, nodes = {} },
+											-- Host results: winner, teams, and each player's lives / ante / best hand.
+											(MP.MATCH_STATS and MP.MATCH_STATS.end_block and MP.MATCH_STATS.end_block())
+												or { n = G.UIT.R, config = { align = "cm" }, nodes = {} },
 											-- 0.6.8: match stats (also shown automatically when the match ends)
 											(MP.MATCH_STATS and MP.MATCH_STATS.end_button and MP.MATCH_STATS.end_button())
 												or { n = G.UIT.R, config = { align = "cm" }, nodes = {} },

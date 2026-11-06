@@ -83,6 +83,20 @@ for _, lang in ipairs({ "en-us", "nl" }) do
 end
 MP.TEAMS = nil
 _G.localize = function() return "ERROR" end
+dofile("lib/presence.lua")
+for _, lang in ipairs({ "en-us", "nl" }) do
+	_G.localize = UM.localizer("localization/" .. lang .. ".lua")
+	MP.GAME.enemies = enemies()
+	local v = SP.lines(SP.rows(MP.GAME.enemies), "p2")
+	for i = 1, 8 do
+		local c = v.cells[i]
+		assert(F.width(c.status, SP.ROW_SCALE) <= SP.COL.status - 2 * SP.CELL_PAD + 1e-6, lang .. " presence status fits: " .. c.status)
+	end
+	local saw = false
+	for i = 1, 8 do if v.cells[i].kind == "away" and v.cells[i].status ~= "" then saw = true end end
+	ok(saw, lang .. ": a held seat shows a connection status")
+end
+_G.localize = function() return "ERROR" end
 
 -- ===== 3. rejoin bar: up to 7 players away, long names, EN + NL
 for _, lang in ipairs({ "en-us", "nl" }) do

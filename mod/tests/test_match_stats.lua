@@ -347,6 +347,30 @@ do
 	ok(#MS.view({ rows = { st.rows[1] }, awards = st.awards }).awards == 0, "one player: no awards")
 	local tv = MS.view({ rows = st.rows, awards = {}, teams = { { team = "A", place = 1, dealt = 5000, pvpWon = 3, livesLost = 1 } } })
 	ok(tv.winner == "Team A wins!" and tv.teams[1] == "Team A: damage 5K, PvPs won 3, lives lost 1", "teams lines")
+	local function side(n, bigger, lives_a)
+		local rows, members_a, members_b = {}, {}, {}
+		for i = 1, n do
+			local team = i <= bigger and "A" or "B"
+			rows[#rows + 1] = { id = "p" .. i, name = "P" .. i, place = team == "A" and 1 or 2, team = team,
+				lives = team == "A" and lives_a or 0, out = team ~= "A", dealt = 100 * i, best = tostring(100 * i), ante = 4,
+				livesLost = team == "A" and 1 or 4, pvpWon = 1, pvps = 2, money = 0, jokers = 1, seen = 1 }
+			if team == "A" then members_a[#members_a + 1] = "p" .. i else members_b[#members_b + 1] = "p" .. i end
+		end
+		return MS.result_lines({ winnerId = "p1", gameMode = "teams", rows = rows, teams = {
+			{ team = "A", place = 1, dealt = 300, pvpWon = 2, livesLost = 1, lives = lives_a, members = members_a },
+			{ team = "B", place = 2, dealt = 200, pvpWon = 0, livesLost = 4, lives = 0, members = members_b },
+		}, code = "ABCDE" })
+	end
+	for _, spec in ipairs({ { 5, 3, "3v2" }, { 7, 4, "4v3" }, { 4, 2, "2v2" } }) do
+		local lines = side(spec[1], spec[2], 2)
+		local blob = table.concat(lines, "\n")
+		ok(lines[1] == "Team A wins!", spec[3] .. " names the winning team")
+		ok(blob:find("2 lives", 1, true) and blob:find("Out", 1, true) and blob:find("ante 4", 1, true), spec[3] .. " shows lives, outs and ante")
+		ok(blob:find("P1 %[A%]") and blob:find("P" .. spec[1] .. " %[B%]"), spec[3] .. " lists every player on a team")
+		ok(not blob:find("ABCDE", 1, true), spec[3] .. " does not print a lobby code")
+	end
+	local endsrc = io.open("ui/game/game_end.lua"):read("*a")
+	ok(endsrc:find("rematch_button", 1, true) and endsrc:find("end_block", 1, true), "the end screen still offers Rematch and shows the results")
 	-- report from a stubbed game: best hand, lineup, jokers used, money earned, ante
 	_G.G = { STAGES = { RUN = 2 }, STAGE = 2, GAME = { round_scores = { hand = { amt = 1234 } }, last_hand_played = "Two Pair", round_resets = { ante = 3 } } }
 	MS.on_start()

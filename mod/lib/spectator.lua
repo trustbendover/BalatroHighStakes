@@ -65,6 +65,7 @@ function SP.rows(enemies, names)
 				ante = tonumber(e.ante),
 				location = e.location,
 				away = e.away and true or false,
+				rejoining = e.rejoining and true or false,
 				out = e.eliminated and true or false,
 			}
 		end
@@ -119,15 +120,19 @@ function SP.lines(rows, follow)
 			L("k_sp_hands", "Hands left: #1#", { f.hands }) }
 		if f.ante then bits[#bits + 1] = L("k_sp_ante", "Ante #1#", { f.ante }) end
 		v.detail = F.join(bits, 0.4, SP.TEXT_W)
-		local where = f.out and L("k_sp_out", "out") or f.away and L("k_sp_away", "disconnected")
+		local where = f.out and L("k_sp_out", "out")
+			or f.rejoining and (MP.PRESENCE and MP.PRESENCE.label("rejoining", localize) or "Rejoining")
+			or f.away and (MP.PRESENCE and MP.PRESENCE.label("held", localize) or L("k_sp_away", "disconnected"))
 			or (f.location and tostring(f.location)) or ""
 		v.where = where ~= "" and F.ellipsize(L("k_sp_where", "Now: #1#", { where }), 0.4, SP.TEXT_W) or ""
 	end
 	for i = 1, SP.MAX_ROWS do
 		local r = rows and rows[i]
 		if r then
-			local kind = r.out and "out" or r.away and "away" or (lead and lead.id == r.id and #rows > 1) and "ahead" or ""
-			local status = kind == "out" and L("k_sp_out", "out") or kind == "away" and L("k_sp_away", "disconnected")
+			local kind = r.out and "out" or r.rejoining and "rejoining" or r.away and "away" or (lead and lead.id == r.id and #rows > 1) and "ahead" or ""
+			local status = kind == "out" and L("k_sp_out", "out")
+				or kind == "rejoining" and (MP.PRESENCE and MP.PRESENCE.label("rejoining", localize) or "Rejoining")
+				or kind == "away" and (MP.PRESENCE and MP.PRESENCE.label("held", localize) or L("k_sp_away", "disconnected"))
 				or kind == "ahead" and L("k_sp_ahead", "ahead") or ""
 			local cell = {
 				mark = r.id == follow and ">" or "",
@@ -172,7 +177,7 @@ function SP.refresh()
 		pcall(function()
 			local grey = G.C.UI.TEXT_INACTIVE
 			F_colour(SP.colours[i].name, c.kind == "out" and grey or c.following and G.C.GOLD or G.C.UI.TEXT_LIGHT)
-			F_colour(SP.colours[i].status, c.kind == "ahead" and G.C.GREEN or c.kind == "away" and G.C.ORANGE or grey)
+			F_colour(SP.colours[i].status, c.kind == "ahead" and G.C.GREEN or (c.kind == "away" or c.kind == "rejoining") and G.C.ORANGE or grey)
 		end)
 	end
 	return rows

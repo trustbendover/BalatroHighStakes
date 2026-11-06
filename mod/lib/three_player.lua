@@ -57,10 +57,16 @@ function MP.THREEP.hud_line(entries, max_named)
 			if not compact then parts[#parts + 1] = tostring(e.username) .. " X" end
 		elseif #parts < max_named then
 			local tag = (e.crown or "") .. (e.ally and "+" or "")
+			local mark = ""
+			if e.rejoining or e.away then
+				if MP.PRESENCE then
+					mark = " " .. MP.PRESENCE.label(MP.PRESENCE.kind({ rejoining = e.rejoining, away = e.away }), localize)
+				elseif e.away then mark = " (away)" end
+			end
 			if compact then
-				parts[#parts + 1] = string.format("%s%s %s %sL%s", tag, tostring(e.username), e.score_text, tostring(e.lives or "?"), e.away and " (away)" or "")
+				parts[#parts + 1] = string.format("%s%s %s %sL%s", tag, tostring(e.username), e.score_text, tostring(e.lives or "?"), mark)
 			else
-				parts[#parts + 1] = string.format("%s%s %s (%sh) %sL%s", tag, tostring(e.username), e.score_text, tostring(e.hands or "?"), tostring(e.lives or "?"), e.away and " (away)" or "")
+				parts[#parts + 1] = string.format("%s%s %s (%sh) %sL%s", tag, tostring(e.username), e.score_text, tostring(e.hands or "?"), tostring(e.lives or "?"), mark)
 			end
 		else
 			alive_hidden = alive_hidden + 1
@@ -91,6 +97,7 @@ function MP.THREEP.refresh_hud()
 			lives = e.lives,
 			eliminated = e.eliminated,
 			away = e.away,
+			rejoining = e.rejoining,
 			crown = (MP.KOTH and MP.KOTH.name_prefix) and MP.KOTH.name_prefix(e.id) or "",
 			ally = MP.TEAMS and MP.TEAMS.is_teammate(e.id) or false,
 		}

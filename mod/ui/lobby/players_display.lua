@@ -1,6 +1,16 @@
+local function presence_label(player)
+	if not (player and MP.PRESENCE) then return "" end
+	local kind = MP.PRESENCE.kind({
+		spectator = player.spectator, rejoining = player.rejoining, held = player.held, away = player.away,
+		eliminated = player.eliminated, connected = true,
+	})
+	return MP.PRESENCE.label(kind, localize, player.grace)
+end
+
 local function create_player_info_row(player, player_type, text_scale)
 	if not player or not player.username then return nil end
 	player.display_name = (MP.TEAMS and MP.TEAMS.seat_label) and MP.TEAMS.seat_label(player) or player.username
+	player.status_text = presence_label(player)
 
 	return MP.UI.UTILS.create_row({ padding = MP.THREEP.seat_count() > 4 and 0.03 or 0.1, align = "cm" }, {
         MP.UI.UTILS.create_column({ align = "cm", maxw = 3 }, {
@@ -11,6 +21,13 @@ local function create_player_info_row(player, player_type, text_scale)
                 colour = G.C.UI.TEXT_LIGHT,
                 maxw = 3.5
             }),
+            player.status_text ~= "" and MP.UI.UTILS.create_text_node(nil, {
+                ref_table = player,
+                ref_value = "status_text",
+                scale = text_scale * 0.45,
+                colour = G.C.UI.TEXT_INACTIVE or G.C.UI.TEXT_LIGHT,
+                maxw = 3.5
+            }) or nil,
         }),
 		MP.UI.UTILS.create_blank(0.1, 0.1),
 		player.hash and UIBox_button({
@@ -46,6 +63,15 @@ function MP.UI.players_section_rows(text_scale)
 		local seat = (MP.LOBBY.seats and MP.LOBBY.seats[i]) or (i == 1 and MP.LOBBY.host) or (i == 2 and MP.LOBBY.guest) or (i == 3 and MP.LOBBY.third)
 		local row = create_player_info_row(seat, "seat" .. i, text_scale)
 		if row then rows[#rows + 1] = row end
+	end
+	-- Held seats are not in the seated list. Show them with the same status words.
+	for i, a in ipairs(MP.LOBBY.away or {}) do
+		if type(a) == "table" and a.username then
+			local name = tostring(a.username):gsub("~.*$", "")
+			rows[#rows + 1] = create_player_info_row({
+				username = name, held = true, eliminated = a.eliminated, grace = a.left,
+			}, "away" .. i, text_scale)
+		end
 	end
 	-- Teams: the host picks who plays together. On 3v2/4v3 the first seats in that order are the larger side.
 	if MP.LOBBY.is_host and MP.TEAMS and MP.TEAMS.is_active() then
