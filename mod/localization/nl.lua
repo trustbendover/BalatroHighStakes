@@ -528,6 +528,7 @@ return {
 			k_random = "Willekeurig",
 			k_standard = "Standaard",
 			k_standard_description = "De standaard regels, inclusief Multiplayer kaarten en veranderingen aan Balatro zelf om beter te passen binnen Multiplayer.",
+			k_blitz = "High Stakes Multiplayer",
 			k_vanilla = "Vanilla",
 			k_vanilla_description = "De vanilla regels, geen Multiplayer kaarten, geen veranderingen aan Balatro zelf.",
 			k_weekly = "Wekelijks",
