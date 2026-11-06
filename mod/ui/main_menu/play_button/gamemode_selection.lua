@@ -1,7 +1,7 @@
 -- 0.6.8: grouped Gamemodes menu. Versus = fixed formats (2v2-4v4 are Teams with a fixed team size),
 -- Free-for-all = everyone against everyone, Challenge = co-op style.
 MP.UI.GAMEMODE_GROUPS = {
-	{ name = "k_versus", entries = { "duel", "teams2", "teams3", "teams4" } },
+	{ name = "k_versus", entries = { "duel", "teams2", "teams3", "teams4", "teams" } },
 	{ name = "k_ffa", entries = { "attrition", "showdown", "koth", "deathmatch" } },
 	{ name = "k_challenge", entries = { "survival" } },
 }

@@ -5,7 +5,7 @@
 -- GPL-3.0, based on Balatro-Multiplayer/BalatroMultiplayerAPI-Server.
 
 local Core = {}
--- Balatro High Stakes: 2 to 8 players. 1v1 Duel is exactly 2, Teams needs 4-8 (even split).
+-- Balatro High Stakes: 2 to 8 players. 1v1 Duel is exactly 2, Teams is 4-8 including 3v2 and 4v3.
 Core.MAX_PLAYERS = 8
 Core.MIN_PLAYERS = 2
 function Core.max_players(mode) return mode == "duel" and 2 or Core.MAX_PLAYERS end
@@ -28,7 +28,7 @@ function Core.start_error(mode, n, options)
 		local size, why = Core.TEAMS and Core.TEAMS.plan(n, options)
 		local fmt = tonumber((options or {}).teams_format)
 		if not size and fmt and fmt >= 2 and fmt <= 4 then return fmt .. "v" .. fmt .. " " .. tostring(why) .. "." end
-		if not size then return "Teams " .. tostring(why or "unavailable") .. " (4, 6 or 8 players)." end
+		if not size then return "Teams " .. tostring(why or "unavailable") .. " (4 to 8 players)." end
 	end
 	return nil
 end
@@ -816,7 +816,7 @@ end
 ---------------------------------------------------------------- Teams (2v2 ... 4v4, 2v2v2, 2v2v2v2)
 function Server:teams_active(L) return L.gameMode == "teams" and L.teamLives ~= nil and Core.TEAMS ~= nil end
 
---- Fix the teams at game start (exactly 4 players).
+--- Fix the teams at game start (4-8 seated players; 5 is 3v2 and 7 is 4v3).
 function Server:teams_start(L, lives)
 	if L.gameMode ~= "teams" or not Core.TEAMS then return end
 	local ids = {}

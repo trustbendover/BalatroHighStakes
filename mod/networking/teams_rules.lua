@@ -3,14 +3,15 @@
 -- The TypeScript server has the same rules in server/src/teams.ts; both are checked against
 -- tests/teams_vectors.json. GPL-3.0, based on Balatro Multiplayer.
 --
---  * 4 to 8 players split evenly into teams of `teams_size` (2, 3 or 4): 4 players = 2v2,
---    6 = 2v2v2 or 3v3, 8 = 2v2v2v2 or 4v4. At least 2 teams.
---  * The host decides who plays together: seats in lobby order (or the host's shuffled order,
---    option teams_order "3,1,2,4") are cut into consecutive teams A, B, C, D.
---  * Every PvP blind: team score = the SUM of the teammates' scores. The team with the single
---    lowest sum loses one shared team life; a tie for lowest costs nobody a life.
---  * Teammates who are away (disconnected, seat held) or left: the team's sum is scaled up to a
---    full team (average x team size), so a disconnect never auto-loses.
+--  * 4 to 8 players. Even counts split evenly into teams of `teams_size` (2, 3 or 4):
+--    4 = 2v2, 6 = 2v2v2 or 3v3, 8 = 2v2v2v2 or 4v4. A locked 2v2/3v3/4v4 still needs that exact count.
+--  * 5 players are two teams, 3v2. 7 players are two teams, 4v3. Not 2v1 and not 5v3.
+--  * The host decides who plays together. Seats in lobby order (or teams_order "3,1,2,4") are
+--    cut into consecutive teams. On 3v2 and 4v3 the first seats in that order are the larger side.
+--  * Every PvP blind: team score = the SUM of the teammates' scores. The lowest sum loses one
+--    shared team life; a tie for lowest costs nobody a life.
+--  * A short or absent side is scaled up to the larger side with the same average fill used when
+--    a teammate is away (sum * larger / present), so 2 players are not automatically behind 3.
 --  * Shared team lives (default 4). A team at 0 lives is out; the last team left wins.
 local T = {}
 
@@ -36,6 +37,9 @@ function T.plan(n, options)
 		if n ~= 2 * fmt then return nil, "needs exactly " .. (2 * fmt) .. " players" end
 		return fmt, 2
 	end
+	-- Odd versus: two teams, the first seats in host order are the larger side.
+	if n == 5 then return 3, 2 end
+	if n == 7 then return 4, 2 end
 	local size = math.floor(tonumber((options or {}).teams_size) or T.DEFAULTS.size)
 	if size < 2 or size > 4 then size = T.DEFAULTS.size end
 	if n % size ~= 0 or n / size < 2 then
@@ -44,6 +48,15 @@ function T.plan(n, options)
 		size = 2
 	end
 	return size, n / size
+end
+
+--- "3v2" / "4v3" when the sides differ, "2v2" when two equal teams, else nil.
+function T.matchup(n, options)
+	local size, count = T.plan(n, options)
+	if not size or count ~= 2 then return nil end
+	local other = n - size
+	if other < 1 then return nil end
+	return tostring(size) .. "v" .. tostring(other)
 end
 
 --- Seat order (1-based seat numbers) from the teams_order option; identity when invalid.

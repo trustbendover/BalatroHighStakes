@@ -23,8 +23,9 @@ for _, mode in ipairs({ "attrition", "showdown", "koth", "survival" }) do
 	for p = 2, 8 do ok(M.start_problem(p, mode) == nil, mode .. ": " .. p .. " players ok") end
 	ok(M.start_problem(9, mode):find("max 8"), mode .. ": 9 refused")
 end
-for _, p in ipairs({ 2, 3, 5, 7 }) do ok(M.start_problem(p, "teams", {}) ~= nil, "teams: " .. p .. " refused") end
-for _, p in ipairs({ 4, 6, 8 }) do ok(M.start_problem(p, "teams", {}) == nil, "teams: " .. p .. " ok") end
+for _, p in ipairs({ 2, 3, 9 }) do ok(M.start_problem(p, "teams", {}) ~= nil, "teams: " .. p .. " refused") end
+for _, p in ipairs({ 4, 5, 6, 7, 8 }) do ok(M.start_problem(p, "teams", {}) == nil, "teams: " .. p .. " ok") end
+ok(M.start_problem(5, "teams", { teams_format = 2 }) ~= nil and M.start_problem(6, "teams", { teams_format = 3 }) == nil and M.start_problem(7, "teams", { teams_format = 4 }) ~= nil, "locked formats keep their exact counts")
 ok(M.default_lives("gamemode_mp_duel") == 4 and M.default_lives("gamemode_mp_koth") == 3 and M.default_lives("attrition") == nil, "default lives")
 
 -- ===== Teams helpers =====

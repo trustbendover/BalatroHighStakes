@@ -21,7 +21,8 @@ end
 
 local function detail_line(row)
 	local bits = {}
-	if row.fmt == "2" or row.fmt == "3" or row.fmt == "4" then bits[#bits + 1] = row.fmt .. "v" .. row.fmt end
+	if row.fmt == "2" or row.fmt == "3" or row.fmt == "4" then bits[#bits + 1] = row.fmt .. "v" .. row.fmt
+	elseif row.split == "3v2" or row.split == "4v3" then bits[#bits + 1] = row.split end
 	if row.boss == true then bits[#bits + 1] = loc("k_browser_boss_on", "Boss effects on")
 	elseif row.boss == false then bits[#bits + 1] = loc("k_browser_boss_off", "Boss effects off")
 	else bits[#bits + 1] = loc("k_browser_boss_unknown", "Boss effects unknown") end

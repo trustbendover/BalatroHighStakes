@@ -47,13 +47,27 @@ function MP.UI.players_section_rows(text_scale)
 		local row = create_player_info_row(seat, "seat" .. i, text_scale)
 		if row then rows[#rows + 1] = row end
 	end
-	-- Teams: the host picks who plays together
+	-- Teams: the host picks who plays together. On 3v2/4v3 the first seats in that order are the larger side.
 	if MP.LOBBY.is_host and MP.TEAMS and MP.TEAMS.is_active() then
 		local fixed = MP.MODES.teams_format and MP.MODES.teams_format(MP.LOBBY.config)
+		local seated = MP.LOBBY.player_list and #MP.LOBBY.player_list or #rows
+		local rules = MP.MODES and MP.MODES.TEAMS_RULES
+		local shape = (not fixed) and rules and rules.matchup and rules.matchup(seated, MP.LOBBY.config)
 		if fixed then -- Versus 2v2/3v3/4v4: the team size is the format, only shuffling is left
 			rows[#rows + 1] = MP.UI.UTILS.create_row({ align = "cm", padding = 0.05 }, {
 				UIBox_button({ id = "teams_shuffle", button = "mp_teams_shuffle", label = { MP.MODES.L("b_teams_shuffle", "Shuffle teams") },
 					minw = 1.6, minh = 0.4, scale = 0.3, colour = G.C.ORANGE, col = true }),
+			})
+			return rows
+		end
+		if shape == "3v2" or shape == "4v3" then
+			rows[#rows + 1] = MP.UI.UTILS.create_row({ align = "cm", padding = 0.05 }, {
+				UIBox_button({ id = "teams_shuffle", button = "mp_teams_shuffle", label = { MP.MODES.L("b_teams_shuffle", "Shuffle teams") },
+					minw = 1.6, minh = 0.4, scale = 0.3, colour = G.C.ORANGE, col = true }),
+				MP.UI.UTILS.create_blank(0.1, 0.1),
+				MP.UI.UTILS.create_text_node(MP.MODES.L("k_teams_uneven", "#1#: first seats are the larger team", { shape }), {
+					scale = text_scale * 0.55, colour = G.C.UI.TEXT_LIGHT, maxw = 2.2,
+				}),
 			})
 			return rows
 		end

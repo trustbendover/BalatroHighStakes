@@ -28,7 +28,7 @@ M.MODES = {
 
 -- Cleared (empty value removes the key on Steam) whenever the lobby is not public.
 M.CLEAR_KEYS = {
-	"mp3p_mod", "mp3p_name", "mp3p_mode", "mp3p_fmt",
+	"mp3p_mod", "mp3p_name", "mp3p_mode", "mp3p_fmt", "mp3p_split",
 	"mp3p_players", "mp3p_max", "mp3p_state", "mp3p_watch",
 	"mp3p_boss", "mp3p_lives", "mp3p_pvp", "mp3p_show", "mp3p_timer",
 }
@@ -63,7 +63,7 @@ function M.read_keys()
 	return {
 		"mp3p_discover", "mp3p_mod", "mp3p_version", "mp3p_name", "mp3p_mode",
 		"mp3p_fmt", "mp3p_players", "mp3p_max", "mp3p_state", "mp3p_watch", "mp3p_code",
-		"mp3p_boss", "mp3p_lives", "mp3p_pvp", "mp3p_show", "mp3p_timer",
+		"mp3p_boss", "mp3p_lives", "mp3p_pvp", "mp3p_show", "mp3p_timer", "mp3p_split",
 	}
 end
 
@@ -130,10 +130,12 @@ function M.publish(L, opt)
 	if maxp < 1 or maxp > 16 then maxp = 8 end
 	if seated < 0 then seated = 0 end
 	if seated > 16 then seated = 16 end
-	local fmt = ""
+	local fmt, split = "", ""
 	if mode == "teams" then
 		local f = tonumber(type(L.options) == "table" and L.options.teams_format)
-		if f == 2 or f == 3 or f == 4 then fmt = tostring(math.floor(f)) end
+		if f == 2 or f == 3 or f == 4 then fmt = tostring(math.floor(f))
+		elseif seated == 5 then split = "3v2"
+		elseif seated == 7 then split = "4v3" end
 	end
 	local max_spec = tonumber(opt.max_spectators) or 8
 	local host = type(L.players) == "table" and L.players[1] or nil
@@ -154,6 +156,7 @@ function M.publish(L, opt)
 	out.mp3p_name = M.sanitize_name(host and host.username) or ""
 	out.mp3p_mode = mode
 	out.mp3p_fmt = fmt
+	out.mp3p_split = split
 	out.mp3p_players = tostring(seated)
 	out.mp3p_max = tostring(maxp)
 	out.mp3p_state = L.isInGame and "play" or "wait"
@@ -192,6 +195,10 @@ function M.accept(data, opt)
 	if players < 0 or players > 16 or maxp < 1 or maxp > 16 then return nil end
 	local fmt = field(data, "mp3p_fmt")
 	if fmt ~= "" and fmt ~= "2" and fmt ~= "3" and fmt ~= "4" then return nil end
+	-- Only an explicit host split. A missing key, or 2v1/5v3, is not guessed from the player count.
+	local split = field(data, "mp3p_split")
+	if fmt ~= "" or (split ~= "3v2" and split ~= "4v3") then split = "" end
+	if (split == "3v2" and players ~= 5) or (split == "4v3" and players ~= 7) then split = "" end
 	local watch = field(data, "mp3p_watch")
 	if watch ~= "0" and watch ~= "1" then return nil end
 	local mode_key = "k_" .. mode
@@ -215,6 +222,7 @@ function M.accept(data, opt)
 		state = state,
 		watch = watch == "1",
 		fmt = fmt,
+		split = split ~= "" and split or nil,
 		boss = tri(field(data, "mp3p_boss")),
 		lives = bounded(field(data, "mp3p_lives"), 1, 16),
 		pvp_at = bounded(field(data, "mp3p_pvp"), 1, 20),

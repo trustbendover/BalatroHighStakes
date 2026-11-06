@@ -21,7 +21,7 @@ const generateUniqueLobbyCode = (): string => {
 	return Lobbies.get(result) ? generateUniqueLobbyCode() : result;
 };
 
-/** Balatro High Stakes: 2 to 8 players. 1v1 Duel is exactly 2; Teams needs 4-8 (even split). */
+/** Balatro High Stakes: 2 to 8 players. 1v1 Duel is exactly 2; Teams is 4-8, including 3v2 and 4v3. */
 export const MAX_PLAYERS = 8;
 export const MIN_PLAYERS = 2;
 export const maxPlayersFor = (mode: GameMode | string): number => (mode === "duel" ? 2 : MAX_PLAYERS);
@@ -35,7 +35,7 @@ export const startError = (mode: GameMode | string, n: number, options: { [k: st
 		const [size, why] = teamsPlan(n, options);
 		const fmt = Number(options?.teams_format ?? 0);
 		if (size === null && fmt >= 2 && fmt <= 4) return `${fmt}v${fmt} ${why}.`;
-		if (size === null) return `Teams ${why} (4, 6 or 8 players).`;
+		if (size === null) return `Teams ${why} (4 to 8 players).`;
 	}
 	return null;
 };
@@ -601,7 +601,7 @@ class Lobby {
 	// ---------------- Teams (2v2 ... 4v4, 2v2v2, 2v2v2v2) ----------------
 	teamsActive = () => this.gameMode === "teams" && this.teamLives !== null;
 
-	/** Fix the teams at game start (exactly 4 players). */
+	/** Fix the teams at game start (4-8 seated players; 5 is 3v2 and 7 is 4v3). */
 	teamsStart = (lives: number) => {
 		if (this.gameMode !== "teams") return;
 		const teams = assignTeams(this.players.map((p) => p.id), this.options);

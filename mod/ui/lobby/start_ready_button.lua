@@ -29,7 +29,7 @@ local function get_warnings()
 		table.insert(warnings, { localize("k_wait_join"), G.C.UI.TEXT_LIGHT, 0.3 })
 	end
 
-	-- Player count vs. mode (1v1 Duel: exactly 2, Teams: 4/6/8, others 2-8)
+	-- Player count vs. mode (1v1 Duel: exactly 2, Teams: 4-8 including 3v2 and 4v3, others 2-8)
 	local count = MP.LOBBY.player_list and #MP.LOBBY.player_list or 0
 	local problem = count >= 2 and MP.MODES and MP.MODES.start_problem(count)
 	if problem then table.insert(warnings, { problem, SMODS.Gradients.warning_text, 0.35 }) end

@@ -39,4 +39,27 @@ ok(Browser.accept(base({ mp3p_discover = "0", mp3p_boss = "1" }), { version = "0
 local play = Browser.accept(base({ mp3p_state = "play", mp3p_watch = "1", mp3p_boss = "0" }), { version = "0.6.9.1" })
 ok(play and Browser.action(play) == "watch" and play.boss == false, "Watch still requires a running match, and explicit off stays off")
 ok(Browser.action(known) == "join", "Join still requires a waiting lobby with room")
+local function seated(n, options)
+	local players = {}
+	for i = 1, n do players[i] = { username = "P" .. i } end
+	if n >= 1 then players[1].username = "Ann" end
+	return Browser.publish({ gameMode = "teams", isInGame = false, players = players, options = options or {} }, opt)
+end
+local five = seated(5, {})
+ok(five.mp3p_split == "3v2" and five.mp3p_fmt == "" and five.mp3p_players == "5", "5 seated players publish 3v2")
+ok(seated(7, {}).mp3p_split == "4v3", "7 seated players publish 4v3")
+ok(seated(4, {}).mp3p_split == "" and seated(6, { teams_size = 3 }).mp3p_split == "", "even teams do not invent a split")
+ok(seated(5, { teams_format = 2 }).mp3p_fmt == "2" and seated(5, { teams_format = 2 }).mp3p_split == "", "locked 2v2 is not shown as 3v2")
+local card = Browser.accept(base({ mp3p_fmt = "", mp3p_players = "5", mp3p_split = "3v2" }), { version = "0.6.9.1" })
+ok(card and card.split == "3v2" and card.code == nil, "the card shows 3v2 and still has no lobby code")
+local fourv = Browser.accept(base({ mp3p_fmt = "", mp3p_players = "7", mp3p_split = "4v3" }), { version = "0.6.9.1" })
+ok(fourv and fourv.split == "4v3", "the card shows 4v3")
+local guessed = Browser.accept(base({ mp3p_fmt = "", mp3p_players = "5" }), { version = "0.6.9.1" })
+ok(guessed and guessed.split == nil, "an older lobby is not guessed as 3v2")
+local bad = Browser.accept(base({ mp3p_fmt = "", mp3p_players = "3", mp3p_split = "2v1" }), { version = "0.6.9.1" })
+ok(bad and bad.split == nil, "2v1 is not a shown team size")
+local mismatch = Browser.accept(base({ mp3p_fmt = "", mp3p_players = "4", mp3p_split = "3v2" }), { version = "0.6.9.1" })
+ok(mismatch and mismatch.split == nil, "a split that does not match the player count is dropped")
+local hidden = Browser.publish({ gameMode = "teams", players = { { username = "Ann" }, {}, {}, {}, {} }, options = {} }, { public = false, version = "0.6.9.1" })
+ok(hidden.mp3p_split == "" and hidden.mp3p_discover == "0", "a private lobby clears the split")
 print("PASS: browser detail")

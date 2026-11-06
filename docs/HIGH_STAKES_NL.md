@@ -60,7 +60,7 @@ Voorheen "Balatro Multiplayer 3P".*
 - **Iedereen tegelijk op 0 levens** (niet in Teams): de hoogste score van die PvP wint (was: geen winnaar).
 - **Uitgeschakeld en "Terug naar lobby"**: alleen jij gaat terug, de match loopt door (was: stopte voor iedereen).
 - De lobby laat zien waarom je niet kunt starten ("1v1 Duel heeft precies 2 spelers nodig",
-  "Teams heeft 4, 6 of 8 spelers nodig", "Te veel spelers voor deze modus (max N)").
+  "Teams heeft 4 tot 8 spelers nodig", "Te veel spelers voor deze modus (max N)").
 
 ## Steam P2P met 8 spelers
 - De Steam-lobby wordt nu gemaakt voor **8 leden** (was 3). Steam staat tot 250 leden per lobby toe.

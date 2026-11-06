@@ -107,8 +107,9 @@ function M.start_problem(n, gamemode, options)
 		return nil
 	end
 	if key == "teams" then
-		if n < lim.min or n % 2 ~= 0 then return L("k_mode_teams_split", "Teams needs 4, 6 or 8 players") end
-		if M.TEAMS_RULES and not M.TEAMS_RULES.plan(n, options) then return L("k_mode_teams_split", "Teams needs 4, 6 or 8 players") end
+		if not (M.TEAMS_RULES and M.TEAMS_RULES.plan(n, options)) then
+			return L("k_mode_teams_split", "Teams needs 4 to 8 players")
+		end
 	end
 	return nil
 end
