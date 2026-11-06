@@ -13,7 +13,7 @@ MP.UTILS.add_nemesis_info = function() end
 MP.is_pvp_boss = function() return false end
 local defs = {}
 SMODS = { Atlas = function() end, Joker = function(t) defs[t.key] = t end }
-dofile("lib/modes.lua"); dofile("lib/teams.lua"); dofile("lib/jokers_3p.lua"); dofile("lib/deathmatch.lua")
+dofile("lib/presence.lua"); dofile("lib/modes.lua"); dofile("lib/teams.lua"); dofile("lib/jokers_3p.lua"); dofile("lib/deathmatch.lua")
 for _, k in ipairs({ "vulture", "laughing_third", "bounty_hunter" }) do dofile("objects/jokers/threep/" .. k .. ".lua") end
 local D, J = MP.DEATHMATCH, MP.J3P
 local function ok(c, m) assert(c, m); print("ok: " .. m) end
@@ -26,7 +26,7 @@ ok(MP.MODES.start_problem(1, "deathmatch") ~= nil and MP.MODES.start_problem(8, 
 
 -- standings + messages
 local s1 = { you = "a", running = true, alive = { { id = "a", lives = 4 }, { id = "b", lives = 3 }, { id = "c", lives = 2, away = true }, { id = "d", lives = 1 } }, out = {} }
-ok(D.standings_text(s1) == "Deathmatch: 4 left  |  You 4  Bob 3  Carol 2 (away)  Dan 1", D.standings_text(s1))
+ok(D.standings_text(s1) == "Deathmatch: 4 left  |  You 4  Bob 3  Carol 2 Waiting to rejoin  Dan 1", D.standings_text(s1))
 local s2 = { you = "a", running = true, alive = { { id = "a", lives = 4 }, { id = "b", lives = 3 }, { id = "c", lives = 2 } }, out = { { id = "d", place = 4 } } }
 local m = D.messages(s1, s2)
 ok(#m == 1 and m[1] == "Dan eliminated - 3 left", "elimination message: " .. tostring(m[1]))

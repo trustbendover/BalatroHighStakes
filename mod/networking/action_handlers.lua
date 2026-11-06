@@ -354,8 +354,12 @@ local function action_lobbyInfo(p)
 		if MP.LOBBY.seats[i] then
 			MP.LOBBY.seats[i].team = pl.team
 			MP.LOBBY.seats[i].id = pl.id
+			MP.LOBBY.seats[i].spectator = pl.spectator and true or nil
+			MP.LOBBY.seats[i].rejoining = pl.rejoining and true or nil
+			MP.LOBBY.seats[i].eliminated = pl.eliminated and true or nil
 		end
 	end
+	MP.LOBBY.away = p.away or {}
 	MP.LOBBY.max_players = p.maxPlayers or MP.LOBBY.max_players
 	-- Map player ids -> display names (for the HUD)
 	MP.LOBBY.names_by_id = {}
@@ -693,6 +697,8 @@ action_enemy_info = function(p)
 	e.eliminated = p.eliminated and true or false
 	e.ante = tonumber(p.ante) or e.ante
 	e.away = p.away and true or nil
+	e.rejoining = p.rejoining and true or nil
+	e.spectator = p.spectator and true or nil
 	if not p.noScore and p.score ~= nil then
 		e.raw_score = tostring(p.score)
 		e.real_score = MP.INSANE_INT.from_string(e.raw_score)

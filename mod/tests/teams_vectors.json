@@ -3,7 +3,10 @@
   "plans": [
     { "n": 3, "options": {}, "size": null },
     { "n": 4, "options": {}, "size": 2, "count": 2 },
-    { "n": 5, "options": {}, "size": null },
+    { "n": 5, "options": {}, "size": 3, "count": 2 },
+    { "n": 7, "options": {}, "size": 4, "count": 2 },
+    { "n": 5, "options": { "teams_format": 2 }, "size": null },
+    { "n": 7, "options": { "teams_format": 4 }, "size": null },
     { "n": 6, "options": {}, "size": 2, "count": 3 },
     { "n": 6, "options": { "teams_size": "3" }, "size": 3, "count": 2 },
     { "n": 8, "options": { "teams_size": "4" }, "size": 4, "count": 2 },
@@ -17,7 +20,10 @@
     { "n": 4, "options": { "teams_order": "1,1,2,4" }, "expect": ["A", "A", "B", "B"] },
     { "n": 6, "options": { "teams_size": "3", "teams_order": "6,5,4,3,2,1" }, "expect": ["B", "B", "B", "A", "A", "A"] },
     { "n": 6, "options": {}, "expect": ["A", "A", "B", "B", "C", "C"] },
-    { "n": 8, "options": { "teams_size": "4" }, "expect": ["A", "A", "A", "A", "B", "B", "B", "B"] }
+    { "n": 8, "options": { "teams_size": "4" }, "expect": ["A", "A", "A", "A", "B", "B", "B", "B"] },
+    { "n": 5, "options": {}, "expect": ["A", "A", "A", "B", "B"] },
+    { "n": 5, "options": { "teams_order": "5,4,3,2,1" }, "expect": ["B", "B", "A", "A", "A"] },
+    { "n": 7, "options": {}, "expect": ["A", "A", "A", "A", "B", "B", "B"] }
   ],
   "cases": [
     { "name": "plain sums, B lower", "size": 2, "teams": { "A": ["1000", "500"], "B": ["900", "500"] }, "loser": "B" },
@@ -37,6 +43,12 @@
     { "name": "2v2v2: tie for lowest spares both", "size": 2, "teams": { "A": ["100", "50"], "B": ["50", "100"], "C": ["300", "10"] }, "loser": null },
     { "name": "3v3 with one away on A", "size": 3, "teams": { "A": ["300", "300"], "B": ["100", "200", "300"] }, "loser": "B" },
     { "name": "4v4 sums", "size": 4, "teams": { "A": ["1", "2", "3", "4"], "B": ["2", "2", "3", "4"] }, "loser": "A" },
+    { "name": "3v2 equal per player is a tie", "size": 3, "teams": { "A": ["100", "100", "100"], "B": ["100", "100"] }, "loser": null },
+    { "name": "3v2 smaller side stronger after scale", "size": 3, "teams": { "A": ["90", "90", "90"], "B": ["200", "200"] }, "loser": "A" },
+    { "name": "3v2 away on the larger side", "size": 3, "teams": { "A": ["100", "100"], "B": ["150", "150"] }, "loser": "A" },
+    { "name": "4v3 equal per player is a tie", "size": 4, "teams": { "A": ["100", "100", "100", "100"], "B": ["100", "100", "100"] }, "loser": null },
+    { "name": "4v3 smaller side lower after scale", "size": 4, "teams": { "A": ["100", "100", "100", "100"], "B": ["100", "100", "50"] }, "loser": "B" },
+    { "name": "4v3 away members still use the average fill", "size": 4, "teams": { "A": ["100", "100"], "B": ["100", "100", "100"] }, "loser": null },
     { "name": "2v2v2v2 one team absent", "size": 2, "teams": { "A": ["10", "10"], "B": [], "C": ["30", "1"], "D": ["5", "40"] }, "loser": "A" }
   ],
   "ffa": [

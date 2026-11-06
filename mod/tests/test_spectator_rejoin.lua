@@ -370,11 +370,12 @@ do
 	ok(SP.leader(rows).id == "b", "leader = first alive")
 	ok(SP.step(rows, "b", 1) == "d" and SP.step(rows, "a", 1) == "b" and SP.step(rows, "b", -1) == "a", "follow next/prev wraps and skips players who are out")
 	ok(SP.step(rows, "zzz", 1) == "b", "unknown follow -> leader")
+	dofile("lib/presence.lua")
 	local v = SP.lines(rows, "a")
 	ok(v.follow == "Following: Ann" and v.detail:find("Lives: 2") and v.detail:find("Hands left: 1") and v.detail:find("Ante 3")
 		and v.where == "Now: Shop", "panel shows lives, score, hands, ante and location")
-	ok(v.rows[1]:find("ahead") and v.rows[2]:find("disconnected") and v.rows[4]:find("out") and v.rows[3]:sub(1, 2) == "> ",
-		"list marks who is ahead, away, out and who you follow")
+	ok(v.rows[1]:find("ahead") and v.rows[2]:find("Waiting to rejoin") and v.rows[4]:find("out") and v.rows[3]:sub(1, 2) == "> ",
+		"list marks who is ahead, waiting to rejoin, out and who you follow")
 	ok(#v.rows == SP.MAX_ROWS and v.rows[8] == "", "always " .. SP.MAX_ROWS .. " rows")
 	ok(SP.step({}, nil, 1) == nil and SP.lines({}, nil).follow == "Nobody left to watch", "nobody left")
 	_G.localize = function(a) if type(a) == "table" and a.key == "k_sp_following" then return "Je volgt: " .. a.vars[1] end return "ERROR" end

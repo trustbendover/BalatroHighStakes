@@ -1,7 +1,7 @@
 -- 0.6.8: grouped Gamemodes menu. Versus = fixed formats (2v2-4v4 are Teams with a fixed team size),
 -- Free-for-all = everyone against everyone, Challenge = co-op style.
 MP.UI.GAMEMODE_GROUPS = {
-	{ name = "k_versus", entries = { "duel", "teams2", "teams3", "teams4" } },
+	{ name = "k_versus", entries = { "duel", "teams2", "teams3", "teams4", "teams" } },
 	{ name = "k_ffa", entries = { "attrition", "showdown", "koth", "deathmatch" } },
 	{ name = "k_challenge", entries = { "survival" } },
 }
@@ -251,8 +251,13 @@ function MP.UI.gamemode_card_nodes(gamemode, tab_type)
 		{ n = G.UIT.R, config = { align = "cm", padding = 0.05 }, nodes = {
 			{ n = G.UIT.C, config = { align = "cm", colour = G.C.BLUE, r = 0.1, padding = 0.08 }, nodes = {
 				{ n = G.UIT.T, config = { text = MP.MODES.players_label(key, fmt), scale = 0.4, colour = G.C.WHITE } } } } } },
-		text_row(select(1, MP.UTILS.mode_desc("k_" .. entry .. "_short", 0.5, 1)), select(2, MP.UTILS.mode_desc("k_" .. entry .. "_short", 0.5, 1))),
+		text_row(select(1, MP.UTILS.mode_desc("k_" .. entry .. "_short", 0.45, 2)), select(2, MP.UTILS.mode_desc("k_" .. entry .. "_short", 0.45, 2))),
 	}
+	local win_key = "k_" .. entry .. "_win"
+	local win_text, win_scale = MP.UTILS.mode_desc(win_key, 0.38, 2)
+	if type(win_text) == "string" and win_text ~= "" and win_text ~= "ERROR" and not win_text:find(win_key, 1, true) then
+		nodes[#nodes + 1] = text_row(win_text, win_scale, G.C.GOLD or G.C.UI.TEXT_LIGHT)
+	end
 	local info = gamemode:create_info_menu()
 	for i = 3, #info do nodes[#nodes + 1] = info[i] end
 	return nodes

@@ -164,13 +164,41 @@ async function main() {
     console.log('ok: a 1-player lobby cannot start')
   }
 
-  // Teams: invalid splits
-  for (const n of [3, 5]) {
-    const { cs } = await lobby(n, 'teams')
+  // Teams: 3 stays illegal. 5 is 3v2 and 7 is 4v3. A locked format still needs its exact count.
+  {
+    const { cs } = await lobby(3, 'teams')
     cs[0].send({ action: 'startGame' }); assert.match((await cs[0].waitAction('error')).message, /Teams/)
     for (const c of cs) c.sock.destroy()
+    console.log('ok: teams refuses 3 players')
   }
-  console.log('ok: teams refuses 3 and 5 players')
+  {
+    const { cs } = await lobby(6, 'teams', { teams_format: '2' })
+    cs[0].send({ action: 'startGame' }); assert.match((await cs[0].waitAction('error')).message, /2v2/)
+    for (const c of cs) c.sock.destroy()
+    console.log('ok: locked 2v2 refuses 6 players')
+  }
+  for (const [n, bigger, shape] of [[5, 3, '3v2'], [7, 4, '4v3']]) {
+    const { cs } = await lobby(n, 'teams', { starting_lives: '2' })
+    await sleep(100)
+    const info = cs[0].last('lobbyInfo')
+    const letters = cs.map((c) => info.players.find((p) => p.id === c.id).team)
+    assert.deepEqual(letters, [...Array(bigger).fill('A'), ...Array(n - bigger).fill('B')], shape)
+    await start(cs)
+    const tu = await cs[0].waitAction('teamsUpdate')
+    assert.equal(tu.teamSize, bigger)
+    assert.equal(Object.keys(tu.teams).length, 2)
+    let res = await blind(cs, () => 100)
+    assert.equal(res.get(cs[0]).lost, false, `${shape} equal scores are a tie`)
+    assert.equal(res.get(cs[0]).loserTeam, undefined)
+    assert.equal(cs[0].last('teamsUpdate').lastLoser, 'none')
+    res = await blind(cs, (c) => (letters[cs.indexOf(c)] === 'A' ? 100 : 1))
+    assert.equal(res.get(cs[0]).lost, false)
+    assert.equal(res.get(cs[n - 1]).lost, true)
+    assert.equal(res.get(cs[0]).loserTeam, 'B')
+    assert.equal(cs[n - 1].last('playerInfo').lives, 1)
+    console.log(`ok: teams ${n} players start as ${shape}; equal scores tie, the scaled smaller side can still lose`)
+    for (const c of cs) c.sock.destroy()
+  }
 
   // Teams 2v2 with the host's order, teammate disconnect + rejoin
   {

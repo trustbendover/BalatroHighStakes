@@ -5,7 +5,7 @@
 -- GPL-3.0, based on Balatro-Multiplayer/BalatroMultiplayerAPI-Server.
 
 local Core = {}
--- Balatro High Stakes: 2 to 8 players. 1v1 Duel is exactly 2, Teams needs 4-8 (even split).
+-- Balatro High Stakes: 2 to 8 players. 1v1 Duel is exactly 2, Teams is 4-8 including 3v2 and 4v3.
 Core.MAX_PLAYERS = 8
 Core.MIN_PLAYERS = 2
 function Core.max_players(mode) return mode == "duel" and 2 or Core.MAX_PLAYERS end
@@ -28,7 +28,7 @@ function Core.start_error(mode, n, options)
 		local size, why = Core.TEAMS and Core.TEAMS.plan(n, options)
 		local fmt = tonumber((options or {}).teams_format)
 		if not size and fmt and fmt >= 2 and fmt <= 4 then return fmt .. "v" .. fmt .. " " .. tostring(why) .. "." end
-		if not size then return "Teams " .. tostring(why or "unavailable") .. " (4, 6 or 8 players)." end
+		if not size then return "Teams " .. tostring(why or "unavailable") .. " (4 to 8 players)." end
 	end
 	return nil
 end
@@ -254,7 +254,7 @@ function Server:enemy_info(p, with_score)
 		action = "enemyInfo", playerId = p.id, username = p.username, handsLeft = p.handsLeft,
 		score = with_score and (p.score.str or "0") or nil, noScore = (not with_score) or nil,
 		skips = p.skips, lives = p.lives, eliminated = p.eliminated, ante = p.ante,
-		away = (p.lobby == nil) or nil, spectator = p.spectator or nil,
+		away = (p.lobby == nil) or nil, spectator = p.spectator or nil, rejoining = p.rejoining or nil,
 	}
 end
 
@@ -271,7 +271,7 @@ function Server:lobby_info(L)
 	for i, p in ipairs(L.players) do
 		players[i] = { id = p.id, username = p.username, hash = p.modHash, cached = p.isCached, ready = p.isReadyLobby,
 			isHost = i == 1, lives = p.lives, eliminated = p.eliminated, team = preview and (p.team or preview[p.id]) or nil,
-			spectator = p.spectator or nil }
+			spectator = p.spectator or nil, rejoining = p.rejoining or nil }
 	end
 	local away = {}
 	local now, grace = self.now(), Core.rejoin_grace(L.options, L.gameMode)
@@ -498,7 +498,10 @@ function Server:expire_slot(L, slot)
 	end
 	self:deathmatch_broadcast(L)
 	self:teams_broadcast(L)
-	if self:check_game_over(L) then return end
+	if self:check_game_over(L) then
+		self:lobby_info(L)
+		return
+	end
 	self:try_start_blind(L)
 	self:try_resolve_pvp(L)
 	self:lobby_info(L)
@@ -801,6 +804,12 @@ function Server:stats_finish(L)
 		if not here then out[id] = true end -- left the match
 	end
 	if L.winnerId then out[L.winnerId] = nil end
+	local function stamp(p)
+		local b = self:book_entry(L, p)
+		if b and p.lives ~= nil then b.lives = p.lives end
+	end
+	for _, p in ipairs(L.players) do if not p.spectator then stamp(p) end end
+	for _, sl in ipairs(L.slots or {}) do if sl.old then stamp(sl.old) end end
 	local teams_mode = L.gameMode == "teams" and L.teamLives ~= nil
 	local rows, teams, awards = Core.match_table(L.book, out, L.elimOrder, teams_mode)
 	if teams then
@@ -816,7 +825,7 @@ end
 ---------------------------------------------------------------- Teams (2v2 ... 4v4, 2v2v2, 2v2v2v2)
 function Server:teams_active(L) return L.gameMode == "teams" and L.teamLives ~= nil and Core.TEAMS ~= nil end
 
---- Fix the teams at game start (exactly 4 players).
+--- Fix the teams at game start (4-8 seated players; 5 is 3v2 and 7 is 4v3).
 function Server:teams_start(L, lives)
 	if L.gameMode ~= "teams" or not Core.TEAMS then return end
 	local ids = {}
@@ -1102,6 +1111,8 @@ function Server:reclaim(L, c, slot)
 	end
 	c.lobby = L
 	if slot.migration then return self:migration_reclaimed(L, c) end
+	-- Socket is back; the run is restored when the client sends resumeRestarted. Display only.
+	c.rejoining = true
 	local missed = c.inPvp and (not L.blindActive or c.blindSeq ~= L.blindSeq)
 	if missed then c.inPvp, c.pvpDone, c.isReady = false, false, false end
 	sendA(c, { action = "rejoinedLobby", code = L.code, type = L.gameMode, reconnectToken = c.reconnectToken })
@@ -1642,11 +1653,14 @@ function H.syncClient(S, c, a) c.isCached = a.isCached and true or false end
 function H.resumeRestarted(S, c)
 	local L = c.lobby
 	if not L then return end
+	c.rejoining = nil
 	if L.blindActive then
 		c.sitOut, c.inPvp = true, false
 		S:try_resolve_pvp(L)
 	end
 	c.isReady = false
+	S:lobby_info(L)
+	for _, p in ipairs(L.players) do if p ~= c then sendA(p, S:enemy_info(c, true)) end end
 end
 function H.moddedAction(S, c, a)
 	local L = c.lobby
