@@ -57,7 +57,8 @@ Core.MAX_SPECTATORS = 8
 -- what a spectator may send (everything else is ignored: spectators cannot affect the game)
 Core.SPECTATOR_OK = { username = true, version = true, leaveLobby = true, lobbyInfo = true, keepAlive = true,
 	keepAliveAck = true, stopGame = true, syncClient = true,
-	rejoinLobby = true } -- 0.6.9: "Rejoin" while watching your own held seat
+	rejoinLobby = true, -- 0.6.9: "Rejoin" while watching your own held seat
+	chat = true } -- watchers may read and send; the host labels them as watching
 -- relays an eliminated player may still send (end-of-game screens)
 Core.END_GAME_RELAYS = { getEndGameJokers = true, receiveEndGameJokers = true, getNemesisDeck = true,
 	receiveNemesisDeck = true, endGameStatsRequested = true, nemesisEndGameStats = true }
@@ -219,6 +220,7 @@ function Server:new_lobby(host, gameMode)
 	local L = {
 		code = code, players = { host }, gameMode = gameMode or "attrition", options = {},
 		firstReadyAt = nil, slots = {}, isInGame = false, seed = nil,
+		chatLobby = {}, chatMatch = {}, chatSeq = 0,
 		blindActive = false, blindSeq = 0, emptySince = nil,
 	}
 	self.lobbies[code] = L
@@ -1128,6 +1130,7 @@ function Server:reclaim(L, c, slot)
 		end
 	end
 	self:lobby_info(L)
+	self:chat_sync(c)
 end
 
 function Server:take_over(L, stale)
@@ -1187,6 +1190,7 @@ function Server:late_join(L, c)
 		end
 	end
 	self:lobby_info(L)
+	self:chat_sync(c)
 end
 
 --- 0.6.8: watch a running match. Spectators get the same live info as eliminated players
@@ -1221,6 +1225,7 @@ function Server:spectate(L, c)
 		if p ~= c then sendA(p, { action = "spectatorJoined", playerId = c.id, username = c.username }) end
 	end
 	self:lobby_info(L)
+	self:chat_sync(c)
 end
 
 function Server:join(L, c, want_spectate)
@@ -1253,6 +1258,7 @@ function Server:join(L, c, want_spectate)
 	sendA(c, { action = "joinedLobby", code = L.code, type = L.gameMode, reconnectToken = c.reconnectToken })
 	self:send_options(c)
 	self:lobby_info(L)
+	self:chat_sync(c)
 end
 
 ---------------------------------------------------------------- host migration (Steam P2P)
@@ -1468,6 +1474,40 @@ function H.lobbyInfo(S, c) if c.lobby then S:lobby_info(c.lobby) end end
 function H.leaveLobby(S, c) S:leave(c) end
 function H.readyLobby(S, c) c.isReadyLobby = true; if c.lobby then S:lobby_info(c.lobby) end end
 function H.unreadyLobby(S, c) c.isReadyLobby = false; if c.lobby then S:lobby_info(c.lobby) end end
+function Server:chat_sync(c)
+	local L = c and c.lobby
+	if not L or not Core.CHAT then return end
+	local view = L.isInGame and "match" or "lobby"
+	local src = view == "match" and (L.chatMatch or {}) or (L.chatLobby or {})
+	local lines = {}
+	for i, m in ipairs(src) do
+		lines[i] = { id = m.id, scope = m.scope, name = m.name, watch = m.watch, text = m.text, col = m.col }
+	end
+	sendA(c, { action = "chatLog", view = view, lines = lines })
+end
+
+function Server:chat_say(c, text)
+	local L = c.lobby
+	if not L or not Core.CHAT then return end
+	local people = {}
+	for _, p in ipairs(L.players) do people[#people + 1] = { id = p.id, username = p.username } end
+	local cols = Core.CHAT.colors(people)
+	local scope = L.isInGame and "match" or "lobby"
+	L.chatSeq = (L.chatSeq or 0) + 1
+	local msg = { action = "chat", id = L.chatSeq, scope = scope, name = Core.CHAT.display_name(c.username),
+		watch = c.spectator and true or false, text = text, col = cols[c.id] or 1 }
+	if scope == "match" then L.chatMatch = Core.CHAT.push(L.chatMatch, msg)
+	else L.chatLobby = Core.CHAT.push(L.chatLobby, msg) end
+	self:broadcast(L, msg)
+end
+
+function H.chat(S, c, a)
+	if not c.lobby or not Core.CHAT then return end
+	local text, why = Core.CHAT.accept(a and a.text)
+	if not text then return sendA(c, { action = "chatReject", reason = why or "empty" }) end
+	S:chat_say(c, text)
+end
+
 function H.keepAlive(S, c) sendA(c, { action = "keepAliveAck" }) end
 function H.keepAliveAck() end
 function H.rematch(S, c)
@@ -1483,6 +1523,7 @@ function H.rematch(S, c)
 		return sendA(c, { action = "error", message = "A match is still running." })
 	end
 	S:prepare_rematch(L)
+	S:broadcast(L, { action = "chatState", view = "lobby", clear = false })
 	local config = Core.MATCH and Core.MATCH.complete(L.options, L.gameMode) or nil
 	S:broadcast(L, { action = "rematch", config = config })
 	S:lobby_info(L)
@@ -1507,6 +1548,8 @@ function H.startGame(S, c)
 	L.seed = seed
 	S:reset_players(L)
 	L.isInGame = true
+	L.chatMatch = {}
+	S:broadcast(L, { action = "chatState", view = "match", clear = true })
 	local seated = S:seated(L)
 	local config = Core.MATCH and Core.MATCH.complete(L.options, L.gameMode) or nil
 	for _, p in ipairs(seated) do sendA(p, { action = "startGame", deck = "c_multiplayer_1", seed = seed, playerCount = #seated, config = config }) end
@@ -1721,6 +1764,10 @@ do
 	if dir and not Core.MATCH then
 		local ok, m = pcall(dofile, dir .. "/match_settings.lua")
 		if ok and type(m) == "table" and m.store then Core.MATCH = m end
+	end
+	if dir and not Core.CHAT then
+		local ok, m = pcall(dofile, dir .. "/chat_rules.lua")
+		if ok and type(m) == "table" and m.accept then Core.CHAT = m end
 	end
 end
 

@@ -3,6 +3,7 @@ import { InsaneInt } from "./InsaneInt.js";
 import GameModes from "./GameMode.js";
 import { type KothEvent, type KothState, kothConfig, kothSnapshot, newKothState, resolveKoth } from "./koth.js";
 import { type Team, TEAM_LETTERS, assignTeams, resolveTeams, teamsPlan } from "./teams.js";
+import { type ChatLine, acceptChat, chatColors, displayName, pushChat } from "./chat.js";
 import { loserCount, pvpLosers } from "./pvpRules.js";
 import type {
 	ActionLobbyInfo,
@@ -123,6 +124,9 @@ class Lobby {
 	elimOrder: string[] = [];
 	winnerId: string | null = null;
 	graceTimers = new Map<string, ReturnType<typeof setTimeout>>();
+	chatLobby: ChatLine[] = [];
+	chatMatch: ChatLine[] = [];
+	chatSeq = 0;
 	/** increments for every started PvP blind */
 	blindSeq = 0;
 	/** deletes the lobby if nobody reconnects while it's empty mid-game */
@@ -297,6 +301,39 @@ class Lobby {
 		}
 		console.log(`Player ${newClient.username} rejoined lobby ${this.code} (lives=${newClient.lives}, ante=${newClient.ante})`);
 		this.broadcastLobbyInfo();
+		this.chatSync(newClient);
+	};
+
+	chatSync = (client: Client) => {
+		const view = this.isInGame ? "match" as const : "lobby" as const;
+		const src = view === "match" ? this.chatMatch : this.chatLobby;
+		client.sendAction({
+			action: "chatLog",
+			view,
+			lines: src.map((m) => ({ id: m.id, scope: m.scope, name: m.name, watch: m.watch, text: m.text, col: m.col })),
+		});
+	};
+
+	sayChat = (client: Client, text: unknown) => {
+		const accepted = acceptChat(text);
+		if (!accepted.ok) {
+			client.sendAction({ action: "chatReject", reason: accepted.reason });
+			return;
+		}
+		const cols = chatColors(this.players.map((p) => ({ id: p.id, username: p.username })));
+		const scope = this.isInGame ? "match" as const : "lobby" as const;
+		this.chatSeq += 1;
+		const line: ChatLine = {
+			id: this.chatSeq,
+			scope,
+			name: displayName(client.username),
+			watch: false,
+			text: accepted.text,
+			col: cols.get(client.id) ?? 1,
+		};
+		if (scope === "match") this.chatMatch = pushChat(this.chatMatch, line);
+		else this.chatLobby = pushChat(this.chatLobby, line);
+		this.broadcastAction({ action: "chat", ...line });
 	};
 
 	/** Tell a (re)joining client how to continue: seed, ante, lives, opponents. */
@@ -373,6 +410,7 @@ class Lobby {
 		client.sendAction({ action: "joinedLobby", code: this.code, type: this.gameMode, reconnectToken: client.reconnectToken });
 		client.sendAction({ action: "lobbyOptions", gamemode: this.gameMode, ...this.options });
 		this.broadcastLobbyInfo();
+		this.chatSync(client);
 	};
 
 	/**
@@ -412,6 +450,7 @@ class Lobby {
 		}
 		console.log(`Late join: ${client.username} joined ${this.code} at ante ${client.ante} with ${client.lives} lives`);
 		this.broadcastLobbyInfo();
+		this.chatSync(client);
 	};
 
 	broadcastAction = (action: ActionServerToClient) => {

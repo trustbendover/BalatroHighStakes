@@ -136,6 +136,10 @@ const unreadyLobbyAction = (client: Client) => {
 	client.lobby?.broadcastLobbyInfo();
 };
 
+const chatAction = ({ text }: ActionHandlerArgs<{ action: "chat"; text?: string }>, client: Client) => {
+	client.lobby?.sayChat(client, text);
+};
+
 const keepAliveAction = (client: Client) => {
 	// Send an ack back to the received keepAlive
 	client.sendAction({ action: "keepAliveAck" });
@@ -169,6 +173,8 @@ const startGameAction = (client: Client) => {
 	lobby.resetPlayers();
 
 	lobby.isInGame = true;
+	lobby.chatMatch = [];
+	lobby.broadcastAction({ action: "chatState", view: "match", clear: true });
 	lobby.broadcastAction({
 		action: "startGame",
 		deck: "c_multiplayer_1",
@@ -262,6 +268,7 @@ const rematchAction = (client: Client) => {
 		return;
 	}
 	lobby.prepareRematch();
+	lobby.broadcastAction({ action: "chatState", view: "lobby", clear: false });
 	lobby.broadcastAction({ action: "rematch", config: { ...lobby.options, gamemode: lobby.gameMode } });
 	lobby.broadcastLobbyInfo();
 };
@@ -812,6 +819,7 @@ export const actionHandlers = {
 	readyLobby: readyLobbyAction,
 	unreadyLobby: unreadyLobbyAction,
 	keepAlive: keepAliveAction,
+	chat: chatAction,
 	startGame: startGameAction,
 	readyBlind: readyBlindAction,
 	unreadyBlind: unreadyBlindAction,

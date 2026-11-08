@@ -102,6 +102,10 @@ export type ActionPauseAnteTimer = { action: 'pauseAnteTimer', time: number }
 export type ActionDataSyncResponse = { action: "dataSync", timer?: number }
 // Handy Actions (Server to Client)
 export type ActionHandyMPExtensionLobbyEnabled = { action: 'handyMPExtensionLobbyEnabled', enabled: boolean }
+export type ActionChatLine = { action: 'chat'; id: number; scope: 'lobby' | 'match'; name: string; watch: boolean; text: string; col: number }
+export type ActionChatState = { action: 'chatState'; view: 'lobby' | 'match'; clear: boolean }
+export type ActionChatLog = { action: 'chatLog'; view: 'lobby' | 'match'; lines: { id: number; scope: 'lobby' | 'match'; name: string; watch: boolean; text: string; col: number }[] }
+export type ActionChatReject = { action: 'chatReject'; reason: 'empty' | 'long' }
 // TCG Actions (Server to Client)
 export type ActionTcgCompatible = { action: 'tcg_compatible' }
 export type ActionTcgStartGame = { action: 'tcgStartGame', damage: number, starting: boolean }
@@ -164,6 +168,10 @@ export type ActionServerToClient =
 	| ActionModded
     | ActionDataSyncResponse
     | ActionHandyMPExtensionLobbyEnabled
+	| ActionChatLine
+	| ActionChatState
+	| ActionChatLog
+	| ActionChatReject
 // Client to Server
 export type ActionUsername = { action: 'username'; username: string; modHash: string }
 export type ActionCreateLobby = { action: 'createLobby'; gameMode: GameMode }
@@ -227,6 +235,7 @@ export type ActionRejoinLobby = { action: 'rejoinLobby'; code: string; reconnect
 export type ActionDataSyncRequest = { action: "dataSync", timer?: number }
 export type ActionHandyMPExtensionEnable = { action: 'handyMPExtensionEnable', [key: string]: unknown }
 export type ActionHandyMPExtensionDisable = { action: 'handyMPExtensionDisable', [key: string]: unknown }
+export type ActionChatRequest = { action: 'chat'; text?: string }
 export type ActionClientToServer =
 	| ActionResumeRestarted
 	| ActionUsername
@@ -285,6 +294,7 @@ export type ActionClientToServer =
     | ActionDataSyncRequest
     | ActionHandyMPExtensionEnable
     | ActionHandyMPExtensionDisable
+	| ActionChatRequest
 // Utility actions
 export type ActionKeepAlive = { action: 'keepAlive' }
 export type ActionKeepAliveAck = { action: 'keepAliveAck' }
