@@ -419,6 +419,7 @@ return {
 			k_gambel_foil = "Folie",
 			k_gambel_holo = "Holografisch",
 			k_gambel_polychrome = "Polychroom",
+			k_gambel_need_cash = "Minimaal $2 nodig",
 			k_hs_gambel_music = "Muziek: GAMBEL TIME door Bass Gas M",
 			k_koth_rules = "Voor 2 tot 8 spelers. Elke boss blind is een Aartsvijand-blind; de laagste score verliest een leven (vanaf 6 spelers de laagste twee). De hoogste score wordt Koning en draagt een premie die groeit zolang hij bovenaan blijft. Versla de Koning en je pakt de premie ($, en +1 leven bij een hoge premie) en de kroon. Kroonschild: scoort de Koning bij de laagsten, dan verliest hij de kroon in plaats van een leven. Houd de heuvel een aantal PvP's op rij vast (5 met 2 spelers, 4 met 3-4, 3 met 5-8), of blijf als laatste over, om te winnen.",
 			k_deathmatch_rules = "2-8 spelers, iedereen tegen iedereen, tot er één overblijft. Standaard 4 levens. Elke Aartsvijand-blind speelt ALLE levende spelers tegelijk en niemand zit over; de laagste score verliest een leven (6-8 levend: de onderste twee). Doodgaan, weggaan of een verbroken verbinding beëindigt de match niet voor de anderen. Weggaan of wegvallen houdt de plek voor de respijt (standaard 60 seconden); daarna ligt die speler eruit. Geen late join. Gaan de laatste spelers in dezelfde blind dood, dan wint de hoogste score. Uitgeschakelde spelers kunnen de stand volgen of terug naar de lobby.",

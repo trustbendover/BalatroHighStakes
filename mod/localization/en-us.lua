@@ -1432,6 +1432,7 @@ return {
 			k_gambel_foil = "Foil",
 			k_gambel_holo = "Holographic",
 			k_gambel_polychrome = "Polychrome",
+			k_gambel_need_cash = "Need at least $2",
 			k_hs_gambel_music = "Music: GAMBEL TIME by Bass Gas M",
 			k_koth_rules = "For 2 to 8 players. Every boss blind is a Nemesis blind; the lowest score loses a life (with 6+ players the bottom two). The top score becomes King and carries a bounty that grows each PvP he stays on top. Beat the King to claim the bounty ($, and +1 life at a high bounty) and the crown. Crown shield: if the King scores among the lowest he loses the crown instead of a life. Hold the hill for a number of PvPs in a row (5 with 2 players, 4 with 3-4, 3 with 5-8), or be the last one standing, to win.",
 			k_deathmatch_rules = "2-8 players, everyone against everyone, to the last one standing. Default 4 lives. Every Nemesis blind is ALL living players at once and nobody sits out; the lowest score loses a life (6-8 alive: the bottom two). Dying, leaving or a disconnect does not end the match for the others. Leave or a disconnect holds the seat for the grace (default 60 seconds); when that ends, the player is out. No late join. If the last players die in the same blind, the highest score wins. Eliminated players can watch the standings or return to the lobby.",

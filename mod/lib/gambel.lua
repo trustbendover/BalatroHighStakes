@@ -175,6 +175,7 @@ function R.reset()
 	if R.drop_cards then R.drop_cards(R.double_view) end
 	R.double_view = nil
 	R.wheel_view = nil
+	if G and G.GAME then G.GAME.mp_gambel_shop_used = nil end
 	R.state = {}
 end
 
@@ -293,6 +294,7 @@ function R.bet(kind, choice)
 	if online then
 		MP.GAME.gambel_bet_sent = true
 		MP.GAME.gambel_bet_for = ante
+		R.mirror_shop_used()
 		local msg = { action = "gambelBet", kind = kind, money = money, ante = ante, give = give, room = room }
 		if kind == "double" then msg.choice = choice end
 		Client.send(msg)
@@ -405,6 +407,7 @@ function R.apply_bet(msg)
 			MP.GAME.gambel_bet_sent = true
 			MP.GAME.gambel_bet_for = G and G.GAME and G.GAME.round_resets and tonumber(G.GAME.round_resets.ante) or MP.GAME.gambel_bet_for
 		end
+		R.mirror_shop_used()
 		if R.double_view and R.double_view.picked then R.finish_double(nil) end
 		if R.wheel_view and R.wheel_view.spinning then R.finish_wheel(nil) end
 		R.clear_shop()
@@ -412,6 +415,7 @@ function R.apply_bet(msg)
 	end
 	MP.GAME.gambel_bet_sent = true
 	MP.GAME.gambel_bet_for = G and G.GAME and G.GAME.round_resets and tonumber(G.GAME.round_resets.ante) or MP.GAME.gambel_bet_for
+	R.mirror_shop_used()
 	R.mute_shop_buttons()
 	if msg.kind == "double" or msg.id == "cash" or msg.id == "tax" or msg.won ~= nil then
 		R.apply_delta(msg.delta)
@@ -484,14 +488,30 @@ function R.mute_shop_buttons()
 	end
 end
 
+--- The ante's bet is spent. Either flag is enough: the run copy can outlive a menu rebuild.
+function R.shop_used()
+	if MP.GAME and MP.GAME.gambel_bet_sent then return true end
+	return (G and G.GAME and G.GAME.mp_gambel_shop_used) and true or false
+end
+
+function R.mirror_shop_used()
+	if G and G.GAME then
+		G.GAME.mp_gambel_shop_used = (MP.GAME and MP.GAME.gambel_bet_sent) and true or nil
+	end
+end
+
 --- Shop click opens this. Backing out before Red or Black does not spend the ante's bet.
 function R.can_double()
-	if not R.active() or (MP.GAME and MP.GAME.gambel_bet_sent) then return false end
+	if not R.active() or R.shop_used() then return false end
 	return R.stake(dollars()) >= 1
 end
 
 function R.open_double()
-	if R.double_view or not R.can_double() then return end
+	if R.double_view or R.shop_used() or not R.active() then return end
+	if R.stake(dollars()) < 1 then
+		R.toast(L("k_gambel_need_cash", "Need at least $2"))
+		return
+	end
 	if R.wheel_view and not R.wheel_view.spinning then R.close_wheel() end
 	if not (G and G.FUNCS and G.FUNCS.overlay_menu) then return end
 	local stake = R.stake(dollars())
@@ -606,8 +626,11 @@ function R.tick_double(dt)
 		local def = G and G.P_CARDS and G.P_CARDS[flip.key]
 		if card and def then
 			pcall(function()
-				if card.set_base then card:set_base(def) end
-				if card.set_sprites then card:set_sprites(nil, def) end
+				R.with_classic_suits(function()
+					if card.set_base then card:set_base(def) end
+					if card.set_sprites then card:set_sprites(nil, def) end
+				end)
+				R.force_classic_front(card, def)
 				card.facing = "front"
 				card.sprite_facing = "front"
 				card.flipping = nil
@@ -707,6 +730,23 @@ function R.mute_ace(card, area)
 	end
 end
 
+--- High Contrast uses cards_2 (orange diamonds, blue clubs). The Ace stays on classic cards_1.
+function R.with_classic_suits(fn)
+	local settings = G and G.SETTINGS
+	local prev = settings and settings.colourblind_option
+	if settings then settings.colourblind_option = false end
+	local ok, err = pcall(fn)
+	if settings then settings.colourblind_option = prev end
+	if not ok then error(err, 0) end
+end
+
+function R.force_classic_front(card, def)
+	if not (card and card.children and card.children.front and G and G.ASSET_ATLAS and G.ASSET_ATLAS.cards_1) then return end
+	local front = card.children.front
+	front.atlas = G.ASSET_ATLAS.cards_1
+	if def and def.pos and front.set_sprite_pos then front:set_sprite_pos(def.pos) end
+end
+
 --- Face down until reveal_double. emplace flips a face-down card up unless stay_flipped is set.
 function R.make_double_card(view)
 	if view and view.card and not view.card.REMOVED and view.area and not view.area.REMOVED then
@@ -722,7 +762,10 @@ function R.make_double_card(view)
 			card_limit = 1, type = "title_2", highlight_limit = 0, card_w = G.CARD_W * 0.95,
 		})
 		local hidden = G.P_CARDS.H_A or G.P_CARDS["H_A"]
-		card = Card(0, 0, G.CARD_W * 0.95, G.CARD_H * 0.95, hidden, G.P_CENTERS.c_base)
+		R.with_classic_suits(function()
+			card = Card(0, 0, G.CARD_W * 0.95, G.CARD_H * 0.95, hidden, G.P_CENTERS.c_base)
+		end)
+		R.force_classic_front(card, hidden)
 		card.facing = "back"
 		card.sprite_facing = "back"
 		card.flipping = nil
@@ -763,8 +806,11 @@ function R.hold_ace(view)
 		local def = key and G and G.P_CARDS and G.P_CARDS[key]
 		if def then
 			pcall(function()
-				if card.set_base then card:set_base(def) end
-				if card.set_sprites then card:set_sprites(nil, def) end
+				R.with_classic_suits(function()
+					if card.set_base then card:set_base(def) end
+					if card.set_sprites then card:set_sprites(nil, def) end
+				end)
+				R.force_classic_front(card, def)
 				card.facing = "front"
 				card.sprite_facing = "front"
 				if card.pinch then card.pinch.x = false end
@@ -1142,7 +1188,7 @@ local function wheel_legend()
 end
 
 function R.can_wheel()
-	return R.active() and not (MP.GAME and MP.GAME.gambel_bet_sent)
+	return R.active() and not R.shop_used()
 end
 
 function R.open_wheel()
@@ -1297,11 +1343,12 @@ function R.flash(text)
 	R.toast(text)
 end
 
-local function shop_button(id, func, label, colour, enabled)
+local function shop_button(id, click, update, label, colour, enabled)
 	return { n = G.UIT.C, config = { align = "cm", padding = 0.08 }, nodes = {
 		UIBox_button({
 			id = id,
-			button = enabled and func or nil,
+			button = enabled and click or nil,
+			func = update,
 			label = { label },
 			minw = 3.6,
 			minh = 0.74,
@@ -1319,16 +1366,15 @@ function R.sync_bet_ante()
 	local ante = G and G.GAME and G.GAME.round_resets and tonumber(G.GAME.round_resets.ante)
 	MP.GAME.gambel_bet_sent = R.keep_bet(MP.GAME.gambel_bet_for, ante, MP.GAME.gambel_bet_sent)
 	if not MP.GAME.gambel_bet_sent then MP.GAME.gambel_bet_for = nil end
+	R.mirror_shop_used()
 end
 
 function R.shop_row()
 	R.sync_bet_ante()
 	MP.GAME.gambel_shop_note = MP.GAME.gambel_shop_note or ""
-	local used = MP.GAME.gambel_bet_sent and true or false
-	local cash = dollars()
 	return { n = G.UIT.R, config = { align = "cm", padding = 0.08, r = 0.1, colour = G.C.BLACK, emboss = 0.05 }, nodes = {
-		shop_button("mp_gambel_double", "mp_gambel_double", L("b_gambel_double", "Double or Nothing"), G.C.ORANGE, (not used) and cash >= 2),
-		shop_button("mp_gambel_wheel", "mp_gambel_wheel", L("b_gambel_wheel", "Gambel Wheel"), G.C.PURPLE, not used),
+		shop_button("mp_gambel_double", "mp_gambel_double", "mp_gambel_double_btn", L("b_gambel_double", "Double or Nothing"), G.C.ORANGE, R.can_double()),
+		shop_button("mp_gambel_wheel", "mp_gambel_wheel", "mp_gambel_wheel_btn", L("b_gambel_wheel", "Gambel Wheel"), G.C.PURPLE, R.can_wheel()),
 		{ n = G.UIT.C, config = { align = "cm", minw = 2.2, padding = 0.06 }, nodes = {
 			{ n = G.UIT.T, config = { ref_table = MP.GAME, ref_value = "gambel_shop_note", scale = 0.4, colour = G.C.GOLD or G.C.WHITE } },
 		} },
@@ -1352,6 +1398,13 @@ end
 function R.on_shop()
 	R.hook_shop()
 	R.clear_shop()
+	R.sync_bet_ante()
+	-- A leftover overlay from the previous run must not block the first shop.
+	if not (G and G.OVERLAY_MENU) then
+		if R.double_view then R.drop_cards(R.double_view) end
+		R.double_view = nil
+		R.wheel_view = nil
+	end
 end
 
 function R.register_music()
@@ -1384,6 +1437,26 @@ R.register_music()
 function R.register_ui()
 	G = G or {}
 	G.FUNCS = G.FUNCS or {}
+	function G.FUNCS.mp_gambel_double_btn(e)
+		if not (e and e.config and MP.GAMBEL) then return end
+		if MP.GAMBEL.can_double() then
+			e.config.colour = G.C.ORANGE
+			e.config.button = "mp_gambel_double"
+		else
+			e.config.colour = G.C.UI.BACKGROUND_INACTIVE
+			e.config.button = nil
+		end
+	end
+	function G.FUNCS.mp_gambel_wheel_btn(e)
+		if not (e and e.config and MP.GAMBEL) then return end
+		if MP.GAMBEL.can_wheel() then
+			e.config.colour = G.C.PURPLE
+			e.config.button = "mp_gambel_wheel"
+		else
+			e.config.colour = G.C.UI.BACKGROUND_INACTIVE
+			e.config.button = nil
+		end
+	end
 	function G.FUNCS.mp_gambel_double(e)
 		if not MP.GAMBEL then return end
 		MP.GAMBEL.open_double()
