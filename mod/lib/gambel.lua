@@ -590,57 +590,92 @@ function R.make_wheel()
 			local slice = (2 * math.pi) / n
 			local colours = R.wheel_colours()
 			local labels = R.wheel_slices()
+			-- Rim, pegs, and the pointer all stay inside this box. The legend is a later column.
 			local half = math.min(T.w, T.h) / 2
-			local radius = (half - 0.28) * ts
+			local radius = (half - 0.72) * ts
+			local rim = radius + 0.11 * ts
 			g.push()
 			if self.translate_container then self:translate_container() end
 			g.scale(sc, sc)
 			g.translate((T.x + T.w / 2) * ts, (T.y + T.h / 2) * ts)
-			g.setColor(0.03, 0.10, 0.07, 1)
-			g.circle("fill", 0, 0, radius + 0.08 * ts)
+			g.setColor(0.28, 0.18, 0.05, 1)
+			g.circle("fill", 0, 0, rim + 0.07 * ts)
 			g.setColor(GOLD_INK[1], GOLD_INK[2], GOLD_INK[3], 1)
-			g.setLineWidth(1.5)
-			g.circle("line", 0, 0, radius + 0.08 * ts)
+			g.circle("fill", 0, 0, rim + 0.035 * ts)
+			g.setColor(0.45, 0.28, 0.06, 1)
+			g.circle("fill", 0, 0, rim)
+			g.setLineWidth(2)
+			g.setColor(1, 0.92, 0.55, 1)
+			g.circle("line", 0, 0, rim + 0.035 * ts)
 			for i = 1, n do
 				local a0 = -math.pi / 2 + (i - 1) * slice + rot
 				local a1 = a0 + slice
 				local col = colours[i] or GOLD_INK
-				g.setColor(col[1], col[2], col[3], 1)
+				local mid = (a0 + a1) / 2
 				local poly = { 0, 0 }
-				for s = 0, 10 do
-					local a = a0 + (a1 - a0) * (s / 10)
+				for s = 0, 12 do
+					local a = a0 + (a1 - a0) * (s / 12)
 					poly[#poly + 1] = math.cos(a) * radius
 					poly[#poly + 1] = math.sin(a) * radius
 				end
+				g.setColor(col[1] * 0.55, col[2] * 0.55, col[3] * 0.55, 1)
 				g.polygon("fill", poly)
+				local face = { math.cos(mid) * radius * 0.22, math.sin(mid) * radius * 0.22 }
+				for s = 0, 12 do
+					local a = a0 + (a1 - a0) * (s / 12)
+					face[#face + 1] = math.cos(a) * radius
+					face[#face + 1] = math.sin(a) * radius
+				end
+				g.setColor(col[1], col[2], col[3], 1)
+				g.polygon("fill", face)
 				local landed = view and view.landed and view.index == i
-				g.setColor(landed and GOLD_INK[1] or 0.05, landed and GOLD_INK[2] or 0.03, landed and GOLD_INK[3] or 0.02, 1)
-				g.setLineWidth(landed and 3 or 1)
+				g.setColor(landed and 1 or 0.15, landed and 0.9 or 0.1, landed and 0.4 or 0.05, 1)
+				g.setLineWidth(landed and 3 or 1.2)
 				g.polygon("line", poly)
+				local peg = rim + 0.01 * ts
+				g.setColor(1, 0.82, 0.35, 1)
+				g.circle("fill", math.cos(a0) * peg, math.sin(a0) * peg, 0.055 * ts)
+				g.setColor(1, 0.95, 0.7, 1)
+				g.circle("fill", math.cos(a0) * peg - 0.012 * ts, math.sin(a0) * peg - 0.012 * ts, 0.022 * ts)
 				local font = g.getFont and g.getFont()
 				if font and labels[i] then
-					local mid = (a0 + a1) / 2
 					local fh = font:getHeight()
-					-- Keep the word upright. A plain radial spin turns the bottom wedges over.
 					local spin = mid + math.pi / 2
 					if math.sin(mid) > 0 then spin = spin + math.pi end
 					g.push()
-					g.translate(math.cos(mid) * radius * 0.74, math.sin(mid) * radius * 0.74)
+					g.translate(math.cos(mid) * radius * 0.64, math.sin(mid) * radius * 0.64)
 					g.rotate(spin)
-					g.scale(0.16, 0.16)
-					g.setColor(0.08, 0.06, 0.05, 1)
-					g.printf(labels[i], -22, -fh / 2, 44, "center")
+					g.scale(0.26, 0.26)
+					g.setColor(0, 0, 0, 0.9)
+					g.printf(labels[i], -71, -fh / 2, 140, "center")
+					g.printf(labels[i], -69, -fh / 2, 140, "center")
+					g.setColor(1, 0.98, 0.9, 1)
+					g.printf(labels[i], -70, -fh / 2 - 1, 140, "center")
 					g.pop()
 				end
 			end
-			g.setColor(0.10, 0.06, 0.04, 1)
-			g.circle("fill", 0, 0, radius * 0.16)
+			g.setColor(0.55, 0.38, 0.08, 1)
+			g.circle("fill", 0, 0, radius * 0.24)
 			g.setColor(GOLD_INK[1], GOLD_INK[2], GOLD_INK[3], 1)
-			g.setLineWidth(2)
-			g.circle("line", 0, 0, radius * 0.16)
-			local tip = -radius + 0.04 * ts
+			g.circle("fill", 0, 0, radius * 0.18)
+			g.setColor(0.35, 0.18, 0.04, 1)
+			g.circle("fill", 0, 0, radius * 0.09)
+			g.setColor(1, 0.9, 0.45, 1)
+			local star = {}
+			for s = 0, 9 do
+				local a = -math.pi / 2 + s * math.pi / 5
+				local rr = (s % 2 == 0) and radius * 0.07 or radius * 0.03
+				star[#star + 1] = math.cos(a) * rr
+				star[#star + 1] = math.sin(a) * rr
+			end
+			g.polygon("fill", star)
+			local tip = -(rim + 0.02 * ts)
+			g.setColor(0.75, 0.62, 0.2, 1)
+			g.polygon("fill", 0, tip - 0.28 * ts, -0.16 * ts, tip + 0.02 * ts, 0.16 * ts, tip + 0.02 * ts)
 			g.setColor(CRIMSON[1], CRIMSON[2], CRIMSON[3], 1)
-			g.polygon("fill", 0, tip + 0.18 * ts, -0.14 * ts, tip - 0.10 * ts, 0.14 * ts, tip - 0.10 * ts)
+			g.polygon("fill", 0, tip - 0.24 * ts, -0.11 * ts, tip, 0.11 * ts, tip)
+			g.setColor(1, 0.85, 0.85, 1)
+			g.polygon("fill", 0, tip - 0.2 * ts, -0.035 * ts, tip - 0.04 * ts, 0.035 * ts, tip - 0.04 * ts)
 			g.setColor(1, 1, 1, 1)
 			g.pop()
 		end)
@@ -654,7 +689,7 @@ local function wheel_face()
 	if obj and R.wheel_view then R.wheel_view.wheel = obj end
 	local inner = obj and { n = G.UIT.O, config = { object = obj } }
 		or { n = G.UIT.T, config = { text = L("b_gambel_wheel", "Gambel Wheel"), scale = 0.36, colour = GOLD_INK } }
-	return { n = G.UIT.C, config = { align = "cm", minw = R.WHEEL_BOX + 0.6, minh = R.WHEEL_BOX + 0.6, padding = 0.2 }, nodes = { inner } }
+	return { n = G.UIT.C, config = { align = "cm", minw = R.WHEEL_BOX, minh = R.WHEEL_BOX, padding = 0.08 }, nodes = { inner } }
 end
 
 local function wheel_legend()
@@ -667,7 +702,9 @@ local function wheel_legend()
 			{ n = G.UIT.T, config = { text = text, scale = 0.28, colour = G.C.WHITE } },
 		} }
 	end
-	return { n = G.UIT.C, config = { align = "tm", padding = 0.12, minw = 2.7, r = 0.08, colour = { 0.03, 0.08, 0.06, 1 }, emboss = 0.05 }, nodes = rows }
+	return { n = G.UIT.C, config = { align = "cm", padding = 0.06, r = 0.1, minw = 3.05, colour = GOLD_INK, emboss = 0.05 }, nodes = {
+		{ n = G.UIT.C, config = { align = "tm", padding = 0.1, r = 0.08, minw = 2.85, colour = { 0.06, 0.04, 0.03, 1 } }, nodes = rows },
+	} }
 end
 
 function R.can_wheel()
@@ -781,13 +818,13 @@ end
 
 function R.wheel_definition()
 	local view = R.wheel_view or { prompt = "", result = "" }
-	return R.casino_frame(L("b_gambel_wheel", "Gambel Wheel"), 11.2, {
+	return R.casino_frame(L("b_gambel_wheel", "Gambel Wheel"), 12.4, {
 		{ n = G.UIT.R, config = { align = "cm", padding = 0.02 }, nodes = {
 			{ n = G.UIT.T, config = { ref_table = view, ref_value = "prompt", scale = 0.32, colour = G.C.WHITE } },
 		} },
 		{ n = G.UIT.R, config = { align = "cm", padding = 0.08 }, nodes = {
 			wheel_face(),
-			{ n = G.UIT.C, config = { align = "cm", minw = 0.45 } },
+			{ n = G.UIT.C, config = { align = "cm", minw = 0.7 } },
 			wheel_legend(),
 		} },
 		{ n = G.UIT.R, config = { align = "cm", padding = 0.04, minh = 0.4 }, nodes = {

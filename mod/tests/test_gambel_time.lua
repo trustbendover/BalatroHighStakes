@@ -247,7 +247,10 @@ ok(shop:find("open_wheel", 1, true) and shop:find('R.bet("wheel")', 1, true) and
 ok(shop:find("if not (love and love.graphics", 1, true) and shop:find("love.graphics.polygon", 1, true) and shop:find("G.TILESIZE", 1, true), "the wheel canvas is skipped without Love2D and drawn in pixels")
 ok(shop:find("gambel_bet_for", 1, true) and shop:find("sync_bet_ante", 1, true) and shop:find("drop_cards", 1, true), "the ante lock survives a shop rebuild, and a closed card is removed")
 ok(shop:find("set_sprites", 1, true) and shop:find('sprite_facing = "front"', 1, true) and shop:find("R.ace_name", 1, true), "the drawn Ace is turned face up and named")
-ok(shop:find("R.WHEEL_BOX = 5.0", 1, true) and shop:find("wheel_slices", 1, true) and shop:find("minw = R.WHEEL_BOX + 0.6", 1, true) and shop:find("g.scale(0.16, 0.16)", 1, true), "the wheel is large, the slice marks are small, and the prize list sits beside it")
+ok(shop:find("R.WHEEL_BOX = 5.0", 1, true) and shop:find("wheel_slices", 1, true)
+	and shop:find("minw = R.WHEEL_BOX", 1, true) and shop:find("minw = 0.7", 1, true)
+	and shop:find("g.scale(0.26, 0.26)", 1, true) and shop:find("half - 0.72", 1, true),
+	"the wheel rim stays inside its box, the marks do not wrap, and the prize list is beside it")
 ok(shop:find("STEAM_P2P", 1, true) and shop:find("R.flip", 1, true), "a lobby bet goes to the host, and a solo run with no Steam still rolls")
 local credits = io.open("CREDITS.md"):read("*a")
 ok(credits:find("Bass Gas M", 1, true), "the song credits Bass Gas M")

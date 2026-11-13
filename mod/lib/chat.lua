@@ -294,6 +294,8 @@ end
 function CH.draw_front()
 	local box = CH.box
 	if not box or box.REMOVED or not box.draw then return end
+	-- UIBox:draw skips a second pass in the same frame. Reset that so this paint is the last one.
+	if box.FRAME then box.FRAME.DRAW = -1 end
 	pcall(function() box:draw() end)
 end
 
