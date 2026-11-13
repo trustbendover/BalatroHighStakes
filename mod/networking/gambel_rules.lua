@@ -323,9 +323,10 @@ function G.wheel_ease(t)
 	return 1 - u * u * u
 end
 
---- 10 while this player is in a Gambel Time run (including a watcher). Nil in menus and other modes.
+--- 10 while this player is in a Gambel Time lobby and running or watching. Nil after they leave.
 function G.music_priority(state)
 	state = state or {}
+	if state.in_lobby == false then return nil end
 	local mode = tostring(state.mode or "")
 	if not mode:find(G.KEY, 1, true) then return nil end
 	if state.watching or state.stage == "run" then return 10 end

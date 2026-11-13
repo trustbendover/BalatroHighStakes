@@ -133,9 +133,15 @@ ok(R.music_priority({ mode = "gamemode_mp_gambel_time", stage = "run" }) == 10, 
 ok(R.music_priority({ mode = "gamemode_mp_gambel_time", watching = true, stage = "menu" }) == 10, "a watcher hears it too")
 ok(R.music_priority({ mode = "gamemode_mp_attrition", stage = "run" }) == nil, "other modes keep their own music")
 ok(R.music_priority({ mode = "gamemode_mp_gambel_time", stage = "menu" }) == nil, "the menu does not play it")
+ok(R.music_priority({ mode = "gamemode_mp_gambel_time", in_lobby = false, watching = true, stage = "menu" }) == nil, "a dead player who left the lobby does not keep the track")
+ok(R.music_priority({ mode = "gamemode_mp_gambel_time", in_lobby = false, stage = "run" }) == nil, "no lobby means no Gambel Time music, even on a run stage")
+ok(R.music_priority({ mode = "gamemode_mp_gambel_time", in_lobby = true, watching = true, stage = "menu" }) == 10, "a watcher who is still in the lobby hears the track")
 local music = io.open("lib/gambel.lua"):read("*a")
 ok(music:find('key = "music_gambel_time"', 1, true) and music:find('path = "music_gambel_time.ogg"', 1, true) and music:find("sync = false", 1, true), "the sound is registered for assets/sounds/music_gambel_time.ogg")
 ok(music:find("NFS.getInfo", 1, true), "a missing ogg is skipped instead of crashing")
+ok(music:find("in_lobby = in_lobby", 1, true) and music:find("spec.state.active or spec.state.joined", 1, true) and music:find("G.STATE ~= G.STATES.MENU", 1, true), "the track checks the lobby code and a real spectator, not a leftover life of 0")
+local leave = io.open("ui/lobby/lobby.lua"):read("*a")
+ok(leave:find("MP.SPECTATE.on_match_end", 1, true), "leaving the lobby clears the spectator match flag")
 
 -- Host: one player can start, a failed boss can cost 2, the target ante wins, and a second bet is refused.
 local Core = dofile("networking/p2p_server.lua")

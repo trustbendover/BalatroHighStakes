@@ -1045,10 +1045,14 @@ function R.register_music()
 		pitch = 1,
 		volume = 1,
 		select_music_track = function()
-			local watching = MP.SPECTATE and MP.SPECTATE.watching and MP.SPECTATE.watching()
-			local stage = (G and G.STAGES and G.STAGE == G.STAGES.RUN) and "run" or "menu"
+			local in_lobby = (MP.LOBBY and MP.LOBBY.code ~= nil) and true or false
+			local stage = (G and G.STAGES and G.STATES and G.STAGE == G.STAGES.RUN and G.STATE ~= G.STATES.MENU) and "run" or "menu"
+			local spec = MP.SPECTATE
+			local seated = spec and spec.state and (spec.state.active or spec.state.joined)
+			local watching = in_lobby and (seated or (stage == "run" and spec and spec.watching and spec.watching()))
 			return R.music_priority({
 				mode = MP.LOBBY and MP.LOBBY.config and MP.LOBBY.config.gamemode,
+				in_lobby = in_lobby,
 				watching = watching and true or false,
 				stage = stage,
 			})
