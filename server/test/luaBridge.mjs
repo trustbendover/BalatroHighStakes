@@ -17,7 +17,9 @@ lua.stdout.on('data', (d) => {
     s.write(JSON.stringify(f.m) + '\n')
   }
 })
-const send = (o) => lua.stdin.write(JSON.stringify(o) + '\n')
+// Stamp every command with millisecond time. The Lua host used to read os.time(),
+// so a 1s grace could expire on the next whole second (before this reconnect finished).
+const send = (o) => { o.now = Date.now() / 1000; lua.stdin.write(JSON.stringify(o) + '\n') }
 // the game calls Server:tick() about once per frame/second; do the same here
 setInterval(() => send({ t: 'tick' }), 250).unref()
 net.createServer((s) => {

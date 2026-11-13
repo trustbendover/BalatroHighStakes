@@ -171,9 +171,11 @@ async function main() {
   }
 
   // ---- 5 players: disconnect + rejoin within grace, disconnect past grace = eliminated,
-  //      eliminated player spectates / returns to the lobby without ending the match, no late join
+  //      eliminated player spectates / returns to the lobby without ending the match, no late join.
+  //      The window is several seconds. A 1s grace is shorter than a TCP reconnect on a
+  //      busy CI runner, and a whole-second clock can burn that 1s on the next tick.
   {
-    const { code, cs } = await lobby(5, 'deathmatch', { starting_lives: '2', deathmatch_grace: '1' })
+    const { code, cs } = await lobby(5, 'deathmatch', { starting_lives: '2', deathmatch_grace: '5' })
     const [p1, p2, p3, p4, p5] = cs
     await start(cs)
     let res = await dmBlind(cs, cs)
@@ -181,7 +183,9 @@ async function main() {
     p5.sock.destroy(); p4.sock.destroy(); await sleep(150)
     const back = await connect(p4.name); back.send({ action: 'rejoinLobby', code, reconnectToken: p4.token })
     await back.waitAction('rejoinedLobby'); back.id = p4.id
-    const ex = await p2.wait((m) => m.action === 'playerEliminated' && m.playerId === p5.id, 'p5 eliminated after grace', 6000)
+    const resumed = back.last('resumeGame')
+    assert.ok(!resumed || resumed.eliminated !== true, 'p4 rejoin restored a live seat')
+    const ex = await p2.wait((m) => m.action === 'playerEliminated' && m.playerId === p5.id, 'p5 eliminated after grace', 12000)
     assert.equal(ex.reason, 'disconnected')
     await sleep(1500)
     assert.ok(!p2.msgs.some((m) => m.action === 'playerEliminated' && m.playerId === p4.id), 'p4 rejoined in time: not eliminated')
