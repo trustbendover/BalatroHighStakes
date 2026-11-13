@@ -35,6 +35,8 @@ ok(ui:find('align = "tri"', 1, true) and ui:find("y = 2.7", 1, true) and ui:find
 	and ui:find("function CH.drop_box", 1, true) and ui:find("function CH.sync_visual", 1, true)
 	and ui:find("box.VT.x, box.VT.y = pos.x, pos.y", 1, true)
 	and ui:find('id = "mp_chat_drag"', 1, true) and ui:find("CH.clamp_pos", 1, true) and ui:find("CH.pos", 1, true)
+	and ui:find("love.graphics.getWidth", 1, true) and ui:find("G.TILE_W", 1, true)
+	and ui:find("G.WINDOWTRANS", 1, true) and ui:find('get_UIE_by_ID("mp_chat_open")', 1, true)
 	and ui:find("name_colour", 1, true) and ui:find('row.name .. ":"', 1, true)
 	and not ui:find("chip_fill", 1, true) and not ui:find("r = 0.2", 1, true)
 	and ui:find("CH.LOBBY_W = 5.6", 1, true) and ui:find("CH.MATCH_W = 5.4", 1, true)

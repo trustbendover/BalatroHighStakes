@@ -350,14 +350,64 @@ function CH.over(id, x, y)
 	return el and el.collides_with_point and el:collides_with_point({ x = x, y = y }) or false
 end
 
+--- The playfield is inset. G.ROOM.T.w is TILE_W, while the window is TILE_W plus the padding on both sides.
+--- Clamping to the room let the bubble reach x = 0 and stopped it short of the right and bottom edges.
+function CH.screen_span()
+	local right, bottom
+	local scale = G and G.TILESCALE and G.TILESIZE and (G.TILESCALE * G.TILESIZE) or 0
+	if scale > 0 and love and love.graphics and love.graphics.getWidth then
+		local ok, w, h = pcall(function()
+			return love.graphics.getWidth(), love.graphics.getHeight()
+		end)
+		if ok and w and h and w > 0 and h > 0 then
+			right, bottom = w / scale, h / scale
+		end
+	end
+	if G and G.WINDOWTRANS and G.WINDOWTRANS.w and G.WINDOWTRANS.w > 0 then
+		if not right or G.WINDOWTRANS.w > right then right = G.WINDOWTRANS.w end
+		if G.WINDOWTRANS.h and (not bottom or G.WINDOWTRANS.h > bottom) then bottom = G.WINDOWTRANS.h end
+	end
+	if not right and G and G.TILE_W then
+		local padw = G.ROOM_PADDING_W or 1
+		local padh = G.ROOM_PADDING_H or 0.7
+		right = G.TILE_W + 2 * padw
+		bottom = (G.TILE_H or 0) + 2 * padh
+	end
+	if not right and G and G.ROOM and G.ROOM.T then
+		local room = G.ROOM.T
+		right = (room.x or 0) + (room.w or 0) + ((G and G.ROOM_PADDING_W) or 1)
+		bottom = (room.y or 0) + (room.h or 0) + ((G and G.ROOM_PADDING_H) or 0.7)
+	end
+	return 0, 0, right or 0, bottom or 0
+end
+
+--- Closed, the root can be wider than the Chat button. Measure that button. Open, use the panel.
+function CH.visible_extent(box)
+	local w, h = box.T.w or 0, box.T.h or 0
+	local x0, y0 = 0, 0
+	if not CH.open and box.get_UIE_by_ID then
+		local el = box:get_UIE_by_ID("mp_chat_open")
+		if el and el.T and el.T.w and el.T.w > 0 and box.T.x and el.T.x then
+			x0 = el.T.x - box.T.x
+			y0 = (el.T.y or 0) - (box.T.y or 0)
+			w = x0 + el.T.w
+			h = y0 + (el.T.h or 0)
+		end
+	end
+	return x0, y0, w, h
+end
+
 function CH.clamp_pos()
 	local pos, box = CH.pos, CH.box
-	if not pos or not box or not box.T or not (G and G.ROOM and G.ROOM.T) then return end
-	local w, h = box.T.w or 0, box.T.h or 0
-	local maxx = math.max(0, (G.ROOM.T.w or 0) - w)
-	local maxy = math.max(0, (G.ROOM.T.h or 0) - h)
-	if pos.x < 0 then pos.x = 0 elseif pos.x > maxx then pos.x = maxx end
-	if pos.y < 0 then pos.y = 0 elseif pos.y > maxy then pos.y = maxy end
+	if not pos or not box or not box.T then return end
+	local left, top, right, bottom = CH.screen_span()
+	local x0, y0, x1, y1 = CH.visible_extent(box)
+	local minx, maxx = left - x0, right - x1
+	local miny, maxy = top - y0, bottom - y1
+	if maxx < minx then maxx = minx end
+	if maxy < miny then maxy = miny end
+	if pos.x < minx then pos.x = minx elseif pos.x > maxx then pos.x = maxx end
+	if pos.y < miny then pos.y = miny elseif pos.y > maxy then pos.y = maxy end
 end
 
 --- A dragged panel is no longer welded to the room corner.
