@@ -37,6 +37,8 @@ ok(ui:find('align = "tri"', 1, true) and ui:find("y = 2.7", 1, true) and ui:find
 	and ui:find('id = "mp_chat_drag"', 1, true) and ui:find("CH.clamp_pos", 1, true) and ui:find("CH.pos", 1, true)
 	and ui:find("love.graphics.getWidth", 1, true) and ui:find("G.TILE_W", 1, true)
 	and ui:find("G.WINDOWTRANS", 1, true) and ui:find('get_UIE_by_ID("mp_chat_open")', 1, true)
+	and ui:find("G.ROOM.T.x", 1, true) and ui:find("get_cursor_collision", 1, true)
+	and ui:find("drag.swallowed", 1, true) and ui:find("CH.expire_suppress", 1, true)
 	and ui:find("name_colour", 1, true) and ui:find('row.name .. ":"', 1, true)
 	and not ui:find("chip_fill", 1, true) and not ui:find("r = 0.2", 1, true)
 	and ui:find("CH.LOBBY_W = 5.6", 1, true) and ui:find("CH.MATCH_W = 5.4", 1, true)
@@ -121,5 +123,60 @@ S:receive(ann, { action = "startGame" })
 ok(texts(ann.box) == "" and texts(bob.box) == "", "the next match does not reuse the previous match log")
 S:receive(bob, { action = "chat", text = "only this game" })
 ok(texts(ann.box) == "only this game" and texts(bob.box) == "only this game", "host and guest see only the new match")
+
+local CH = dofile("lib/chat.lua")
+G = {
+	ROOM = { T = { x = 1.47, y = 0.7, w = 20, h = 11.5 } },
+	TILESCALE = 1, TILESIZE = 1, TILE_W = 20, TILE_H = 11.5,
+	ROOM_PADDING_W = 1, ROOM_PADDING_H = 0.7,
+	WINDOWTRANS = { w = 22.94, h = 12.9 },
+	DRAW_HASH_BUFF = 2,
+	CURSOR = { T = { x = 1, y = 1 } },
+	FUNCS = {},
+}
+love = {
+	graphics = { getWidth = function() return 22.94 end, getHeight = function() return 12.9 end },
+	mouse = { isDown = function() return false end },
+	timer = { getTime = function() return 10 end },
+	draw = function() end,
+}
+local left, top, right = CH.screen_span()
+ok(math.abs(left - (-1.47 + 0.05)) < 1e-6, "the screen span is room-local on the left")
+ok(math.abs(top - (-0.7 + 0.05)) < 1e-6, "the screen span is room-local on the top")
+ok(math.abs(right - (22.94 - 1.47 - 0.05)) < 1e-6, "the right edge subtracts the room offset")
+CH.open = false
+CH.refresh = function() end
+CH.pos = { x = 100, y = 100 }
+CH.box = { T = { x = 0, y = 0, w = 2, h = 1 }, VT = { x = 0, y = 0 }, states = { visible = true } }
+CH.clamp_pos()
+ok(math.abs(CH.pos.x - (right - 2)) < 1e-6, "a drag cannot push the bubble past the room-local right edge")
+ok(CH.pos.x > 0, "the clamped bubble is still on the playfield, not a window-space overshoot")
+CH.open = false
+CH.drag = { moved = true }
+G.FUNCS = G.FUNCS or {}
+CH.registered = nil
+CH._cursor = nil
+CH._draw = true
+Controller = { get_cursor_collision = function(self) self.collision_list = {} end }
+CH.register()
+G.FUNCS.mp_chat_toggle()
+ok(CH.drag.swallowed and CH.open == false, "releasing a drag does not open the chat")
+CH.tick_drag()
+ok(CH.drag == nil and not CH.suppress_click, "that release does not swallow the next click")
+G.FUNCS.mp_chat_toggle()
+ok(CH.open == true, "the next click opens the chat")
+CH.box.collides_with_point = function(_, p) return p.x > 22.5 and p.x < 23.5 end
+CH.box.get_UIE_by_ID = function(_, id)
+	if id == "mp_chat_open" then
+		return { id = id, states = { collide = {} }, collides_with_point = function(_, p) return p.x > 22.5 and p.x < 23.5 end }
+	end
+end
+local ctrl = {}
+Controller.get_cursor_collision(ctrl, { x = 23 + 1.47, y = 2 })
+local found = false
+for _, node in ipairs(ctrl.collision_list or {}) do
+	if node.id == "mp_chat_open" then found = true end
+end
+ok(found, "a click in the widescreen margin still hits the chat button")
 
 print("PASS: chat")

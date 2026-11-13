@@ -234,6 +234,7 @@ ok(en.b_gambel_spin == "Spin!" and nl.b_gambel_spin == "Draai!", "Spin! in Engli
 ok(en.k_gambel_ace_h == "Ace of Hearts" and en.k_gambel_ace_s == "Ace of Spades", "English ace names")
 ok(nl.k_gambel_ace_h == "Harten Aas" and nl.k_gambel_ace_d == "Ruiten Aas" and nl.k_gambel_ace_s == "Schoppen Aas" and nl.k_gambel_ace_c == "Klaveren Aas", "Dutch ace names")
 ok(en.k_gambel_you_picked == "You picked " and nl.k_gambel_drawn_mid == " — Getrokken: ", "the draw line names the pick and the card")
+ok(en.k_gambel_flipping == "Flipping..." and nl.k_gambel_flipping == "Draaien...", "the flip waits to name the result")
 ok(en.k_gambel_wheel_tax == "-$4 Tax" and nl.k_gambel_wheel_tax == "-$4 Belasting", "the tax wedge is named")
 ok(en.k_gambel_wheel_discard == "-1 Discard" and nl.k_gambel_wheel_discard == "-1 Weggooi", "the discard wedge is named")
 local shop = io.open("lib/gambel.lua"):read("*a")
@@ -248,7 +249,8 @@ ok(shop:find("if not (love and love.graphics", 1, true) and shop:find("love.grap
 ok(shop:find("gambel_bet_for", 1, true) and shop:find("sync_bet_ante", 1, true) and shop:find("drop_cards", 1, true), "the ante lock survives a shop rebuild, and a closed card is removed")
 ok(shop:find("function R.make_double_card", 1, true) and shop:find('sprite_facing = "back"', 1, true) and shop:find("emplace(card, nil, true)", 1, true), "the card is created face down and emplace does not flip it")
 ok(shop:find("no_ui = true", 1, true) and shop:find("states.hover.can = false", 1, true) and shop:find("card.hover = function() end", 1, true), "hovering the Ace does not open the card tooltip")
-ok(shop:find("card:flip()", 1, true) and shop:find("set_sprites", 1, true) and shop:find('sprite_facing = "front"', 1, true) and shop:find("R.ace_name", 1, true), "Red or Black flips the drawn Ace face up and names it")
+ok(shop:find("function R.tick_double", 1, true) and shop:find("k_gambel_flipping", 1, true) and shop:find("set_sprites", 1, true) and shop:find('sprite_facing = "front"', 1, true) and shop:find("R.ace_name", 1, true), "the Ace turns over before the win or loss is shown")
+ok(shop:find("bulbs = 28", 1, true) and shop:find("% 3 == 0", 1, true) and shop:find("love.timer.getTime", 1, true) and shop:find("1, 0.98, 0.84, 1", 1, true) and shop:find("0.42, 0.24, 0.08, 1", 1, true), "the wheel rim carries chasing marquee bulbs")
 ok(shop:find("R.WHEEL_BOX = 5.0", 1, true) and shop:find("wheel_slices", 1, true)
 	and shop:find("minw = R.WHEEL_BOX", 1, true) and shop:find("minw = 1.25", 1, true)
 	and shop:find("colour = { 0.03, 0.08, 0.06, 0.45 }", 1, true)
@@ -263,6 +265,23 @@ local saved_g = G
 MP.load_mp_file = function(p) return dofile(p) end
 dofile("lib/gambel.lua")
 ok(MP.GAMBEL.make_wheel() == nil, "headless Lua does not build a Love2D wheel")
+local R = MP.GAMBEL
+MP.GAME = MP.GAME or {}
+R.double_view = { picked = "red", prompt = "Pick", result = "stale", card_name = "stale", show_close = true, face = "back" }
+R.reveal_double({ suit = "S", drawn = "black" }, "-$4")
+ok(R.double_view.result == "" and R.double_view.card_name == "" and not R.double_view.show_close, "the win or loss stays hidden when the flip starts")
+ok(R.double_view.prompt == "Flipping..." and R.double_view.face == "back", "the prompt stays neutral until the card turns")
+R.tick(0.2)
+ok(R.double_view.result == "" and not R.double_view.show_close and R.double_view.face == "back", "the first half of the flip is still the back")
+R.tick(0.05)
+ok(R.double_view.face == "front" and R.double_view.suit_mark == "S" and R.double_view.result == "", "the face swaps at the midpoint, still without the payout")
+R.tick(0.25)
+ok(R.double_view.show_close and R.double_view.result == "-$4" and R.double_view.card_name == "Ace of Spades", "the payout appears only after the flip")
+ok(MP.GAME.gambel_notice == "-$4", "the toast waits until the card is face up")
+R.double_view = { picked = "black", prompt = "", result = "", card_name = "", show_close = false, face = "back" }
+R.reveal_double({ suit = "H", drawn = "red" }, "+$8")
+R.close_double()
+ok(MP.GAME.gambel_notice == "+$8" and R.double_view == nil, "closing during the flip still announces the result")
 G = saved_g
 
 print("PASS: gambel time")

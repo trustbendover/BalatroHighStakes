@@ -350,8 +350,8 @@ function CH.over(id, x, y)
 	return el and el.collides_with_point and el:collides_with_point({ x = x, y = y }) or false
 end
 
---- The playfield is inset. G.ROOM.T.w is TILE_W, while the window is TILE_W plus the padding on both sides.
---- Clamping to the room let the bubble reach x = 0 and stopped it short of the right and bottom edges.
+--- CH.box.T is G.ROOM-local. World x is box.T.x + G.ROOM.T.x (the window padding).
+--- Returning a window span that starts at 0 pushes the bubble that padding too far right.
 function CH.screen_span()
 	local right, bottom
 	local scale = G and G.TILESCALE and G.TILESIZE and (G.TILESCALE * G.TILESIZE) or 0
@@ -378,7 +378,11 @@ function CH.screen_span()
 		right = (room.x or 0) + (room.w or 0) + ((G and G.ROOM_PADDING_W) or 1)
 		bottom = (room.y or 0) + (room.h or 0) + ((G and G.ROOM_PADDING_H) or 0.7)
 	end
-	return 0, 0, right or 0, bottom or 0
+	local rx = (G and G.ROOM and G.ROOM.T and G.ROOM.T.x) or 0
+	local ry = (G and G.ROOM and G.ROOM.T and G.ROOM.T.y) or 0
+	local edge = 0.05
+	right, bottom = right or 0, bottom or 0
+	return -rx + edge, -ry + edge, right - rx - edge, bottom - ry - edge
 end
 
 --- Closed, the root can be wider than the Chat button. Measure that button. Open, use the panel.
@@ -451,10 +455,68 @@ function CH.sync_visual(box)
 	snap(box)
 end
 
+--- Cursor is in window space. The box transform is often G.ROOM-local, so try both.
+function CH.hits_point(node, cursor)
+	if not (node and node.collides_with_point and cursor) then return false end
+	local ok, hit = pcall(function() return node:collides_with_point(cursor) end)
+	if ok and hit then return true end
+	local rx = (G and G.ROOM and G.ROOM.T and G.ROOM.T.x) or 0
+	local ry = (G and G.ROOM and G.ROOM.T and G.ROOM.T.y) or 0
+	if rx == 0 and ry == 0 then return false end
+	ok, hit = pcall(function() return node:collides_with_point({ x = cursor.x - rx, y = cursor.y - ry }) end)
+	return ok and hit and true or false
+end
+
+function CH.note_hit(list, node)
+	if not node then return end
+	for _, have in ipairs(list) do
+		if have == node then return end
+	end
+	if node.states and node.states.collide then node.states.collide.is = true end
+	table.insert(list, 1, node)
+end
+
+--- The engine drops every click once the cursor leaves the playfield hash.
+--- Put the chat controls back on the list so a bubble in the margin still receives them.
+function CH.hook_cursor()
+	if CH._cursor or not (Controller and Controller.get_cursor_collision) then return end
+	CH._cursor = true
+	local orig = Controller.get_cursor_collision
+	function Controller:get_cursor_collision(cursor_trans)
+		orig(self, cursor_trans)
+		local box = CH.box
+		if not box or box.REMOVED or not cursor_trans then return end
+		if box.states and box.states.visible == false then return end
+		self.collision_list = self.collision_list or {}
+		local ids = { "mp_chat_open", "mp_chat_drag", "mp_chat_send", "mp_chat_close", "text_input" }
+		if box.get_UIE_by_ID then
+			for _, id in ipairs(ids) do
+				local el = box:get_UIE_by_ID(id)
+				if CH.hits_point(el, cursor_trans) then CH.note_hit(self.collision_list, el) end
+			end
+		end
+		if CH.hits_point(box, cursor_trans) then CH.note_hit(self.collision_list, box) end
+	end
+end
+
+function CH.expire_suppress()
+	if not CH.suppress_click then return end
+	local now = love and love.timer and love.timer.getTime and love.timer.getTime()
+	if type(CH.suppress_click) ~= "number" or not now or (now - CH.suppress_click) > 0.05 then
+		CH.suppress_click = nil
+	end
+end
+
 function CH.tick_drag()
-	if CH.typing() or not (CH.box and CH.box.T and love and love.mouse and love.mouse.isDown) then return end
+	if CH.typing() or not (CH.box and CH.box.T and love and love.mouse and love.mouse.isDown) then
+		CH.expire_suppress()
+		return
+	end
 	local x, y = CH.cursor()
-	if not x then return end
+	if not x then
+		CH.expire_suppress()
+		return
+	end
 	local down = love.mouse.isDown(1)
 	if down and not CH.drag then
 		local on_handle = CH.over("mp_chat_drag", x, y) or CH.over("mp_chat_open", x, y)
@@ -470,8 +532,13 @@ function CH.tick_drag()
 			CH.apply_pos()
 		end
 	elseif CH.drag then
-		if CH.drag.moved then CH.suppress_click = true end
+		-- The click handler already ran and saw drag.moved. Do not arm a second swallow.
+		if CH.drag.moved and not CH.drag.swallowed then
+			CH.suppress_click = (love.timer and love.timer.getTime and love.timer.getTime()) or true
+		end
 		CH.drag = nil
+	elseif not down then
+		CH.expire_suppress()
 	end
 	if CH.pos then CH.apply_pos() end
 end
@@ -489,7 +556,8 @@ function CH.register()
 	G.FUNCS = G.FUNCS or {}
 	G.FUNCS.mp_chat_toggle = function()
 		-- The click is dispatched before this frame's drag tick, while the drag is still recorded.
-		if (CH.drag and CH.drag.moved) or CH.suppress_click then CH.suppress_click = nil; return end
+		if CH.drag and CH.drag.moved then CH.drag.swallowed = true; return end
+		if CH.suppress_click then CH.suppress_click = nil; return end
 		CH.toggle()
 	end
 	G.FUNCS.mp_chat_close = function() CH.close() end
@@ -500,6 +568,7 @@ function CH.register()
 		MP.register_action("chatState", function(p) CH.apply(p) end)
 		MP.register_action("chatReject", function() end)
 	end
+	CH.hook_cursor()
 	if love and love.draw and not CH._draw then
 		CH._draw = true
 		local draw = love.draw

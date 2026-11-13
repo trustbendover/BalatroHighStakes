@@ -389,6 +389,7 @@ return {
 			b_gambel_back = "Terug",
 			b_gambel_continue = "Verder",
 			k_gambel_pick = "Kies Rood of Zwart",
+			k_gambel_flipping = "Draaien...",
 			k_gambel_stake = "Inzet: $",
 			k_gambel_win = "Winst +$",
 			k_gambel_lose = "Verlies -$",

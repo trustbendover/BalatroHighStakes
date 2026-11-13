@@ -266,10 +266,7 @@ function R.apply_bet(msg)
 	if line and not showing then
 		local title = msg.won and L("b_gambel_double", "Double or Nothing") or L("k_gambel_house", "The House holds")
 		R.flash(title .. " " .. line)
-	elseif line then
-		if MP.GAME then MP.GAME.gambel_shop_note = line end
-		R.toast(line)
-	elseif msg.id then
+	elseif msg.id and not showing then
 		local spinning = R.wheel_view and R.wheel_view.spinning and G and G.OVERLAY_MENU
 		if spinning then R.arm_wheel(msg, R.play_wheel(msg, true))
 		else R.play_wheel(msg) end
@@ -351,7 +348,12 @@ function R.drop_cards(view)
 end
 
 function R.close_double()
-	R.drop_cards(R.double_view)
+	local view = R.double_view
+	local flip = view and view.flip
+	if flip and not flip.done and flip.line and flip.line ~= "" then
+		R.flash(flip.line)
+	end
+	R.drop_cards(view)
 	R.double_view = nil
 	if G and G.FUNCS and G.FUNCS.exit_overlay_menu and G.OVERLAY_MENU then
 		pcall(function() G.FUNCS.exit_overlay_menu() end)
@@ -393,38 +395,78 @@ function R.reveal_double(msg, line)
 	local key = suit .. "_A"
 	local picked = (view.picked == "black") and L("b_gambel_black", "Black Ace") or L("b_gambel_red", "Red Ace")
 	local drawn = R.ace_name(suit)
-	view.card_name = drawn
-	view.face = "front"
-	view.pip = "A"
-	view.suit_mark = suit
-	view.prompt = L("k_gambel_you_picked", "You picked ") .. picked .. L("k_gambel_drawn_mid", " — Drawn: ") .. drawn
-	view.result = line or ""
-	view.show_close = true
-	local card = view.card
-	local def = G and G.P_CARDS and G.P_CARDS[key]
-	if card and def then
-		pcall(function()
-			if card.set_base then card:set_base(def) end
-			if card.set_sprites then card:set_sprites(nil, def) end
-			-- The shop overlay can pause Card:update, which is what finishes flip().
-			-- Turn it, then leave the face fully open so the Ace is the card you see.
-			if card.flip then card:flip() end
-			card.facing = "front"
-			card.sprite_facing = "front"
-			card.flipping = nil
-			if card.pinch then card.pinch.x = false; card.pinch.y = false end
-			if card.T and card.VT then card.VT.w, card.VT.h = card.T.w, card.T.h end
-			if card.children then
-				for _, part in pairs(card.children) do
-					if type(part) == "table" and part.VT and card.T then
-						part.VT.w, part.VT.h = card.T.w, card.T.h
-					end
-				end
-			end
-			if card.states then card.states.visible = true end
-			R.mute_ace(card, view.area)
-		end)
+	view.card_name = ""
+	view.result = ""
+	view.show_close = false
+	view.prompt = L("k_gambel_flipping", "Flipping...")
+	view.flip = {
+		t = 0, dur = 0.45, swapped = false, done = false,
+		suit = suit, key = key, drawn = drawn, line = line or "",
+		prompt = L("k_gambel_you_picked", "You picked ") .. picked .. L("k_gambel_drawn_mid", " — Drawn: ") .. drawn,
+	}
+end
+
+local function set_card_width(card, w)
+	if not card then return end
+	if card.VT then card.VT.w = w end
+	if card.children then
+		for _, part in pairs(card.children) do
+			if type(part) == "table" and part.VT then part.VT.w = w end
+		end
 	end
+end
+
+function R.tick_double(dt)
+	local view = R.double_view
+	local flip = view and view.flip
+	if not flip or flip.done then return end
+	local step = (tonumber(dt) or 0) / (flip.dur or 0.45)
+	flip.t = math.min(1, (flip.t or 0) + step)
+	local card = view.card
+	local full = card and card.T and card.T.w or 0
+	if card and full > 0 then
+		local span = flip.t < 0.5 and (1 - flip.t / 0.5) or ((flip.t - 0.5) / 0.5)
+		if card.pinch then card.pinch.x = flip.t < 1 end
+		set_card_width(card, full * span)
+	end
+	if not flip.swapped and flip.t >= 0.5 then
+		flip.swapped = true
+		view.face = "front"
+		view.pip = "A"
+		view.suit_mark = flip.suit
+		local def = G and G.P_CARDS and G.P_CARDS[flip.key]
+		if card and def then
+			pcall(function()
+				if card.set_base then card:set_base(def) end
+				if card.set_sprites then card:set_sprites(nil, def) end
+				card.facing = "front"
+				card.sprite_facing = "front"
+				card.flipping = nil
+				if card.states then card.states.visible = true end
+				R.mute_ace(card, view.area)
+			end)
+		end
+		if play_sound then pcall(play_sound, "card1") end
+	end
+	if flip.t >= 1 then
+		flip.done = true
+		if card and card.T then
+			if card.pinch then card.pinch.x = false end
+			set_card_width(card, card.T.w)
+			if card.VT and card.T.h then card.VT.h = card.T.h end
+		end
+		view.card_name = flip.drawn
+		view.prompt = flip.prompt
+		view.result = flip.line or ""
+		view.show_close = true
+		view.flip = nil
+		if flip.line and flip.line ~= "" then R.toast(flip.line) end
+	end
+end
+
+function R.tick(dt)
+	R.tick_double(dt)
+	R.tick_wheel(dt)
 end
 
 function R.finish_double(line)
@@ -656,6 +698,34 @@ function R.make_wheel()
 			g.setLineWidth(2)
 			g.setColor(1, 0.92, 0.55, 1)
 			g.circle("line", 0, 0, rim + 0.035 * ts)
+			local bulbs = 28
+			local now = 0
+			if love.timer and love.timer.getTime then
+				local ok_t, t = pcall(love.timer.getTime)
+				if ok_t and type(t) == "number" then now = t end
+			end
+			local won = view and view.landed
+			local chase = math.floor(now * (won and 18 or 10))
+			local pulse = won and (0.55 + 0.45 * math.abs(math.sin(now * 16))) or 1
+			local bulb_at = rim + 0.09 * ts
+			for b = 0, bulbs - 1 do
+				local a = -math.pi / 2 + b * (2 * math.pi / bulbs)
+				local bx, by = math.cos(a) * bulb_at, math.sin(a) * bulb_at
+				local lit = won or ((b + chase) % 3 == 0)
+				if lit then
+					g.setColor(1, 0.82, 0.35, 0.3 * pulse)
+					g.circle("fill", bx, by, 0.07 * ts)
+					g.setColor(1, 0.98, 0.84, 1 * pulse)
+					g.circle("fill", bx, by, 0.038 * ts)
+					g.setColor(1, 1, 1, pulse)
+					g.circle("fill", bx - 0.01 * ts, by - 0.01 * ts, 0.012 * ts)
+				else
+					g.setColor(0.22, 0.12, 0.04, 1)
+					g.circle("fill", bx, by, 0.042 * ts)
+					g.setColor(0.42, 0.24, 0.08, 1)
+					g.circle("fill", bx, by, 0.032 * ts)
+				end
+			end
 			for i = 1, n do
 				local a0 = -math.pi / 2 + (i - 1) * slice + rot
 				local a1 = a0 + slice
@@ -1052,7 +1122,7 @@ function R.register_ui()
 				MP.GAMBEL.drop_cards(view)
 				if not view.picked then MP.GAMBEL.double_view = nil end
 			end
-			MP.GAMBEL.tick_wheel(dt)
+			MP.GAMBEL.tick(dt)
 			local wheel = MP.GAMBEL.wheel_view
 			if wheel and not G.OVERLAY_MENU then
 				if wheel.pending_label and not wheel.announced then

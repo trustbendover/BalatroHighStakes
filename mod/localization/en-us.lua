@@ -1402,6 +1402,7 @@ return {
 			b_gambel_back = "Back",
 			b_gambel_continue = "Continue",
 			k_gambel_pick = "Pick Red or Black",
+			k_gambel_flipping = "Flipping...",
 			k_gambel_stake = "Stake: $",
 			k_gambel_win = "Win +$",
 			k_gambel_lose = "Lose -$",
