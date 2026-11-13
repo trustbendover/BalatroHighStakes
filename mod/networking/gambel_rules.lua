@@ -273,6 +273,49 @@ function G.wheel(seed, id, ante, money)
 	return { ok = true, id = prize.id, amount = prize.amount, delta = delta, money = G.money(money) + delta }
 end
 
+--- Which wedge a host result lands on. Cash $8 and cash $20 are different wedges.
+function G.wheel_index(msg)
+	msg = msg or {}
+	local amount = tonumber(msg.amount)
+	if amount == nil and (msg.id == "cash" or msg.id == "tax") then amount = math.abs(tonumber(msg.delta) or 0) end
+	if amount == 0 then amount = nil end
+	for i, prize in ipairs(G.WHEEL) do
+		if prize.id == msg.id and (not prize.amount or not amount or prize.amount == amount) then return i end
+	end
+	return 1
+end
+
+--- Rotation that puts wedge `index` under a pointer at the top, after `turns` extra spins.
+function G.wheel_rotation(index, turns)
+	local n = #G.WHEEL
+	index = math.floor(tonumber(index) or 1)
+	if index < 1 then index = 1 end
+	if index > n then index = n end
+	local slice = (2 * math.pi) / n
+	turns = tonumber(turns) or 4
+	return -((index - 0.5) * slice) - turns * 2 * math.pi
+end
+
+--- The wedge whose centre is nearest the top pointer.
+function G.wheel_under(rotation)
+	local n = #G.WHEEL
+	local slice = (2 * math.pi) / n
+	local a = (-(tonumber(rotation) or 0)) % (2 * math.pi)
+	local idx = math.floor((a / slice) + 1e-7) + 1
+	if idx > n then idx = ((idx - 1) % n) + 1 end
+	if idx < 1 then idx = 1 end
+	return idx
+end
+
+--- Ease-out. 0 at the start, 1 at the landing, fast then slow.
+function G.wheel_ease(t)
+	t = tonumber(t) or 0
+	if t < 0 then t = 0 end
+	if t > 1 then t = 1 end
+	local u = 1 - t
+	return 1 - u * u * u
+end
+
 --- 10 while this player is in a Gambel Time run (including a watcher). Nil in menus and other modes.
 function G.music_priority(state)
 	state = state or {}

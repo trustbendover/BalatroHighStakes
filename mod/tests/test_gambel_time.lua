@@ -100,6 +100,24 @@ for ante = 1, 48 do
 	ok(ace_ok(f), "draw " .. ante .. " is one Ace")
 end
 ok(reds >= 12 and blacks >= 12, "red and black both come up")
+ok(#R.WHEEL == 7, "the wheel has 7 wedges")
+local wedges = {
+	{ id = "cash", amount = 8 },
+	{ id = "cash", amount = 20 },
+	{ id = "tag" },
+	{ id = "edition" },
+	{ id = "tax", amount = 4 },
+	{ id = "discard" },
+	{ id = "perish" },
+}
+for i, msg in ipairs(wedges) do
+	ok(R.wheel_index(msg) == i, "wedge " .. i .. " is " .. msg.id)
+	local rot = R.wheel_rotation(i, 4)
+	ok(R.wheel_under(rot) == i, "the pointer stops on wedge " .. i)
+	ok(R.wheel_under(R.wheel_ease(1) * rot) == i, "eased landing is the same wedge")
+end
+ok(R.wheel_index({ id = "cash", amount = 20 }) == 2 and R.wheel_index({ id = "tax", delta = -4 }) == 5, "cash amounts and a tax delta pick the right wedge")
+ok(R.wheel_ease(0) == 0 and R.wheel_ease(1) == 1 and R.wheel_ease(0.5) > 0.7, "the spin starts fast and eases out")
 
 local spin = R.table_spin("house", 2)
 local found = false
@@ -204,6 +222,9 @@ ok(en.k_gambel_house_win:find("House", 1, true) and nl.k_gambel_house:find("Huis
 ok(en.b_gambel_red == "Red Ace" and en.b_gambel_black == "Black Ace" and en.k_gambel_pick == "Pick Red or Black", "English Red and Black")
 ok(nl.b_gambel_red == "Rode Aas" and nl.b_gambel_black == "Zwarte Aas" and nl.k_gambel_pick == "Kies Rood of Zwart", "Dutch Red and Black")
 ok(en.b_gambel_back == "Back" and en.b_gambel_continue == "Continue" and nl.b_gambel_back == "Terug" and nl.b_gambel_continue == "Verder", "back and continue")
+ok(en.b_gambel_spin == "Spin!" and nl.b_gambel_spin == "Draai!", "Spin! in English and Dutch")
+ok(en.k_gambel_wheel_tax == "-$4 Tax" and nl.k_gambel_wheel_tax == "-$4 Belasting", "the tax wedge is named")
+ok(en.k_gambel_wheel_discard == "-1 Discard" and nl.k_gambel_wheel_discard == "-1 Weggooi", "the discard wedge is named")
 local shop = io.open("lib/gambel.lua"):read("*a")
 ok(shop:find("G.UIDEF.shop", 1, true) and shop:find("n = G.UIT.R", 1, true) and shop:find("mp_gambel_double", 1, true) and shop:find("mp_gambel_wheel", 1, true), "both shop buttons are a row inside the shop")
 ok(shop:find("set_edition", 1, true) and shop:find("add_tag", 1, true) and shop:find("set_perishable", 1, true) and shop:find("arm_discard", 1, true), "wheel prizes change the run, they are not only a toast")
@@ -211,8 +232,16 @@ ok(shop:find("pitch = 1", 1, true) and shop:find("volume = 1", 1, true) and shop
 ok(shop:find("function G.FUNCS.mp_gambel_double(e)", 1, true) and shop:find("function G.FUNCS.mp_gambel_wheel(e)", 1, true), "both buttons receive the click")
 ok(shop:find("open_double", 1, true) and shop:find("overlay_menu", 1, true) and shop:find("CardArea", 1, true), "Double or Nothing opens a card overlay and does not spend the bet yet")
 ok(shop:find('MP.GAMBEL.pick_double("red")', 1, true) and shop:find('R.bet("double", choice)', 1, true), "Red or Black is what spends the bet")
+ok(shop:find("open_wheel", 1, true) and shop:find('R.bet("wheel")', 1, true) and shop:find('R.casino_frame(L("b_gambel_wheel"', 1, true) and shop:find('R.casino_frame(L("b_gambel_double"', 1, true), "Gambel Wheel opens the same felt table, and Spin spends the bet")
+ok(shop:find("if not (love and love.graphics", 1, true) and shop:find("love.graphics.polygon", 1, true), "the wheel canvas is skipped without Love2D")
 ok(shop:find("STEAM_P2P", 1, true) and shop:find("R.flip", 1, true), "a lobby bet goes to the host, and a solo run with no Steam still rolls")
 local credits = io.open("CREDITS.md"):read("*a")
 ok(credits:find("Bass Gas M", 1, true), "the song credits Bass Gas M")
+
+local saved_g = G
+MP.load_mp_file = function(p) return dofile(p) end
+dofile("lib/gambel.lua")
+ok(MP.GAMBEL.make_wheel() == nil, "headless Lua does not build a Love2D wheel")
+G = saved_g
 
 print("PASS: gambel time")

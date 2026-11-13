@@ -186,7 +186,7 @@ function R.arm_discard()
 	end
 end
 
-function R.play_wheel(msg)
+function R.play_wheel(msg, quiet)
 	local plan = R.prize_plan(msg.id, {
 		plain_joker = plain_joker() ~= nil,
 		mortal_joker = mortal_joker() ~= nil,
@@ -194,12 +194,16 @@ function R.play_wheel(msg)
 	})
 	local seed = (G and G.GAME and (G.GAME.pseudorandom_seed or G.GAME.seed)) or "house"
 	local ante = G and G.GAME and G.GAME.round_resets and G.GAME.round_resets.ante or 1
+	local function say(text)
+		if not quiet then R.flash(text) end
+		return text
+	end
 	if plan.kind == "cash" then
 		if msg.id ~= "cash" then R.apply_delta(plan.amount or 0) end
-	R.flash("+$" .. tostring(plan.amount or msg.amount or 0))
+		return say("+$" .. tostring(plan.amount or msg.amount or 0))
 	elseif plan.kind == "tax" then
 		if msg.id ~= "tax" then R.apply_delta(-(plan.amount or 4)) end
-		R.flash("-$" .. tostring(plan.amount or 4))
+		return say("-$" .. tostring(plan.amount or 4))
 	elseif plan.kind == "edition" then
 		local card = plain_joker()
 		local pick = WHEEL_EDITIONS[R.roll(seed, ante, "edition", #WHEEL_EDITIONS)]
@@ -212,29 +216,26 @@ function R.play_wheel(msg)
 				G.CONTROLLER.locks.edition = false
 				card:set_edition(edition, true, true)
 			end)
-			R.flash(pick.label)
-		else
-			R.apply_delta(8)
-			R.flash("+$8")
+			return say(pick.label)
 		end
+		R.apply_delta(8)
+		return say("+$8")
 	elseif plan.kind == "tag" then
 		local key = WHEEL_TAGS[R.roll(seed, ante, "tag", #WHEEL_TAGS)]
 		if add_tag and Tag and key then pcall(function() add_tag(Tag(key)) end) end
-		R.flash(L("k_gambel_tag", "Tag"))
+		return say(L("k_gambel_tag", "Tag"))
 	elseif plan.kind == "discard" then
 		R.arm_discard()
-		R.flash(L("k_gambel_discard", "-1 discard next round"))
+		return say(L("k_gambel_discard", "-1 discard next round"))
 	elseif plan.kind == "perish" then
 		local card = mortal_joker()
 		local stuck = false
 		if card and card.set_perishable then
 			stuck = pcall(function() card:set_perishable(true) end)
 		end
-		if stuck then R.flash(L("k_gambel_perish", "Perishable"))
-		else
-			R.apply_delta(-math.min(4, dollars()))
-			R.flash("-$4")
-		end
+		if stuck then return say(L("k_gambel_perish", "Perishable")) end
+		R.apply_delta(-math.min(4, dollars()))
+		return say("-$4")
 	end
 end
 
@@ -243,6 +244,7 @@ function R.apply_bet(msg)
 	if not msg or msg.ok == false then
 		if msg and msg.reason == "once" then MP.GAME.gambel_bet_sent = true end
 		if R.double_view and R.double_view.picked then R.finish_double(nil) end
+		if R.wheel_view and R.wheel_view.spinning then R.finish_wheel(nil) end
 		R.clear_shop()
 		return
 	end
@@ -262,7 +264,9 @@ function R.apply_bet(msg)
 		if MP.GAME then MP.GAME.gambel_shop_note = line end
 		R.toast(line)
 	elseif msg.id then
-		R.play_wheel(msg)
+		local spinning = R.wheel_view and R.wheel_view.spinning and G and G.OVERLAY_MENU
+		if spinning then R.arm_wheel(msg, R.play_wheel(msg, true))
+		else R.play_wheel(msg) end
 	end
 	if showing then R.reveal_double(msg, line)
 	elseif R.double_view and R.double_view.picked then R.double_view = nil end
@@ -321,6 +325,7 @@ end
 
 function R.open_double()
 	if R.double_view or not R.can_double() then return end
+	if R.wheel_view and not R.wheel_view.spinning then R.close_wheel() end
 	if not (G and G.FUNCS and G.FUNCS.overlay_menu) then return end
 	local stake = R.stake(dollars())
 	R.double_view = {
@@ -430,44 +435,308 @@ local function ace_node()
 	} }
 end
 
+local FELT = { 0.05, 0.22, 0.14, 1 }
+local CRIMSON = { 0.62, 0.10, 0.14, 1 }
+local GOLD_INK = { 0.96, 0.80, 0.32, 1 }
+
+--- Shared card-table frame: green felt, crimson title, gold lettering, Balatro emboss.
+local function ink(c) return { c[1], c[2], c[3], c[4] } end
+
+function R.casino_frame(title, minw, nodes)
+	local body = {
+		{ n = G.UIT.R, config = { align = "cm", padding = 0.07, r = 0.08, colour = ink(CRIMSON), minw = (minw or 7.2) - 0.5 }, nodes = {
+			{ n = G.UIT.T, config = { text = title, scale = 0.46, colour = ink(GOLD_INK), shadow = true } },
+		} },
+	}
+	for _, node in ipairs(nodes or {}) do body[#body + 1] = node end
+	return { n = G.UIT.ROOT, config = { align = "cm", colour = G.C.CLEAR, padding = 0.06 }, nodes = {
+		{ n = G.UIT.C, config = { id = "mp_gambel_felt", align = "cm", padding = 0.12, r = 0.12, colour = ink(FELT), emboss = 0.08, minw = minw or 7.2 }, nodes = body },
+	} }
+end
+
+local function casino_btn(id, func, label, colour, minw)
+	return { n = G.UIT.C, config = { align = "cm", padding = 0.05 }, nodes = {
+		UIBox_button({ id = id, button = func, label = { label }, minw = minw or 2.15, minh = 0.55, scale = 0.36, colour = colour, col = true }),
+	} }
+end
+
 function R.double_definition()
 	local view = R.double_view or { stake = 0, prompt = "", result = "", card_name = "" }
 	local stake = tostring(view.stake or 0)
 	local stake_txt = L("k_gambel_stake", "Stake: $") .. stake
 	local odds = L("k_gambel_win", "Win +$") .. stake .. " / " .. L("k_gambel_lose", "Lose -$") .. stake
-	local function btn(id, func, label, colour, minw)
-		return { n = G.UIT.C, config = { align = "cm", padding = 0.05 }, nodes = {
-			UIBox_button({ id = id, button = func, label = { label }, minw = minw or 2.15, minh = 0.55, scale = 0.36, colour = colour, col = true }),
+	return R.casino_frame(L("b_gambel_double", "Double or Nothing"), 7.2, {
+		{ n = G.UIT.R, config = { align = "cm", padding = 0.02 }, nodes = {
+			{ n = G.UIT.T, config = { text = stake_txt, scale = 0.36, colour = GOLD_INK } },
+		} },
+		{ n = G.UIT.R, config = { align = "cm", padding = 0.02 }, nodes = {
+			{ n = G.UIT.T, config = { text = odds, scale = 0.32, colour = G.C.UI and G.C.UI.TEXT_LIGHT or G.C.WHITE } },
+		} },
+		{ n = G.UIT.R, config = { align = "cm", padding = 0.02 }, nodes = {
+			{ n = G.UIT.T, config = { ref_table = view, ref_value = "prompt", scale = 0.34, colour = G.C.WHITE } },
+		} },
+		{ n = G.UIT.R, config = { align = "cm", padding = 0.06 }, nodes = { ace_node() } },
+		{ n = G.UIT.R, config = { align = "cm", padding = 0.04, minh = 0.4 }, nodes = {
+			{ n = G.UIT.T, config = { ref_table = view, ref_value = "result", scale = 0.46, colour = GOLD_INK, shadow = true } },
+		} },
+		{ n = G.UIT.R, config = { id = "mp_gambel_choices", align = "cm", padding = 0.04, func = "mp_gambel_choices_vis" }, nodes = {
+			casino_btn("mp_gambel_red", "mp_gambel_pick_red", L("b_gambel_red", "Red Ace"), G.C.RED, 2.2),
+			casino_btn("mp_gambel_black", "mp_gambel_pick_black", L("b_gambel_black", "Black Ace"), G.C.BLACK, 2.2),
+			casino_btn("mp_gambel_back", "mp_gambel_double_back", L("b_gambel_back", "Back"), G.C.GREY, 1.6),
+		} },
+		{ n = G.UIT.R, config = { id = "mp_gambel_continue", align = "cm", padding = 0.04, func = "mp_gambel_continue_vis" }, nodes = {
+			casino_btn("mp_gambel_continue", "mp_gambel_double_close", L("b_gambel_continue", "Continue"), G.C.BLUE, 2.4),
+		} },
+	})
+end
+
+function R.wheel_labels()
+	return {
+		"+$8",
+		"+$20",
+		L("k_gambel_tag", "Tag"),
+		L("k_gambel_edition", "Edition"),
+		L("k_gambel_wheel_tax", "-$4 Tax"),
+		L("k_gambel_wheel_discard", "-1 Discard"),
+		L("k_gambel_perish", "Perishable"),
+	}
+end
+
+function R.wheel_colours()
+	return {
+		{ 0.95, 0.78, 0.28, 1 },
+		{ 1.00, 0.90, 0.48, 1 },
+		{ 0.28, 0.55, 0.95, 1 },
+		{ 0.68, 0.38, 0.95, 1 },
+		{ 0.86, 0.18, 0.20, 1 },
+		{ 0.95, 0.52, 0.16, 1 },
+		{ 0.32, 0.68, 0.36, 1 },
+	}
+end
+
+--- Draw is a no-op unless Love2D is present, so headless tests never touch the canvas.
+function R.make_wheel()
+	if not (Moveable and love and love.graphics and love.graphics.polygon) then return nil end
+	local size = 3.6
+	local obj = Moveable(0, 0, size, size)
+	function obj:draw()
+		if not (love and love.graphics and love.graphics.polygon) then return end
+		pcall(function()
+			local g = love.graphics
+			local T = self.VT or self.T
+			if not T then return end
+			local cx, cy = T.x + T.w / 2, T.y + T.h / 2
+			local radius = math.min(T.w, T.h) / 2 - 0.16
+			local view = R.wheel_view
+			local rot = view and view.angle or 0
+			local n = (R.WHEEL and #R.WHEEL) or 7
+			local slice = (2 * math.pi) / n
+			local colours = R.wheel_colours()
+			local labels = R.wheel_labels()
+			g.setColor(0.03, 0.10, 0.07, 1)
+			g.circle("fill", cx, cy, radius + 0.14)
+			g.setColor(GOLD_INK[1], GOLD_INK[2], GOLD_INK[3], 1)
+			g.setLineWidth(0.045)
+			g.circle("line", cx, cy, radius + 0.14)
+			for i = 1, n do
+				local a0 = -math.pi / 2 + (i - 1) * slice + rot
+				local a1 = a0 + slice
+				local col = colours[i] or GOLD_INK
+				g.setColor(col[1], col[2], col[3], 1)
+				local poly = { cx, cy }
+				for s = 0, 10 do
+					local a = a0 + (a1 - a0) * (s / 10)
+					poly[#poly + 1] = cx + math.cos(a) * radius
+					poly[#poly + 1] = cy + math.sin(a) * radius
+				end
+				g.polygon("fill", poly)
+				g.setColor(0.05, 0.03, 0.02, 1)
+				g.setLineWidth(view and view.landed and view.index == i and 0.06 or 0.02)
+				if view and view.landed and view.index == i then g.setColor(GOLD_INK[1], GOLD_INK[2], GOLD_INK[3], 1) end
+				g.polygon("line", poly)
+				local font = g.getFont and g.getFont()
+				if font and labels[i] then
+					local mid = (a0 + a1) / 2
+					local lx = cx + math.cos(mid) * radius * 0.62
+					local ly = cy + math.sin(mid) * radius * 0.62
+					local fh = font:getHeight()
+					local sc = fh > 0 and (0.22 / fh) or 0.02
+					g.push()
+					g.translate(lx, ly)
+					g.rotate(mid + math.pi / 2)
+					g.scale(sc, sc)
+					g.setColor(1, 1, 1, 1)
+					g.printf(labels[i], -70, -fh / 2, 140, "center")
+					g.pop()
+				end
+			end
+			g.setColor(0.10, 0.06, 0.04, 1)
+			g.circle("fill", cx, cy, radius * 0.16)
+			g.setColor(GOLD_INK[1], GOLD_INK[2], GOLD_INK[3], 1)
+			g.setLineWidth(0.03)
+			g.circle("line", cx, cy, radius * 0.16)
+			local tip = cy - radius + 0.04
+			g.setColor(CRIMSON[1], CRIMSON[2], CRIMSON[3], 1)
+			g.polygon("fill", cx, tip + 0.18, cx - 0.14, tip - 0.10, cx + 0.14, tip - 0.10)
+			g.setColor(1, 1, 1, 1)
+		end)
+		pcall(function() love.graphics.setColor(1, 1, 1, 1) end)
+	end
+	return obj
+end
+
+local function wheel_face()
+	local obj = R.make_wheel()
+	if obj and R.wheel_view then R.wheel_view.wheel = obj end
+	if obj then return { n = G.UIT.O, config = { object = obj } } end
+	return { n = G.UIT.C, config = { align = "cm", minw = 3.2, minh = 3.2, r = 1.6, colour = FELT, emboss = 0.08 }, nodes = {
+		{ n = G.UIT.T, config = { text = L("b_gambel_wheel", "Gambel Wheel"), scale = 0.36, colour = GOLD_INK } },
+	} }
+end
+
+local function wheel_legend()
+	local rows = {}
+	local labels, colours = R.wheel_labels(), R.wheel_colours()
+	for i, text in ipairs(labels) do
+		rows[#rows + 1] = { n = G.UIT.R, config = { align = "cl", padding = 0.025 }, nodes = {
+			{ n = G.UIT.C, config = { align = "cm", minw = 0.24, minh = 0.24, r = 0.04, colour = colours[i] } },
+			{ n = G.UIT.C, config = { minw = 0.08 } },
+			{ n = G.UIT.T, config = { text = text, scale = 0.28, colour = G.C.WHITE } },
 		} }
 	end
-	return { n = G.UIT.ROOT, config = { align = "cm", colour = G.C.CLEAR, padding = 0.08 }, nodes = {
-		{ n = G.UIT.C, config = { align = "cm", padding = 0.12, r = 0.1, colour = G.C.BLACK, emboss = 0.05, minw = 7.2 }, nodes = {
-			{ n = G.UIT.R, config = { align = "cm", padding = 0.06 }, nodes = {
-				{ n = G.UIT.T, config = { text = L("b_gambel_double", "Double or Nothing"), scale = 0.48, colour = G.C.WHITE, shadow = true } },
-			} },
-			{ n = G.UIT.R, config = { align = "cm", padding = 0.02 }, nodes = {
-				{ n = G.UIT.T, config = { text = stake_txt, scale = 0.36, colour = G.C.GOLD or G.C.WHITE } },
-			} },
-			{ n = G.UIT.R, config = { align = "cm", padding = 0.02 }, nodes = {
-				{ n = G.UIT.T, config = { text = odds, scale = 0.32, colour = G.C.UI and G.C.UI.TEXT_LIGHT or G.C.WHITE } },
-			} },
-			{ n = G.UIT.R, config = { align = "cm", padding = 0.02 }, nodes = {
-				{ n = G.UIT.T, config = { ref_table = view, ref_value = "prompt", scale = 0.34, colour = G.C.UI and G.C.UI.TEXT_LIGHT or G.C.WHITE } },
-			} },
-			{ n = G.UIT.R, config = { align = "cm", padding = 0.06 }, nodes = { ace_node() } },
-			{ n = G.UIT.R, config = { align = "cm", padding = 0.04, minh = 0.4 }, nodes = {
-				{ n = G.UIT.T, config = { ref_table = view, ref_value = "result", scale = 0.46, colour = G.C.GOLD or G.C.WHITE, shadow = true } },
-			} },
-			{ n = G.UIT.R, config = { id = "mp_gambel_choices", align = "cm", padding = 0.04, func = "mp_gambel_choices_vis" }, nodes = {
-				btn("mp_gambel_red", "mp_gambel_pick_red", L("b_gambel_red", "Red Ace"), G.C.RED, 2.2),
-				btn("mp_gambel_black", "mp_gambel_pick_black", L("b_gambel_black", "Black Ace"), G.C.BLACK, 2.2),
-				btn("mp_gambel_back", "mp_gambel_double_back", L("b_gambel_back", "Back"), G.C.GREY, 1.6),
-			} },
-			{ n = G.UIT.R, config = { id = "mp_gambel_continue", align = "cm", padding = 0.04, func = "mp_gambel_continue_vis" }, nodes = {
-				btn("mp_gambel_continue", "mp_gambel_double_close", L("b_gambel_continue", "Continue"), G.C.BLUE, 2.4),
-			} },
+	return { n = G.UIT.C, config = { align = "tm", padding = 0.06, r = 0.08, colour = { 0.03, 0.08, 0.06, 1 }, emboss = 0.05 }, nodes = rows }
+end
+
+function R.can_wheel()
+	return R.active() and not (MP.GAME and MP.GAME.gambel_bet_sent)
+end
+
+function R.open_wheel()
+	if R.wheel_view or not R.can_wheel() then return end
+	if R.double_view and not R.double_view.picked then R.close_double() end
+	if not (G and G.FUNCS and G.FUNCS.overlay_menu) then return end
+	R.wheel_view = {
+		spinning = false, show_close = false, landed = false, angle = 0, result = "",
+		prompt = L("k_gambel_wheel_prompt", "Seven prizes. One spin."),
+	}
+	G.FUNCS.overlay_menu({ definition = R.wheel_definition() })
+end
+
+function R.close_wheel()
+	local view = R.wheel_view
+	if view and view.pending_label and not view.announced then
+		view.announced = true
+		R.flash(view.pending_label)
+	end
+	R.wheel_view = nil
+	if G and G.FUNCS and G.FUNCS.exit_overlay_menu and G.OVERLAY_MENU then
+		pcall(function() G.FUNCS.exit_overlay_menu() end)
+	end
+end
+
+function R.spin_wheel()
+	local view = R.wheel_view
+	if not view or view.spinning or view.show_close then return end
+	if not R.can_wheel() then
+		R.close_wheel()
+		return
+	end
+	view.spinning = true
+	local menu = G and G.OVERLAY_MENU
+	if menu and menu.get_UIE_by_ID then
+		for _, id in ipairs({ "mp_gambel_spin", "mp_gambel_wheel_back" }) do
+			local el = menu:get_UIE_by_ID(id)
+			if el and el.config then
+				el.config.button = nil
+				el.config.colour = (G.C.UI and G.C.UI.BACKGROUND_INACTIVE) or G.C.GREY
+			end
+		end
+	end
+	if not R.bet("wheel") then
+		view.spinning = false
+		R.close_wheel()
+	end
+end
+
+function R.arm_wheel(msg, label)
+	local view = R.wheel_view
+	if not view then
+		if label then R.flash(label) end
+		return
+	end
+	view.index = R.wheel_index(msg)
+	view.target_angle = R.wheel_rotation(view.index, 4)
+	view.pending_label = label
+	view.angle = 0
+	view.t = 0
+	view.duration = 2.4
+	view.spinning = true
+	if not (love and love.graphics and love.graphics.polygon) then
+		view.t = 1
+		view.angle = view.target_angle
+		view.landed = true
+		view.spinning = false
+		view.show_close = true
+		view.result = label or ""
+		view.announced = true
+		if label then R.flash(label) end
+	end
+end
+
+function R.finish_wheel(line)
+	local view = R.wheel_view
+	if not view then return end
+	view.spinning = false
+	view.landed = true
+	view.show_close = true
+	view.result = line or L("k_gambel_house", "The House holds")
+end
+
+function R.tick_wheel(dt)
+	local view = R.wheel_view
+	if not view then return end
+	if view.spinning and not view.target_angle then
+		view.angle = (view.angle or 0) - (tonumber(dt) or 0) * 1.4
+		return
+	end
+	if not view.spinning or view.landed or not view.target_angle then return end
+	local step = (tonumber(dt) or 0.016) / (view.duration or 2.4)
+	view.t = math.min(1, (view.t or 0) + step)
+	view.angle = view.target_angle * R.wheel_ease(view.t)
+	if view.t >= 1 then
+		view.angle = view.target_angle
+		view.landed = true
+		view.spinning = false
+		view.show_close = true
+		view.result = view.pending_label or ""
+		if view.pending_label and not view.announced then
+			view.announced = true
+			R.flash(view.pending_label)
+		end
+	end
+end
+
+function R.wheel_definition()
+	local view = R.wheel_view or { prompt = "", result = "" }
+	return R.casino_frame(L("b_gambel_wheel", "Gambel Wheel"), 8.4, {
+		{ n = G.UIT.R, config = { align = "cm", padding = 0.02 }, nodes = {
+			{ n = G.UIT.T, config = { ref_table = view, ref_value = "prompt", scale = 0.32, colour = G.C.WHITE } },
 		} },
-	} }
+		{ n = G.UIT.R, config = { align = "cm", padding = 0.06 }, nodes = {
+			{ n = G.UIT.C, config = { align = "cm", padding = 0.04 }, nodes = { wheel_face() } },
+			wheel_legend(),
+		} },
+		{ n = G.UIT.R, config = { align = "cm", padding = 0.04, minh = 0.4 }, nodes = {
+			{ n = G.UIT.T, config = { ref_table = view, ref_value = "result", scale = 0.46, colour = GOLD_INK, shadow = true } },
+		} },
+		{ n = G.UIT.R, config = { id = "mp_gambel_spin_row", align = "cm", padding = 0.04, func = "mp_gambel_spin_vis" }, nodes = {
+			casino_btn("mp_gambel_spin", "mp_gambel_spin", L("b_gambel_spin", "Spin!"), G.C.ORANGE, 2.2),
+			casino_btn("mp_gambel_wheel_back", "mp_gambel_wheel_back", L("b_gambel_back", "Back"), G.C.GREY, 1.6),
+		} },
+		{ n = G.UIT.R, config = { id = "mp_gambel_wheel_continue", align = "cm", padding = 0.04, func = "mp_gambel_wheel_continue_vis" }, nodes = {
+			casino_btn("mp_gambel_wheel_continue", "mp_gambel_wheel_close", L("b_gambel_continue", "Continue"), G.C.BLUE, 2.4),
+		} },
+	})
 end
 
 function R.clear_shop()
@@ -591,9 +860,25 @@ function R.register_ui()
 	end
 	function G.FUNCS.mp_gambel_wheel(e)
 		if not MP.GAMBEL then return end
-		if MP.GAMBEL.double_view and not MP.GAMBEL.double_view.picked then MP.GAMBEL.close_double() end
-		MP.GAMBEL.bet("wheel")
-		if e and e.config then e.config.button = nil; e.config.colour = G.C.UI.BACKGROUND_INACTIVE end
+		MP.GAMBEL.open_wheel()
+	end
+	function G.FUNCS.mp_gambel_spin()
+		if MP.GAMBEL then MP.GAMBEL.spin_wheel() end
+	end
+	function G.FUNCS.mp_gambel_wheel_back()
+		if not (MP.GAMBEL and MP.GAMBEL.wheel_view) or MP.GAMBEL.wheel_view.spinning then return end
+		MP.GAMBEL.close_wheel()
+	end
+	function G.FUNCS.mp_gambel_wheel_close()
+		if MP.GAMBEL then MP.GAMBEL.close_wheel() end
+	end
+	function G.FUNCS.mp_gambel_spin_vis(e)
+		local view = MP.GAMBEL and MP.GAMBEL.wheel_view
+		if e and e.states then e.states.visible = not (view and view.show_close) end
+	end
+	function G.FUNCS.mp_gambel_wheel_continue_vis(e)
+		local view = MP.GAMBEL and MP.GAMBEL.wheel_view
+		if e and e.states then e.states.visible = view and view.show_close and true or false end
 	end
 	R.hook_shop()
 	if R._ui or not (Game and Game.update) then return end
@@ -606,6 +891,15 @@ function R.register_ui()
 			if G.STATE ~= G.STATES.SHOP then MP.GAMBEL.clear_shop() end
 			local view = MP.GAMBEL.double_view
 			if view and not view.picked and not G.OVERLAY_MENU then MP.GAMBEL.double_view = nil end
+			MP.GAMBEL.tick_wheel(dt)
+			local wheel = MP.GAMBEL.wheel_view
+			if wheel and not G.OVERLAY_MENU then
+				if wheel.pending_label and not wheel.announced then
+					wheel.announced = true
+					MP.GAMBEL.flash(wheel.pending_label)
+				end
+				if not wheel.spinning or wheel.announced or not wheel.pending_label then MP.GAMBEL.wheel_view = nil end
+			end
 		end
 		return r
 	end
