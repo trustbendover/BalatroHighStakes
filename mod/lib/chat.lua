@@ -255,7 +255,7 @@ function CH.refresh(force)
 	CH._sig = CH.sig()
 	CH._stage = stage
 	pcall(function()
-		if CH.box then pcall(function() CH.box:remove() end); CH.box = nil end
+		if CH.box then CH.drop_box(CH.box); CH.box = nil end
 		-- The lobby menu draws the chat itself. A second box in the screen corner is what
 		-- left only a sliver you could not read or click.
 		if CH.in_lobby_menu() then
@@ -270,7 +270,9 @@ function CH.refresh(force)
 			definition = CH.definition(),
 			config = { align = "tri", offset = { x = -0.2, y = 2.7 }, major = G.ROOM_ATTACH, bond = "Weak" },
 		})
+		CH.box._mp_chat = true
 		CH.box_stage = G.STAGE
+		CH.silence(CH.box)
 		CH.raise()
 		CH.apply_pos()
 	end)
@@ -290,13 +292,49 @@ function CH.raise()
 	end
 end
 
---- Draw again after love.draw, so cards, the deck, the shop, and the HUD stay behind it.
+--- The normal UI pass would paint this box, and a second paint landed on a different VT.
+--- Skip that pass. love.draw calls draw_front once, after cards, the shop, and the HUD.
+function CH.silence(box)
+	if not box or box._mp_chat_draw or not box.draw then return end
+	local orig = box.draw
+	box._mp_chat_draw = orig
+	box._mp_chat = true
+	function box.draw(self, ...)
+		if not CH._painting then return end
+		return orig(self, ...)
+	end
+end
+
 function CH.draw_front()
 	local box = CH.box
 	if not box or box.REMOVED or not box.draw then return end
-	-- UIBox:draw skips a second pass in the same frame. Reset that so this paint is the last one.
+	CH.sync_visual(box)
+	-- UIBox:draw skips a second pass in the same frame. This is the only pass.
 	if box.FRAME then box.FRAME.DRAW = -1 end
+	CH._painting = true
 	pcall(function() box:draw() end)
+	CH._painting = false
+end
+
+--- Remove this box and any earlier chat box still sitting in the UI list.
+function CH.drop_box(box)
+	local list = G and G.I and G.I.UIBOX
+	local doomed = {}
+	if type(list) == "table" then
+		for _, v in ipairs(list) do
+			if v == box or (type(v) == "table" and v._mp_chat) then doomed[#doomed + 1] = v end
+		end
+	elseif box then
+		doomed[1] = box
+	end
+	for _, v in ipairs(doomed) do
+		pcall(function() if v.remove then v:remove() end end)
+	end
+	if type(list) ~= "table" then return end
+	for i = #list, 1, -1 do
+		local v = list[i]
+		if v == box or (type(v) == "table" and v._mp_chat) then table.remove(list, i) end
+	end
 end
 
 function CH.cursor()
@@ -335,6 +373,32 @@ function CH.apply_pos()
 	CH.clamp_pos()
 	box.T.x, box.T.y = pos.x, pos.y
 	if box.VT then box.VT.x, box.VT.y = pos.x, pos.y end
+	if box.velocity then box.velocity.x, box.velocity.y = 0, 0 end
+	CH.sync_visual(box)
+end
+
+--- Children keep the position calculated before the drag. Snap T and VT to the box.
+function CH.sync_visual(box)
+	if not box or not box.T then return end
+	if box.hard_set_VT then
+		pcall(function() box:hard_set_VT() end)
+	elseif box.VT then
+		box.VT.x, box.VT.y, box.VT.w, box.VT.h = box.T.x, box.T.y, box.T.w, box.T.h
+	end
+	local seen = {}
+	local function snap(node)
+		if type(node) ~= "table" or seen[node] then return end
+		seen[node] = true
+		if node ~= box and node.move_with_major and node.role and node.role.major == box then
+			pcall(function() node:move_with_major(0) end)
+			if node.hard_set_VT then pcall(function() node:hard_set_VT() end) end
+			if node.velocity then node.velocity.x, node.velocity.y = 0, 0 end
+		end
+		if node.children then
+			for _, child in pairs(node.children) do snap(child) end
+		end
+	end
+	snap(box)
 end
 
 function CH.tick_drag()
@@ -400,12 +464,15 @@ function CH.register()
 		function Game:update(dt)
 			local r = upd(self, dt)
 			if MP.LOBBY and MP.LOBBY.code then
-				if CH.box and (CH.box.REMOVED or CH.box_stage ~= G.STAGE) then CH.box = nil; CH._sig = nil end
+				if CH.box and (CH.box.REMOVED or CH.box_stage ~= G.STAGE) then
+					CH.drop_box(CH.box)
+					CH.box, CH._sig = nil, nil
+				end
 				CH.refresh()
 				CH.raise()
 				CH.tick_drag()
 			elseif CH.box then
-				pcall(function() CH.box:remove() end)
+				CH.drop_box(CH.box)
 				CH.box, CH._sig = nil, nil
 			end
 			return r
