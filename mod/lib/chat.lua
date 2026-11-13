@@ -253,17 +253,17 @@ local function input_row(wide, scale, input_w, with_close)
 	CH.paint_field()
 	local ui = CH.chrome()
 	local controls = {
-		{ n = G.UIT.C, config = { id = "mp_chat_field", align = "cl", padding = 0.04, minw = input_w, minh = 0.48, r = 0.06, colour = G.C.WHITE, button = "mp_chat_focus", hover = true }, nodes = {
+		{ n = G.UIT.C, config = { id = "mp_chat_field", align = "cl", padding = 0.04, minw = input_w, minh = 0.48, r = 0.06, colour = G.C.WHITE, button = "mp_chat_focus", hover = true, func = "mp_chat_arm" }, nodes = {
 			{ n = G.UIT.T, config = { ref_table = CH.field, ref_value = "show", scale = scale, colour = G.C.BLACK } },
 		} },
 		{ n = G.UIT.C, config = { align = "cm", padding = 0.02 }, nodes = {
-			UIBox_button({ id = "mp_chat_send", button = "mp_chat_send", label = { ui.send },
+			UIBox_button({ id = "mp_chat_send", button = "mp_chat_send", func = "mp_chat_arm", label = { ui.send },
 				minw = 1.3, minh = 0.48, scale = scale, colour = G.C.GREEN, col = true }),
 		} },
 	}
 	if with_close then
 		controls[#controls + 1] = { n = G.UIT.C, config = { align = "cm", padding = 0.02 }, nodes = {
-			UIBox_button({ id = "mp_chat_close", button = "mp_chat_close", label = { ui.close },
+			UIBox_button({ id = "mp_chat_close", button = "mp_chat_close", func = "mp_chat_arm", label = { ui.close },
 				minw = 1.15, minh = 0.48, scale = scale, colour = G.C.RED, col = true }),
 		} }
 	end
@@ -371,7 +371,7 @@ function CH.definition()
 		local n = CH.unread()
 		local label = n > 0 and (ui.open .. " " .. n) or ui.open
 		return { n = G.UIT.ROOT, config = { align = "tr", colour = G.C.CLEAR, padding = 0 }, nodes = {
-			UIBox_button({ id = "mp_chat_open", button = "mp_chat_toggle", label = { label },
+			UIBox_button({ id = "mp_chat_open", button = "mp_chat_toggle", func = "mp_chat_arm", label = { label },
 				minw = 1.8, minh = 0.42, scale = 0.32, colour = G.C.BLUE, col = true }),
 		} }
 	end
@@ -381,7 +381,7 @@ function CH.definition()
 		{ n = G.UIT.R, config = { align = "cr", padding = 0.04, minh = 0.36 }, nodes = {
 			{ n = G.UIT.T, config = { text = ui.title, scale = 0.3, colour = G.C.WHITE, shadow = true } },
 			{ n = G.UIT.C, config = { align = "cm", minw = 0.15 } },
-			UIBox_button({ id = "mp_chat_close", button = "mp_chat_close", label = { ui.close },
+			UIBox_button({ id = "mp_chat_close", button = "mp_chat_close", func = "mp_chat_arm", label = { ui.close },
 				minw = 1.15, minh = 0.36, scale = 0.28, colour = G.C.RED, col = true }),
 		} },
 	}
@@ -444,6 +444,7 @@ function CH.refresh(force)
 			definition = CH.definition(),
 			config = { align = "tri", offset = { x = -0.2, y = 2.7 }, major = G.ROOM_ATTACH, bond = "Weak" },
 		})
+		if G.ROOM then CH.box.container = G.ROOM end
 		CH.box._mp_chat = true
 		CH.box_stage = G.STAGE
 		CH.silence(CH.box)
@@ -482,11 +483,21 @@ end
 function CH.draw_front()
 	local box = CH.box
 	if not box or box.REMOVED or not box.draw then return end
+	-- Pause, settings, and Double or Nothing must keep the clicks and the screen.
+	if G and G.OVERLAY_MENU then return end
 	CH.sync_visual(box)
 	-- UIBox:draw skips a second pass in the same frame. This is the only pass.
 	if box.FRAME then box.FRAME.DRAW = -1 end
 	CH._painting = true
-	pcall(function() box:draw() end)
+	pcall(function()
+		love.graphics.push()
+		local drew, err = pcall(function()
+			box:translate_container()
+			box:draw()
+		end)
+		love.graphics.pop()
+		if not drew then error(err) end
+	end)
 	CH._painting = false
 end
 
@@ -529,41 +540,51 @@ function CH.find(id)
 end
 
 function CH.over(id, x, y)
-	if not x then return false end
+	if x == nil or y == nil then return false end
 	local el = CH.find(id)
-	return el and el.collides_with_point and el:collides_with_point({ x = x, y = y }) or false
+	if not el then return false end
+	return CH.hits_point(el, { x = x, y = y })
 end
 
---- draw_front paints in window tiles, after the room transform has been popped.
---- The span is the window itself, not G.ROOM-local.
-function CH.screen_span()
-	local right, bottom
-	local scale = G and G.TILESCALE and G.TILESIZE and (G.TILESCALE * G.TILESIZE) or 0
-	if scale > 0 and love and love.graphics and love.graphics.getWidth then
-		local ok, w, h = pcall(function()
+--- Window size in tiles. real_window_* is pixels; WINDOWTRANS.w is already tiles.
+function CH.window_wh()
+	local scale = (G and G.TILESCALE and G.TILESIZE and (G.TILESCALE * G.TILESIZE)) or 0
+	local wt = G and G.WINDOWTRANS
+	local w, h
+	if wt and scale > 0 and tonumber(wt.real_window_w) and wt.real_window_w > 0 then
+		w = wt.real_window_w / scale
+		if tonumber(wt.real_window_h) and wt.real_window_h > 0 then h = wt.real_window_h / scale end
+	end
+	if (not w or w <= 0) and scale > 0 and love and love.graphics and love.graphics.getWidth then
+		local ok, pw, ph = pcall(function()
 			return love.graphics.getWidth(), love.graphics.getHeight()
 		end)
-		if ok and w and h and w > 0 and h > 0 then
-			right, bottom = w / scale, h / scale
+		if ok and type(pw) == "number" and pw > 0 then
+			w = pw / scale
+			if type(ph) == "number" and ph > 0 then h = ph / scale end
 		end
 	end
-	if G and G.WINDOWTRANS and G.WINDOWTRANS.w and G.WINDOWTRANS.w > 0 then
-		if not right or G.WINDOWTRANS.w > right then right = G.WINDOWTRANS.w end
-		if G.WINDOWTRANS.h and (not bottom or G.WINDOWTRANS.h > bottom) then bottom = G.WINDOWTRANS.h end
+	if (not w or w <= 0) and wt and tonumber(wt.w) and wt.w > 0 then
+		w, h = wt.w, wt.h
 	end
-	if not right and G and G.TILE_W then
+	if (not w or w <= 0) and G and G.TILE_W then
 		local padw = G.ROOM_PADDING_W or 1
 		local padh = G.ROOM_PADDING_H or 0.7
-		right = G.TILE_W + 2 * padw
-		bottom = (G.TILE_H or 0) + 2 * padh
+		w = G.TILE_W + 2 * padw
+		h = (G.TILE_H or 0) + 2 * padh
 	end
-	if not right and G and G.ROOM and G.ROOM.T then
+	if (not w or w <= 0) and G and G.ROOM and G.ROOM.T then
 		local room = G.ROOM.T
-		right = (room.x or 0) + (room.w or 0) + ((G and G.ROOM_PADDING_W) or 1)
-		bottom = (room.y or 0) + (room.h or 0) + ((G and G.ROOM_PADDING_H) or 0.7)
+		w = (room.x or 0) + (room.w or 0) + ((G and G.ROOM_PADDING_W) or 1)
+		h = (room.y or 0) + (room.h or 0) + ((G and G.ROOM_PADDING_H) or 0.7)
 	end
-	right, bottom = right or 0, bottom or 0
-	return 0, 0, right, bottom
+	return w or 0, h or 0
+end
+
+--- The draw span is the window, starting at the window corner. The box itself is G.ROOM-local.
+function CH.screen_span()
+	local w, h = CH.window_wh()
+	return 0, 0, w, h
 end
 
 --- Closed, the root can be wider than the Chat button. Measure that button. Open, use the panel.
@@ -585,37 +606,53 @@ end
 function CH.clamp_pos()
 	local pos, box = CH.pos, CH.box
 	if not pos or not box or not box.T then return end
-	local left, top, right, bottom = CH.screen_span()
+	local win_w, win_h = CH.window_wh()
+	local rx = (G and G.ROOM and G.ROOM.T and G.ROOM.T.x) or 0
+	local ry = (G and G.ROOM and G.ROOM.T and G.ROOM.T.y) or 0
+	local room_right = win_w - rx
+	local room_top = -ry
+	local room_bottom = win_h - ry
+	local room_left = -rx
 	local x0, y0, x1, y1 = CH.visible_extent(box)
-	local minx, maxx = left - x0, right - x1
-	local miny, maxy = top - y0, bottom - y1
+	local minx, maxx = room_left - x0, room_right - x1
+	local miny, maxy = room_top - y0, room_bottom - y1
 	if maxx < minx then maxx = minx end
 	if maxy < miny then maxy = miny end
 	if pos.x < minx then pos.x = minx elseif pos.x > maxx then pos.x = maxx end
 	if pos.y < miny then pos.y = miny elseif pos.y > maxy then pos.y = maxy end
 end
 
---- Flush to the window's top-right. T is in the same tiles draw_front uses.
+--- Pin in G.ROOM space, inset from the visible top-right so the pill is never clipped.
 function CH.pin()
 	local box = CH.box
 	if not box or box.REMOVED or not box.T then return end
+	if G and G.ROOM then box.container = G.ROOM end
 	if box.set_role then pcall(function() box:set_role({ role_type = "Major" }) end) end
 	if box.alignment then
 		box.alignment.type = "a"
 		box.alignment.prev_type = "a"
 		if box.alignment.type_list then box.alignment.type_list.a = true end
 	end
-	local _, _, right, bottom = CH.screen_span()
+	local win_w, win_h = CH.window_wh()
+	local rx = (G and G.ROOM and G.ROOM.T and G.ROOM.T.x) or 0
+	local ry = (G and G.ROOM and G.ROOM.T and G.ROOM.T.y) or 0
+	local room_right = win_w - rx
+	local room_top = -ry
+	local room_bottom = win_h - ry
+	local room_left = -rx
 	local _, _, x1, y1 = CH.visible_extent(box)
 	local w = (x1 and x1 > 0) and x1 or (box.T.w or CH.MATCH_W)
 	local h = (y1 and y1 > 0) and y1 or (box.T.h or 0.42)
-	local x = right - w - 0.15
-	local y = 0.15
-	if x < 0 then x = 0 end
-	if y + h > bottom then y = math.max(0.15, bottom - h) end
+	local x = room_right - w - 0.25
+	local y = room_top + 0.30
+	if x < room_left then x = room_left end
+	if x + w > room_right then x = math.max(room_left, room_right - w) end
+	if y < room_top then y = room_top end
+	if h > 0 and y + h > room_bottom then y = math.max(room_top, room_bottom - h) end
 	box.T.x, box.T.y = x, y
 	if box.VT then box.VT.x, box.VT.y = x, y end
 	if box.velocity then box.velocity.x, box.velocity.y = 0, 0 end
+	if CH.arm_box then CH.arm_box(box) end
 end
 
 function CH.make_bar()
@@ -655,7 +692,8 @@ function CH.jump_scroll(y)
 		CH.scroll = 0
 		return
 	end
-	local rel = (y - el.T.y) / el.T.h
+	local ry = (G and G.ROOM and G.ROOM.T and G.ROOM.T.y) or 0
+	local rel = ((y - ry) - el.T.y) / el.T.h
 	if rel < 0 then rel = 0 elseif rel > 1 then rel = 1 end
 	CH.scroll = (1 - rel) * maxs
 	CH.paint_slots(CH.log_width(), 0.32)
@@ -686,7 +724,7 @@ function CH.tick_scroll()
 	end
 end
 
---- Children keep the position calculated before the drag. Snap T and VT to the box.
+--- Children keep the position calculated before the pin. Walk top-down, including the scrollbar.
 function CH.sync_visual(box)
 	if not box or not box.T then return end
 	if box.hard_set_VT then
@@ -698,27 +736,29 @@ function CH.sync_visual(box)
 	local function snap(node)
 		if type(node) ~= "table" or seen[node] then return end
 		seen[node] = true
-		if node ~= box and node.move_with_major and node.role and node.role.major == box then
+		if node ~= box and node.move_with_major and node.role and node.role.major then
 			pcall(function() node:move_with_major(0) end)
-			if node.hard_set_VT then pcall(function() node:hard_set_VT() end) end
 			if node.velocity then node.velocity.x, node.velocity.y = 0, 0 end
 		end
+		if node.hard_set_VT then
+			pcall(function() node:hard_set_VT() end)
+		elseif node ~= box and node.VT and node.T then
+			node.VT.x, node.VT.y, node.VT.w, node.VT.h = node.T.x, node.T.y, node.T.w, node.T.h
+		end
+		local obj = node.config and node.config.object
+		if type(obj) == "table" then snap(obj) end
 		if node.children then
-			for _, child in pairs(node.children) do snap(child) end
+			for _, child in ipairs(node.children) do snap(child) end
 		end
 	end
 	snap(box)
+	if box.UIRoot then snap(box.UIRoot) end
 end
 
---- Cursor is in window space. The box transform is often G.ROOM-local, so try both.
+--- Box and cursor are both in the space collides_with_point already understands.
 function CH.hits_point(node, cursor)
 	if not (node and node.collides_with_point and cursor) then return false end
 	local ok, hit = pcall(function() return node:collides_with_point(cursor) end)
-	if ok and hit then return true end
-	local rx = (G and G.ROOM and G.ROOM.T and G.ROOM.T.x) or 0
-	local ry = (G and G.ROOM and G.ROOM.T and G.ROOM.T.y) or 0
-	if rx == 0 and ry == 0 then return false end
-	ok, hit = pcall(function() return node:collides_with_point({ x = cursor.x - rx, y = cursor.y - ry }) end)
 	return ok and hit and true or false
 end
 
@@ -740,6 +780,7 @@ function CH.hook_cursor()
 	function Controller:get_cursor_collision(cursor_trans)
 		orig(self, cursor_trans)
 		local box = CH.box
+		if G and G.OVERLAY_MENU then return end
 		if not box or box.REMOVED or not cursor_trans then return end
 		if box.states and box.states.visible == false then return end
 		self.collision_list = self.collision_list or {}
@@ -793,6 +834,7 @@ function CH.on_key(key)
 end
 
 function CH.on_wheel(dy)
+	if G and G.OVERLAY_MENU then return false end
 	if not CH.over_panel() then return false end
 	local lines = CH.wrapped(CH.log_width(), 0.32)
 	local maxs = CH.scroll_max(#lines)
@@ -804,11 +846,9 @@ end
 
 function CH.over_panel()
 	local x, y = CH.cursor()
-	if not x then return false end
+	if x == nil then return false end
 	local box = CH.box
-	if box and box.T and x >= box.T.x and x <= box.T.x + (box.T.w or 0) and y >= box.T.y and y <= box.T.y + (box.T.h or 0) then
-		return true
-	end
+	if box and CH.hits_point(box, { x = x, y = y }) then return true end
 	return CH.over("mp_chat_lobby", x, y)
 end
 
@@ -836,12 +876,32 @@ function CH.sig()
 	return tostring(CH.open) .. "|" .. tostring(CH.state.view) .. "|" .. tostring(#cur) .. "|" .. tostring(last and last.id)
 end
 
+function CH.arm(node)
+	if type(node) ~= "table" then return end
+	node.states = node.states or {}
+	node.states.hover = node.states.hover or {}
+	node.states.click = node.states.click or {}
+	node.states.collide = node.states.collide or {}
+	node.states.hover.can = true
+	node.states.click.can = true
+	node.states.collide.can = true
+end
+
+function CH.arm_box(box)
+	if not (box and box.get_UIE_by_ID) then return end
+	for _, id in ipairs({ "mp_chat_open", "mp_chat_close", "mp_chat_send", "mp_chat_field" }) do
+		local el = box:get_UIE_by_ID(id)
+		if el then CH.arm(el) end
+	end
+end
+
 function CH.register()
 	if CH.registered then return end
 	CH.registered = true
 	G = G or {}
 	G.FUNCS = G.FUNCS or {}
 	G.FUNCS.mp_chat_toggle = function() CH.toggle() end
+	G.FUNCS.mp_chat_arm = function(e) CH.arm(e) end
 	G.FUNCS.mp_chat_focus = function()
 		CH.focused = true
 		CH.draft.caret = #(CH.draft.text or "")

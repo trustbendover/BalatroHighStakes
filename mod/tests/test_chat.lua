@@ -28,23 +28,29 @@ ok(nl.b_chat_send == "Stuur" and nl.k_chat_prompt == "Bericht" and nl.k_chat_wat
 local core = io.open("core.lua"):read("*a")
 ok(core:find('Core.CHAT = MP.load_mp_file("networking/chat_rules.lua")', 1, true), "Steamodded loads the chat rules onto the host")
 local ui = io.open("lib/chat.lua"):read("*a")
-ok(ui:find("function CH.pin()", 1, true) and ui:find("right - w - 0.15", 1, true) and ui:find("function CH.log_width()", 1, true)
+ok(ui:find("function CH.pin()", 1, true) and ui:find("room_right - w - 0.25", 1, true) and ui:find("room_top + 0.30", 1, true)
+	and ui:find("function CH.log_width()", 1, true)
 	and ui:find("if love and not CH._text", 1, true) and ui:find("if love and not CH._wheel", 1, true)
 	and ui:find("function CH.draw_front()", 1, true) and ui:find("love.draw", 1, true)
+	and ui:find("love.graphics.push()", 1, true) and ui:find("box:translate_container()", 1, true) and ui:find("love.graphics.pop()", 1, true)
+	and ui:find("G.OVERLAY_MENU", 1, true)
 	and ui:find("if not CH._painting then return end", 1, true) and ui:find("CH._painting = true", 1, true)
 	and ui:find("function CH.drop_box", 1, true) and ui:find("function CH.wrap_message", 1, true)
 	and ui:find("CH.VIEW_LINES = 6", 1, true) and ui:find('id = "mp_chat_scroll"', 1, true)
 	and ui:find("love.wheelmoved", 1, true) and ui:find("love.textinput", 1, true)
-	and ui:find("love.graphics.getWidth", 1, true) and ui:find("G.TILE_W", 1, true)
+	and ui:find("love.graphics.getWidth", 1, true) and ui:find("real_window_w", 1, true) and ui:find("G.TILE_W", 1, true)
 	and ui:find("G.WINDOWTRANS", 1, true) and ui:find('get_UIE_by_ID("mp_chat_open")', 1, true)
 	and ui:find("G.ROOM.T.x", 1, true) and ui:find("get_cursor_collision", 1, true)
+	and ui:find("ipairs(node.children)", 1, true) and ui:find("config.object", 1, true)
+	and ui:find("states.hover.can = true", 1, true) and ui:find("states.click.can = true", 1, true) and ui:find("states.collide.can = true", 1, true)
 	and ui:find("name_colour", 1, true) and not ui:find("chip_fill", 1, true) and not ui:find("r = 0.2", 1, true)
 	and ui:find("CH.LOBBY_W = 5.6", 1, true) and ui:find("CH.MATCH_W = 5.4", 1, true)
 	and ui:find("minh = 0.48", 1, true) and ui:find("minw = 1.3", 1, true)
 	and ui:find("minw = 1.8, minh = 0.42", 1, true)
 	and ui:find("panel_nodes(wide, 0.32, 3.6, false)", 1, true)
-	and not ui:find("maxw = 3.2", 1, true) and not ui:find("mp_chat_drag", 1, true) and ui:find("lobby_row", 1, true),
-	"match chat is a fixed top-right log with a scrollbar, and the field stays a fixed width")
+	and not ui:find("maxw = 3.2", 1, true) and not ui:find("mp_chat_drag", 1, true) and ui:find("lobby_row", 1, true)
+	and not ui:find("cursor.x - rx", 1, true),
+	"match chat is a room-space top-right log, drawn with the room transform, and the field stays a fixed width")
 
 local function client(S, name)
 	local msgs = {}
@@ -142,8 +148,17 @@ ok(left == 0 and top == 0, "the draw span starts at the window corner")
 ok(math.abs(right - 22.94) < 1e-6, "the right edge is the window width in tiles")
 CH.box = { T = { x = 0, y = 0, w = 5.4, h = 3 }, VT = {}, states = { visible = true }, REMOVED = false }
 CH.pin()
-ok(math.abs(CH.box.T.x - (22.94 - 5.4 - 0.15)) < 1e-6, "the panel is pinned to the window's top-right")
-ok(math.abs(CH.box.T.y - 0.15) < 1e-6, "the panel starts just under the top of the window")
+local rx, ry = G.ROOM.T.x, G.ROOM.T.y
+ok(math.abs(CH.box.T.x - ((22.94 - rx) - 5.4 - 0.25)) < 1e-6, "the panel is pinned in room space, inset from the window's right edge")
+ok(math.abs(CH.box.T.y - (-ry + 0.30)) < 1e-6, "the panel sits below the top edge so the Chat pill is not clipped")
+ok(CH.box.container == G.ROOM, "the box container stays G.ROOM, matching collides_with_point")
+G.WINDOWTRANS.real_window_w = 40
+G.WINDOWTRANS.real_window_h = 20
+CH.pin()
+ok(math.abs(CH.box.T.x - ((40 - rx) - 5.4 - 0.25)) < 1e-6, "real_window_w is the pixel width converted into tiles")
+G.WINDOWTRANS.real_window_w = nil
+G.WINDOWTRANS.real_window_h = nil
+CH.pin()
 local wrapped = CH.wrap_message("Ann", string.rep("word ", 20), 1, 12)
 ok(#wrapped > 1 and wrapped[1].name == "Ann:" and wrapped[2].name == "", "a long line wraps under the coloured name")
 ok(CH.scroll_max(10) == 4, "six visible lines leave four lines to scroll")
@@ -180,18 +195,66 @@ CH._pending = nil
 love.mouse.isDown = function() return true end
 CH.tick_focus()
 ok(CH.focused == false, "a click outside the field releases the keyboard")
-CH.box.collides_with_point = function(_, p) return p.x > 22.5 and p.x < 23.5 end
+local function like_balatro(_, p)
+	local x = p.x - (G.ROOM.T.x or 0)
+	local y = p.y - (G.ROOM.T.y or 0)
+	local T = CH.box.T
+	return x >= T.x and x <= T.x + (T.w or 0) and y >= T.y and y <= T.y + (T.h or 0)
+end
+CH.box.collides_with_point = like_balatro
 CH.box.get_UIE_by_ID = function(_, id)
-	if id == "mp_chat_open" then
-		return { id = id, states = { collide = {} }, collides_with_point = function(_, p) return p.x > 22.5 and p.x < 23.5 end }
+	if id == "mp_chat_open" or id == "mp_chat_send" or id == "mp_chat_close" or id == "mp_chat_field" then
+		return { id = id, states = { collide = {}, hover = {}, click = {} }, collides_with_point = like_balatro }
 	end
 end
+CH.pin()
+local wx = CH.box.T.x + G.ROOM.T.x + 0.2
+local wy = CH.box.T.y + G.ROOM.T.y + 0.1
 local ctrl = {}
-Controller.get_cursor_collision(ctrl, { x = 23 + 1.47, y = 2 })
+Controller.get_cursor_collision(ctrl, { x = wx, y = wy })
 local found = false
 for _, node in ipairs(ctrl.collision_list or {}) do
 	if node.id == "mp_chat_open" then found = true end
 end
-ok(found, "a click in the widescreen margin still hits the chat button")
+ok(found, "a window-space click on the pill hits the chat button once")
+local missed = {}
+Controller.get_cursor_collision(missed, { x = wx - G.ROOM.T.x, y = wy - G.ROOM.T.y })
+local doubled = false
+for _, node in ipairs(missed.collision_list or {}) do
+	if node.id == "mp_chat_open" then doubled = true end
+end
+ok(not doubled, "the room offset is not subtracted a second time")
+G.OVERLAY_MENU = { id = "pause" }
+local covered = {}
+Controller.get_cursor_collision(covered, { x = wx, y = wy })
+local stole = false
+for _, node in ipairs(covered.collision_list or {}) do
+	if node.id == "mp_chat_open" then stole = true end
+end
+ok(not stole, "an open menu keeps the chat from taking the click")
+G.OVERLAY_MENU = nil
+local el = { states = { hover = { can = false }, click = { can = false }, collide = { can = false } } }
+CH.arm(el)
+ok(el.states.hover.can and el.states.click.can and el.states.collide.can, "chat controls accept the first click")
+local order = {}
+local function tracked(name, major)
+	return {
+		role = { major = major },
+		move_with_major = function() order[#order + 1] = name end,
+		hard_set_VT = function() end,
+		velocity = { x = 1, y = 1 },
+	}
+end
+local root = { T = { x = 1, y = 2, w = 3, h = 4 }, VT = {}, hard_set_VT = function(self) self.VT.x = self.T.x end }
+local bar = tracked("bar", nil)
+local child_a = tracked("a", root)
+child_a.config = { object = bar }
+child_a.children = {}
+bar.role.major = child_a
+local child_b = tracked("b", root)
+child_b.children = {}
+root.children = { child_a, child_b }
+CH.sync_visual(root)
+ok(order[1] == "a" and order[2] == "bar" and order[3] == "b", "sync walks children in order and snaps the scrollbar object")
 
 print("PASS: chat")

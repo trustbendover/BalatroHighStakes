@@ -248,14 +248,17 @@ local en = dofile("localization/en-us.lua").misc.dictionary
 local nl = dofile("localization/nl.lua").misc.dictionary
 ok(en.k_gambel_time == "Gambel Time" and nl.k_gambel_time == "Gambel Time", "the mode name stays Gambel Time")
 ok(en.k_gambel_house_win:find("House", 1, true) and nl.k_gambel_house:find("Huis", 1, true), "The House has a Dutch name")
-ok(en.b_gambel_red == "Red Ace" and en.b_gambel_black == "Black Ace" and en.k_gambel_pick == "Pick Red or Black", "English Red and Black")
-ok(nl.b_gambel_red == "Rode Aas" and nl.b_gambel_black == "Zwarte Aas" and nl.k_gambel_pick == "Kies Rood of Zwart", "Dutch Red and Black")
+ok(en.b_gambel_red == "Red Ace" and en.b_gambel_black == "Black Ace", "English Red and Black")
+ok(nl.b_gambel_red == "Rode Aas" and nl.b_gambel_black == "Zwarte Aas", "Dutch Red and Black")
 ok(en.b_gambel_back == "Back" and en.b_gambel_continue == "Continue" and nl.b_gambel_back == "Terug" and nl.b_gambel_continue == "Verder", "back and continue")
 ok(en.b_gambel_spin == "Spin!" and nl.b_gambel_spin == "Draai!", "Spin! in English and Dutch")
 ok(en.k_gambel_ace_h == "Ace of Hearts" and en.k_gambel_ace_s == "Ace of Spades", "English ace names")
 ok(nl.k_gambel_ace_h == "Harten Aas" and nl.k_gambel_ace_d == "Ruiten Aas" and nl.k_gambel_ace_s == "Schoppen Aas" and nl.k_gambel_ace_c == "Klaveren Aas", "Dutch ace names")
-ok(en.k_gambel_you_picked == "You picked " and nl.k_gambel_drawn_mid == " — Getrokken: ", "the draw line names the pick and the card")
-ok(en.k_gambel_flipping == "Flipping..." and nl.k_gambel_flipping == "Draaien...", "the flip waits to name the result")
+ok(en.k_gambel_ace_ask == "RED OR BLACK ACE?" and nl.k_gambel_ace_ask == "RODE OF ZWARTE AAS?", "the subtitle stays a static question")
+ok(en.k_gambel_stake == "STAKE: $" and nl.k_gambel_stake == "INZET: $", "the stake pill is labeled")
+ok(en.k_gambel_win == "WIN +$" and nl.k_gambel_win == "WINST +$", "a win bar reads WIN +$")
+ok(en.k_gambel_lose == "LOSE -$" and nl.k_gambel_lose == "VERLIES -$", "a loss bar reads LOSE -$")
+ok(en.k_gambel_half == "BET HALF YOUR CASH - WIN IT OR LOSE IT" and nl.k_gambel_half == "ZET DE HELFT VAN JE GELD IN - WIN HET OF VERLIES HET", "the tagline sits under the bar")
 ok(en.k_gambel_wheel_tax == "-$4 Tax" and nl.k_gambel_wheel_tax == "-$4 Belasting", "the tax wedge is named")
 ok(en.k_gambel_wheel_discard == "-1 Discard" and nl.k_gambel_wheel_discard == "-1 Weggooi", "the discard wedge is named")
 local shop = io.open("lib/gambel.lua"):read("*a")
@@ -270,7 +273,13 @@ ok(shop:find("if not (love and love.graphics", 1, true) and shop:find("love.grap
 ok(shop:find("gambel_bet_for", 1, true) and shop:find("sync_bet_ante", 1, true) and shop:find("drop_cards", 1, true), "the ante lock survives a shop rebuild, and a closed card is removed")
 ok(shop:find("function R.make_double_card", 1, true) and shop:find('sprite_facing = "back"', 1, true) and shop:find("emplace(card, nil, true)", 1, true), "the card is created face down and emplace does not flip it")
 ok(shop:find("no_ui = true", 1, true) and shop:find("states.hover.can = false", 1, true) and shop:find("card.hover = function() end", 1, true), "hovering the Ace does not open the card tooltip")
-ok(shop:find("function R.tick_double", 1, true) and shop:find("k_gambel_flipping", 1, true) and shop:find("set_sprites", 1, true) and shop:find('sprite_facing = "front"', 1, true) and shop:find("R.ace_name", 1, true), "the Ace turns over before the win or loss is shown")
+ok(shop:find("function R.tick_double", 1, true) and shop:find("flip_dur = 0.70", 1, true) and shop:find("hold_dur = 0.55", 1, true)
+	and shop:find("pinch.x = false", 1, true) and shop:find("set_sprites", 1, true) and shop:find('sprite_facing = "front"', 1, true)
+	and shop:find("R.ace_name", 1, true) and shop:find("R.reshow_double", 1, true) and shop:find("0.96, 0.62, 0.08, 1", 1, true)
+	and shop:find("k_gambel_ace_ask", 1, true) and shop:find("k_gambel_half", 1, true)
+	and not shop:find("k_gambel_flipping", 1, true) and not shop:find('ref_value = "card_name"', 1, true)
+	and not shop:find("mp_gambel_choices_vis", 1, true),
+	"the Ace turns over and holds, then the result bar replaces the choices")
 ok(shop:find("bulbs = 28", 1, true) and shop:find("% 3 == 0", 1, true) and shop:find("love.timer.getTime", 1, true) and shop:find("1, 0.98, 0.84, 1", 1, true) and shop:find("0.42, 0.24, 0.08, 1", 1, true), "the wheel rim carries chasing marquee bulbs")
 ok(shop:find("R.WHEEL_BOX = 5.0", 1, true) and shop:find("wheel_slices", 1, true)
 	and shop:find("minw = R.WHEEL_BOX", 1, true) and shop:find("minw = 1.25", 1, true)
@@ -288,23 +297,96 @@ dofile("lib/gambel.lua")
 ok(MP.GAMBEL.make_wheel() == nil, "headless Lua does not build a Love2D wheel")
 local R = MP.GAMBEL
 MP.GAME = MP.GAME or {}
-R.double_view = { picked = "red", prompt = "Pick", result = "stale", card_name = "stale", show_close = true, face = "back" }
+R.double_view = { picked = "red", stake = 4, prompt = "Pick", result = "stale", show_close = true, face = "back" }
 R.reveal_double({ suit = "S", drawn = "black" }, "-$4")
-ok(R.double_view.result == "" and R.double_view.card_name == "" and not R.double_view.show_close, "the win or loss stays hidden when the flip starts")
-ok(R.double_view.prompt == "Flipping..." and R.double_view.face == "back", "the prompt stays neutral until the card turns")
+ok(R.double_view.result == "" and not R.double_view.show_close and not R.double_view.outcome, "the win or loss stays hidden when the flip starts")
+ok(R.double_view.prompt == "Pick" and R.double_view.face == "back" and R.double_view.flip.outcome == "loss", "the header stays put while the card is still face down")
+ok(R.double_view.flip.flip_dur == 0.70 and R.double_view.flip.hold_dur == 0.55, "the flip holds the face-up Ace before the bar")
 R.tick(0.30)
 ok(R.double_view.result == "" and not R.double_view.show_close and R.double_view.face == "back", "the first half of the flip is still the back")
 R.tick(0.10)
 ok(R.double_view.face == "front" and R.double_view.suit_mark == "S" and R.double_view.result == "", "the face swaps at the midpoint, still without the payout")
 R.tick(0.30)
-ok(R.double_view.card_name == "Ace of Spades" and R.double_view.result == "" and not R.double_view.show_close, "the face-up Ace is held before the payout")
+ok(R.double_view.flip and R.double_view.flip.drawn == "Ace of Spades" and R.double_view.result == "" and not R.double_view.show_close, "the face-up Ace is held before the payout")
 R.tick(0.55)
-ok(R.double_view.show_close and R.double_view.result == "-$4", "the payout appears only after the hold")
+ok(R.double_view.show_close and R.double_view.result == "-$4" and R.double_view.outcome == "loss", "the payout appears only after the hold")
 ok(MP.GAME.gambel_notice == "-$4", "the toast waits until the hold finishes")
-R.double_view = { picked = "black", prompt = "", result = "", card_name = "", show_close = false, face = "back" }
+local win_text, win_col = R.payout_line({ stake = 12, outcome = "win" })
+ok(win_text == "WIN +$12" and win_col[1] == 0.96 and win_col[2] == 0.62 and win_col[3] == 0.08, "a win bar is gold and names the stake")
+G = G or {}
+G.C = G.C or {}
+local red = { 0.9, 0.12, 0.16, 1 }
+G.C.RED = red
+local lose_text, lose_col = R.payout_line({ stake = 12, outcome = "loss" })
+ok(lose_text == "LOSE -$12" and lose_col == red, "a loss bar uses Balatro red")
+ok(R.payout_line({ outcome = "house", result = "" }) == "The House holds", "a timeout stays on the neutral house line")
+R.double_view = { picked = "black", prompt = "", result = "", show_close = false, face = "back" }
 R.reveal_double({ suit = "H", drawn = "red" }, "+$8")
 R.close_double()
 ok(MP.GAME.gambel_notice == "+$8" and R.double_view == nil, "closing during the flip still announces the result")
+
+local function collect_text(node, acc)
+	acc = acc or {}
+	if type(node) ~= "table" then return acc end
+	if node.config and type(node.config.text) == "string" then acc[#acc + 1] = node.config.text end
+	if node.nodes then for _, child in ipairs(node.nodes) do collect_text(child, acc) end end
+	if node.config and node.config.object and type(node.config.object) == "table" then acc._area = node.config.object end
+	return acc
+end
+local function has_colour(node, r, g, b)
+	if type(node) ~= "table" then return false end
+	local c = node.config and node.config.colour
+	if type(c) == "table" and math.abs((c[1] or 0) - r) < 1e-6 and math.abs((c[2] or 0) - g) < 1e-6 and math.abs((c[3] or 0) - b) < 1e-6 then return true end
+	if node.nodes then for _, child in ipairs(node.nodes) do if has_colour(child, r, g, b) then return true end end end
+	return false
+end
+UIBox_button = function(args)
+	return { n = "C", config = { id = args.id, button = args.button, colour = args.colour }, nodes = {
+		{ n = "T", config = { text = args.label and args.label[1] or "" } },
+	} }
+end
+G.UIT = { ROOT = "ROOT", R = "R", C = "C", T = "T", O = "O" }
+G.C.WHITE = G.C.WHITE or { 1, 1, 1, 1 }
+G.C.BLACK = G.C.BLACK or { 0, 0, 0, 1 }
+G.C.GREY = G.C.GREY or { 0.4, 0.4, 0.4, 1 }
+G.C.BLUE = G.C.BLUE or { 0.2, 0.45, 1, 1 }
+G.C.CLEAR = G.C.CLEAR or { 0, 0, 0, 0 }
+G.FUNCS = G.FUNCS or {}
+local kept = { id = "ace", facing = "front", sprite_facing = "front", pinch = { x = false }, no_ui = true, REMOVED = false, config = {}, states = { hover = {}, click = {}, drag = {} } }
+local area = { id = "area", REMOVED = false, config = {}, role = { major = "old" }, parent = nil }
+R.double_view = { stake = 12, show_close = false, outcome = nil, face = "back", result = "", picked = false, card = kept, area = area }
+local choosing = table.concat(collect_text(R.double_definition()), "|")
+ok(choosing:find("DOUBLE", 1, true) and choosing:find("OR NOTHING", 1, true) and choosing:find("RED OR BLACK ACE?", 1, true)
+	and choosing:find("STAKE: $12", 1, true) and choosing:find("Red Ace", 1, true) and choosing:find("Black Ace", 1, true) and choosing:find("Back", 1, true)
+	and not choosing:find("WIN +$", 1, true) and not choosing:find("Flipping", 1, true),
+	"before the flip the promo header and the choice buttons stay put")
+ok(not has_colour(R.double_definition(), 0.62, 0.10, 0.14), "the double modal does not use the jumping crimson caption bar")
+R.double_view.show_close = true
+R.double_view.outcome = "win"
+R.double_view.face = "front"
+R.double_view.suit_mark = "H"
+local rebuilt = 0
+local linked, blob, gold
+G.OVERLAY_MENU = { config = { object = area }, children = { { config = { object = area }, children = {} } } }
+G.FUNCS.overlay_menu = function(args)
+	rebuilt = rebuilt + 1
+	local texts = collect_text(args.definition)
+	linked = texts._area
+	blob = table.concat(texts, "|")
+	gold = has_colour(args.definition, 0.96, 0.62, 0.08)
+end
+R.reshow_double()
+ok(rebuilt == 1 and type(blob) == "string" and blob:find("WIN +$12", 1, true) and blob:find("BET HALF YOUR CASH - WIN IT OR LOSE IT", 1, true)
+	and blob:find("Continue", 1, true) and not blob:find("Red Ace", 1, true), "the result bar replaces the choices in the rebuilt modal")
+ok(gold, "the win bar is the promo gold")
+ok(linked == area and kept.facing == "front" and kept.no_ui == true and kept.pinch.x == false, "the rebuild keeps the revealed Ace face up and muted")
+ok(G.OVERLAY_MENU.children[1].config.object == nil, "the dying menu lets go of the Ace before it is removed")
+R.double_view.outcome = "loss"
+local loss = table.concat(collect_text(R.double_definition()), "|")
+ok(loss:find("LOSE -$12", 1, true) and has_colour(R.double_definition(), red[1], red[2], red[3]), "a loss rebuilds a red LOSE bar")
+R.double_view.outcome = "house"
+R.double_view.result = ""
+ok(table.concat(collect_text(R.double_definition()), "|"):find("The House holds", 1, true), "a house timeout stays a neutral bar")
 G = saved_g
 
 print("PASS: gambel time")

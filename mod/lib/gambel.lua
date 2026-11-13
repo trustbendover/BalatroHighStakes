@@ -333,8 +333,7 @@ function R.open_double()
 	local stake = R.stake(dollars())
 	R.double_view = {
 		stake = stake, picked = false, show_close = false,
-		prompt = L("k_gambel_pick", "Pick Red or Black"),
-		result = "", card_name = "",
+		result = "", outcome = nil, face = "back",
 	}
 	G.FUNCS.overlay_menu({ definition = R.double_definition() })
 end
@@ -393,16 +392,14 @@ function R.reveal_double(msg, line)
 		suit = (msg and msg.drawn == "black") and "S" or "H"
 	end
 	local key = suit .. "_A"
-	local picked = (view.picked == "black") and L("b_gambel_black", "Black Ace") or L("b_gambel_red", "Red Ace")
 	local drawn = R.ace_name(suit)
-	view.card_name = ""
 	view.result = ""
+	view.outcome = nil
 	view.show_close = false
-	view.prompt = L("k_gambel_flipping", "Flipping...")
 	view.flip = {
 		t = 0, flip_dur = 0.70, hold_dur = 0.55, swapped = false, opened = false, done = false,
 		suit = suit, key = key, drawn = drawn, line = line or "",
-		prompt = L("k_gambel_you_picked", "You picked ") .. picked .. L("k_gambel_drawn_mid", " — Drawn: ") .. drawn,
+		outcome = R.outcome_from(msg, line),
 	}
 end
 
@@ -463,15 +460,22 @@ function R.tick_double(dt)
 			if card.pinch then card.pinch.x = false end
 			set_card_width(card, card.T.w)
 		end
-		view.card_name = flip.drawn
 	end
 	if flip.t >= turn + hold then
 		flip.done = true
-		view.prompt = flip.prompt
+		view.outcome = flip.outcome
 		view.result = flip.line or ""
 		view.show_close = true
+		if card then
+			card.facing = "front"
+			card.sprite_facing = "front"
+			if card.pinch then card.pinch.x = false end
+			R.mute_ace(card, view.area)
+		end
 		view.flip = nil
 		if flip.line and flip.line ~= "" then R.toast(flip.line) end
+		-- Rebuild once. Hiding a sibling row leaves a blank gap in Balatro's UIBox.
+		R.reshow_double()
 	end
 end
 
@@ -480,11 +484,24 @@ function R.tick(dt)
 	R.tick_wheel(dt)
 end
 
+function R.outcome_from(msg, line)
+	if msg and msg.won == true then return "win" end
+	if msg and msg.won == false then return "loss" end
+	if type(line) == "string" then
+		if line:sub(1, 1) == "+" then return "win" end
+		if line:sub(1, 1) == "-" then return "loss" end
+	end
+	return "house"
+end
+
 function R.finish_double(line)
 	local view = R.double_view
 	if not view then return end
+	view.flip = nil
 	view.result = line or L("k_gambel_house", "The House holds")
+	view.outcome = (line == nil) and "house" or R.outcome_from(nil, line)
 	view.show_close = true
+	R.reshow_double()
 end
 
 function R.ace_name(suit)
@@ -528,6 +545,10 @@ end
 
 --- Face down until reveal_double. emplace flips a face-down card up unless stay_flipped is set.
 function R.make_double_card(view)
+	if view and view.card and not view.card.REMOVED and view.area and not view.area.REMOVED then
+		if view.face == "front" then R.hold_ace(view) else R.mute_ace(view.card, view.area) end
+		return view.card
+	end
 	if not (view and Card and CardArea and G and G.P_CARDS and G.P_CENTERS and G.P_CENTERS.c_base and G.CARD_W and G.CARD_H) then
 		return nil
 	end
@@ -560,8 +581,33 @@ function R.make_double_card(view)
 		return nil
 	end
 	view.area, view.card = area, card
-	view.face = "back"
+	if view.face == "front" then R.hold_ace(view) else view.face = "back" end
 	return card
+end
+
+--- The revealed Ace is shown face up. Hover stays muted, and pinch stays off so the width holds.
+function R.hold_ace(view)
+	local card = view and view.card
+	if not card or card.REMOVED then return end
+	if view.face == "front" then
+		card.facing = "front"
+		card.sprite_facing = "front"
+		card.flipping = nil
+		if card.pinch then card.pinch.x = false end
+		if card.states then card.states.visible = true end
+		local key = (view.suit_mark and view.suit_mark ~= "") and (view.suit_mark .. "_A") or nil
+		local def = key and G and G.P_CARDS and G.P_CARDS[key]
+		if def then
+			pcall(function()
+				if card.set_base then card:set_base(def) end
+				if card.set_sprites then card:set_sprites(nil, def) end
+				card.facing = "front"
+				card.sprite_facing = "front"
+				if card.pinch then card.pinch.x = false end
+			end)
+		end
+	end
+	R.mute_ace(card, view.area)
 end
 
 local function ace_node()
@@ -569,32 +615,50 @@ local function ace_node()
 	view.face = view.face or "back"
 	view.pip = view.pip or "?"
 	view.suit_mark = view.suit_mark or ""
-	local caption = { n = G.UIT.R, config = { align = "cm", padding = 0.04, minh = 0.4 }, nodes = {
-		{ n = G.UIT.T, config = { ref_table = view, ref_value = "card_name", scale = 0.38, colour = G.C.WHITE, shadow = true } },
-	} }
-	local function shown(card_row)
-		return { n = G.UIT.C, config = { align = "cm" }, nodes = { card_row, caption } }
-	end
 	local card = R.make_double_card(view)
-	if not card or not view.area then return shown(ace_fallback(view)) end
-	return shown({ n = G.UIT.R, config = { align = "cm", minw = G.CARD_W * 1.6, minh = G.CARD_H * 1.45 }, nodes = {
-		{ n = G.UIT.O, config = { object = view.area } },
-	} })
+	local cw = (G and G.CARD_W) or 1
+	local ch = (G and G.CARD_H) or 1
+	local row = (not card or not view.area) and ace_fallback(view)
+		or { n = G.UIT.R, config = { align = "cm", minw = cw * 1.6, minh = ch * 1.45 }, nodes = {
+			{ n = G.UIT.O, config = { object = view.area } },
+		} }
+	return { n = G.UIT.C, config = { align = "cm", minw = 2.4, minh = 3.15 }, nodes = { row } }
 end
 
 local FELT = { 0.05, 0.22, 0.14, 1 }
 local CRIMSON = { 0.62, 0.10, 0.14, 1 }
 local GOLD_INK = { 0.96, 0.80, 0.32, 1 }
+local WIN_BAR = { 0.96, 0.62, 0.08, 1 }
+local HOUSE_BAR = { 0.16, 0.17, 0.22, 1 }
+local STAKE_FILL = { 0.07, 0.09, 0.14, 1 }
+local STAKE_RIM = { 0.95, 0.74, 0.28, 1 }
 
 --- Shared card-table frame: green felt, crimson title, gold lettering, Balatro emboss.
 local function ink(c) return { c[1], c[2], c[3], c[4] } end
 
-function R.casino_frame(title, minw, nodes)
-	local body = {
-		{ n = G.UIT.R, config = { align = "cm", padding = 0.07, r = 0.08, colour = ink(CRIMSON), minw = (minw or 7.2) - 0.5 }, nodes = {
+function R.casino_frame(title, minw, nodes, opts)
+	opts = opts or {}
+	local body = {}
+	if opts.promo then
+		local head, tail = tostring(title or ""), nil
+		local at = head:lower():find(" or ", 1, true)
+		if at then
+			tail = head:sub(at + 1):upper()
+			head = head:sub(1, at - 1):upper()
+		end
+		body[#body + 1] = { n = G.UIT.R, config = { align = "cm", padding = 0.01 }, nodes = {
+			{ n = G.UIT.T, config = { text = head, scale = 0.64, colour = ink(GOLD_INK), shadow = true } },
+		} }
+		if tail then
+			body[#body + 1] = { n = G.UIT.R, config = { align = "cm", padding = 0.01 }, nodes = {
+				{ n = G.UIT.T, config = { text = tail, scale = 0.56, colour = G.C.WHITE, shadow = true } },
+			} }
+		end
+	else
+		body[#body + 1] = { n = G.UIT.R, config = { align = "cm", padding = 0.07, r = 0.08, colour = ink(CRIMSON), minw = (minw or 7.2) - 0.5 }, nodes = {
 			{ n = G.UIT.T, config = { text = title, scale = 0.46, colour = ink(GOLD_INK), shadow = true } },
-		} },
-	}
+		} }
+	end
 	for _, node in ipairs(nodes or {}) do body[#body + 1] = node end
 	return { n = G.UIT.ROOT, config = { align = "cm", colour = G.C.CLEAR, padding = 0.06 }, nodes = {
 		{ n = G.UIT.C, config = { id = "mp_gambel_felt", align = "cm", padding = 0.12, r = 0.12, colour = ink(FELT), emboss = 0.08, minw = minw or 7.2 }, nodes = body },
@@ -607,34 +671,110 @@ local function casino_btn(id, func, label, colour, minw)
 	} }
 end
 
-function R.double_definition()
-	local view = R.double_view or { stake = 0, prompt = "", result = "", card_name = "" }
+function R.payout_line(view)
+	view = view or {}
 	local stake = tostring(view.stake or 0)
-	local stake_txt = L("k_gambel_stake", "Stake: $") .. stake
-	local odds = L("k_gambel_win", "Win +$") .. stake .. " / " .. L("k_gambel_lose", "Lose -$") .. stake
-	return R.casino_frame(L("b_gambel_double", "Double or Nothing"), 7.2, {
+	if view.outcome == "win" then return L("k_gambel_win", "WIN +$") .. stake, ink(WIN_BAR) end
+	if view.outcome == "loss" then return L("k_gambel_lose", "LOSE -$") .. stake, (G and G.C and G.C.RED) or { 0.86, 0.16, 0.18, 1 } end
+	local text = view.result
+	if type(text) ~= "string" or text == "" then text = L("k_gambel_house", "The House holds") end
+	return text, ink(HOUSE_BAR)
+end
+
+--- The live menu owns the Ace. Unhook it before overlay_menu removes that menu.
+local function detach_ace(view)
+	local area = view and view.area
+	if not area then return end
+	local seen = {}
+	local function walk(node)
+		if type(node) ~= "table" or node == area or seen[node] then return end
+		seen[node] = true
+		if node.config and node.config.object == area then node.config.object = nil end
+		if node.children then
+			for k, child in pairs(node.children) do
+				if child == area then node.children[k] = nil else walk(child) end
+			end
+		end
+		if node.nodes then
+			for _, child in pairs(node.nodes) do walk(child) end
+		end
+		if node.UIRoot then walk(node.UIRoot) end
+	end
+	if G and G.OVERLAY_MENU then walk(G.OVERLAY_MENU) end
+	local parent = area.parent
+	if type(parent) == "table" and type(parent.children) == "table" then
+		for k, child in pairs(parent.children) do
+			if child == area then parent.children[k] = nil end
+		end
+	end
+	area.parent = nil
+	if area.role then area.role.major = nil end
+end
+
+--- Rebuild the modal once the hold ends, keeping the Ace that is already face up.
+function R.reshow_double()
+	local view = R.double_view
+	if not (view and G and G.FUNCS and G.FUNCS.overlay_menu) then return end
+	if view.face == "front" then R.hold_ace(view) end
+	local area, card = view.area, view.card
+	local area_remove = area and area.remove
+	local card_remove = card and card.remove
+	if area then area.remove = function() end end
+	if card then card.remove = function() end end
+	detach_ace(view)
+	local shown = pcall(function()
+		G.FUNCS.overlay_menu({ definition = R.double_definition() })
+	end)
+	if area then area.remove = area_remove end
+	if card then card.remove = card_remove end
+	if not shown and G.FUNCS.exit_overlay_menu and G.OVERLAY_MENU then
+		pcall(function() G.FUNCS.exit_overlay_menu() end)
+	end
+end
+
+function R.double_definition()
+	local view = R.double_view or { stake = 0, result = "", show_close = false }
+	local stake = tostring(view.stake or 0)
+	local nodes = {
 		{ n = G.UIT.R, config = { align = "cm", padding = 0.02 }, nodes = {
-			{ n = G.UIT.T, config = { text = stake_txt, scale = 0.36, colour = GOLD_INK } },
+			{ n = G.UIT.T, config = { text = L("k_gambel_ace_ask", "RED OR BLACK ACE?"), scale = 0.36, colour = G.C.WHITE, shadow = true } },
 		} },
-		{ n = G.UIT.R, config = { align = "cm", padding = 0.02 }, nodes = {
-			{ n = G.UIT.T, config = { text = odds, scale = 0.32, colour = G.C.UI and G.C.UI.TEXT_LIGHT or G.C.WHITE } },
+		{ n = G.UIT.R, config = { align = "cm", padding = 0.06 }, nodes = {
+			{ n = G.UIT.C, config = {
+				id = "mp_gambel_stake", align = "cm", padding = 0.08, minw = 3.4, minh = 0.48,
+				r = 0.12, colour = ink(STAKE_FILL), emboss = 0.08, outline = 1.5, outline_colour = ink(STAKE_RIM),
+			}, nodes = {
+				{ n = G.UIT.T, config = { text = L("k_gambel_stake", "STAKE: $") .. stake, scale = 0.38, colour = ink(GOLD_INK), shadow = true } },
+			} },
 		} },
-		{ n = G.UIT.R, config = { align = "cm", padding = 0.02 }, nodes = {
-			{ n = G.UIT.T, config = { ref_table = view, ref_value = "prompt", scale = 0.34, colour = G.C.WHITE } },
-		} },
-		{ n = G.UIT.R, config = { align = "cm", padding = 0.06 }, nodes = { ace_node() } },
-		{ n = G.UIT.R, config = { align = "cm", padding = 0.04, minh = 0.4 }, nodes = {
-			{ n = G.UIT.T, config = { ref_table = view, ref_value = "result", scale = 0.46, colour = GOLD_INK, shadow = true } },
-		} },
-		{ n = G.UIT.R, config = { id = "mp_gambel_choices", align = "cm", padding = 0.04, func = "mp_gambel_choices_vis" }, nodes = {
+		{ n = G.UIT.R, config = { align = "cm", padding = 0.08 }, nodes = { ace_node() } },
+	}
+	if view.show_close then
+		local label, bar = R.payout_line(view)
+		local edge = view.outcome == "loss" and { 1, 0.72, 0.7, 1 }
+			or (view.outcome == "win" and { 1, 0.88, 0.55, 1 } or { 0.45, 0.48, 0.55, 1 })
+		nodes[#nodes + 1] = { n = G.UIT.R, config = { align = "cm", padding = 0.05 }, nodes = {
+			{ n = G.UIT.C, config = {
+				id = "mp_gambel_result", align = "cm", padding = 0.1, minw = 5.6, minh = 0.76,
+				r = 0.14, colour = bar, emboss = 0.1, outline = 2, outline_colour = edge,
+			}, nodes = {
+				{ n = G.UIT.T, config = { text = label, scale = 0.52, colour = G.C.WHITE, shadow = true } },
+			} },
+		} }
+		nodes[#nodes + 1] = { n = G.UIT.R, config = { align = "cm", padding = 0.03, maxw = 6.6 }, nodes = {
+			{ n = G.UIT.T, config = { text = L("k_gambel_half", "BET HALF YOUR CASH - WIN IT OR LOSE IT"), scale = 0.26, colour = G.C.WHITE, shadow = true } },
+		} }
+		nodes[#nodes + 1] = { n = G.UIT.R, config = { id = "mp_gambel_continue", align = "cm", padding = 0.06 }, nodes = {
+			casino_btn("mp_gambel_continue", "mp_gambel_double_close", L("b_gambel_continue", "Continue"), G.C.BLUE, 2.4),
+		} }
+	else
+		nodes[#nodes + 1] = { n = G.UIT.R, config = { id = "mp_gambel_choices", align = "cm", padding = 0.06 }, nodes = {
 			casino_btn("mp_gambel_red", "mp_gambel_pick_red", L("b_gambel_red", "Red Ace"), G.C.RED, 2.2),
 			casino_btn("mp_gambel_black", "mp_gambel_pick_black", L("b_gambel_black", "Black Ace"), G.C.BLACK, 2.2),
 			casino_btn("mp_gambel_back", "mp_gambel_double_back", L("b_gambel_back", "Back"), G.C.GREY, 1.6),
-		} },
-		{ n = G.UIT.R, config = { id = "mp_gambel_continue", align = "cm", padding = 0.04, func = "mp_gambel_continue_vis" }, nodes = {
-			casino_btn("mp_gambel_continue", "mp_gambel_double_close", L("b_gambel_continue", "Continue"), G.C.BLUE, 2.4),
-		} },
-	})
+		} }
+	end
+	return R.casino_frame(L("b_gambel_double", "Double or Nothing"), 7.2, nodes, { promo = true })
 end
 
 function R.wheel_labels()
@@ -1092,14 +1232,6 @@ function R.register_ui()
 	end
 	function G.FUNCS.mp_gambel_double_close()
 		if MP.GAMBEL then MP.GAMBEL.close_double() end
-	end
-	function G.FUNCS.mp_gambel_choices_vis(e)
-		local view = MP.GAMBEL and MP.GAMBEL.double_view
-		if e and e.states then e.states.visible = not (view and view.show_close) end
-	end
-	function G.FUNCS.mp_gambel_continue_vis(e)
-		local view = MP.GAMBEL and MP.GAMBEL.double_view
-		if e and e.states then e.states.visible = view and view.show_close and true or false end
 	end
 	function G.FUNCS.mp_gambel_wheel(e)
 		if not MP.GAMBEL then return end
