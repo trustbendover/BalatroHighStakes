@@ -1605,10 +1605,12 @@ function H.gambelBet(S, c, a)
 	local ante = math.floor(tonumber(a and a.ante) or c.ante or 1)
 	if c.gambelBetAnte == ante then return sendA(c, { action = "gambelBetResult", ok = false, reason = "once" }) end
 	local kind = a and a.kind == "wheel" and "wheel" or "double"
-	local res = kind == "wheel" and Core.GAMBEL.wheel(L.seed, c.id, ante, a and a.money) or Core.GAMBEL.flip(L.seed, c.id, ante, a and a.money)
+	local res = kind == "wheel" and Core.GAMBEL.wheel(L.seed, c.id, ante, a and a.money)
+		or Core.GAMBEL.flip(L.seed, c.id, ante, a and a.money, a and a.choice)
 	if res.ok then c.gambelBetAnte = ante end
 	sendA(c, { action = "gambelBetResult", kind = kind, ok = res.ok, reason = res.reason, won = res.won,
-		id = res.id, stake = res.stake, delta = res.delta, amount = res.amount })
+		id = res.id, stake = res.stake, delta = res.delta, amount = res.amount,
+		drawn = res.drawn, suit = res.suit, choice = res.choice })
 end
 function H.chat(S, c, a)
 	if not c.lobby or not Core.CHAT then return end

@@ -108,7 +108,7 @@ export type ActionChatLog = { action: 'chatLog'; view: 'lobby' | 'match'; lines:
 export type ActionChatReject = { action: 'chatReject'; reason: 'empty' | 'long' }
 export type ActionGambelTable = { action: 'gambelTable'; ante: number; spin: string }
 export type ActionGambelTwist = { action: 'gambelTwist'; twist: string; ante?: number; blind?: number; solo?: boolean }
-export type ActionGambelBetResult = { action: 'gambelBetResult'; kind?: string; ok: boolean; reason?: string; won?: boolean; id?: string; stake?: number; delta?: number; amount?: number }
+export type ActionGambelBetResult = { action: 'gambelBetResult'; kind?: string; ok: boolean; reason?: string; won?: boolean; id?: string; stake?: number; delta?: number; amount?: number; drawn?: 'red' | 'black'; suit?: 'H' | 'D' | 'S' | 'C'; choice?: 'red' | 'black' }
 export type ActionGambelHit = { action: 'gambelHit'; kind: string; amount?: number; payout?: number; joker?: boolean; role?: string }
 // TCG Actions (Server to Client)
 export type ActionTcgCompatible = { action: 'tcg_compatible' }
@@ -244,7 +244,7 @@ export type ActionDataSyncRequest = { action: "dataSync", timer?: number }
 export type ActionHandyMPExtensionEnable = { action: 'handyMPExtensionEnable', [key: string]: unknown }
 export type ActionHandyMPExtensionDisable = { action: 'handyMPExtensionDisable', [key: string]: unknown }
 export type ActionGambelBoss = { action: 'gambelBoss'; ante?: number }
-export type ActionGambelBet = { action: 'gambelBet'; kind?: string; money?: number; ante?: number; give?: boolean; room?: boolean }
+export type ActionGambelBet = { action: 'gambelBet'; kind?: string; money?: number; ante?: number; give?: boolean; room?: boolean; choice?: 'red' | 'black' }
 export type ActionChatRequest = { action: 'chat'; text?: string }
 export type ActionClientToServer =
 	| ActionResumeRestarted

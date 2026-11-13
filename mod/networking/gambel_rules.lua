@@ -201,12 +201,68 @@ function G.stake(money)
 	return math.min(G.STAKE_CAP, math.floor(money / 2))
 end
 
-function G.flip(seed, id, ante, money)
+local function u32(n)
+	n = n % 4294967296
+	if n < 0 then n = n + 4294967296 end
+	return n
+end
+
+--- Low 32 bits of a product. Lua numbers are doubles, so this is split into 16-bit halves.
+local function mul32(a, b)
+	a, b = u32(a), u32(b)
+	local a0, b0 = a % 65536, b % 65536
+	local a1 = (a - a0) / 65536
+	local b1 = (b - b0) / 65536
+	local mid = (a1 * b0 + a0 * b1) % 65536
+	return u32(a0 * b0 + mid * 65536)
+end
+
+local function bxor(a, b)
+	if bit and bit.bxor then return u32(bit.bxor(a, b)) end
+	local r, p = 0, 1
+	a, b = u32(a), u32(b)
+	for _ = 1, 32 do
+		local abit, bbit = a % 2, b % 2
+		if abit ~= bbit then r = r + p end
+		a, b, p = (a - abit) / 2, (b - bbit) / 2, p * 2
+	end
+	return r
+end
+
+--- 32-bit FNV-1a. The older G.roll multiply loses bits in a double, and that
+--- made one colour almost certain. This matches Math.imul on the server.
+local function fnv32(s)
+	local h = 2166136261
+	for i = 1, #s do
+		h = mul32(bxor(h, s:byte(i)), 16777619)
+	end
+	return h
+end
+
+local function mix(seed, ante, salt)
+	local s = tostring(seed or "house") .. ":" .. tostring(math.floor(tonumber(ante) or 1)) .. ":" .. tostring(salt or "")
+	return fnv32(s)
+end
+
+local ACES = { "H", "D", "S", "C" }
+
+--- One Ace. Hearts and diamonds are red, spades and clubs are black.
+--- One 32-bit mix picks the suit, so each suit is its own card and the colour
+--- stays about half and half. A missing or other guess still wins on red.
+--- The guess is not part of the mix, so it cannot steer the card.
+function G.flip(seed, id, ante, money, choice)
 	local stake = G.stake(money)
 	if stake < 1 then return { ok = false, reason = "low", stake = 0, delta = 0, money = G.money(money) } end
-	local won = G.roll(seed, ante, "flip:" .. tostring(id), 2) == 1
+	local suit = ACES[(mix(seed, ante, "ace:" .. tostring(id)) % 4) + 1]
+	local drawn = (suit == "H" or suit == "D") and "red" or "black"
+	if choice ~= "red" and choice ~= "black" then choice = nil end
+	local won = choice and (choice == drawn) or (not choice and drawn == "red")
+	won = won and true or false
 	local delta = won and stake or -stake
-	return { ok = true, won = won, stake = stake, delta = delta, money = G.money(money) + delta }
+	return {
+		ok = true, won = won, stake = stake, delta = delta, money = G.money(money) + delta,
+		drawn = drawn, suit = suit, choice = choice,
+	}
 end
 
 function G.wheel(seed, id, ante, money)

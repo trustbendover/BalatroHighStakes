@@ -365,7 +365,7 @@ const server = createServer((socket) => {
 						actionHandlers.gambelBoss(actionArgs as { ante?: number }, client)
 						break
 					case 'gambelBet':
-						actionHandlers.gambelBet(actionArgs as { kind?: string; money?: number; ante?: number }, client)
+						actionHandlers.gambelBet(actionArgs as { kind?: string; money?: number; ante?: number; choice?: string }, client)
 						break
 					case 'setAnte':
 						actionHandlers.setAnte(

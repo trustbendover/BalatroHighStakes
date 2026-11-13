@@ -360,7 +360,7 @@ const gambelBossAction = ({ ante }: { ante?: number }, client: Client) => {
 };
 
 const gambelBetAction = (
-	{ kind, money, ante }: { kind?: string; money?: number; ante?: number },
+	{ kind, money, ante, choice }: { kind?: string; money?: number; ante?: number; choice?: string },
 	client: Client,
 ) => {
 	const lobby = client.lobby;
@@ -370,7 +370,7 @@ const gambelBetAction = (
 		client.sendAction({ action: "gambelBetResult", ok: false, reason: "once" });
 		return;
 	}
-	const res = kind === "wheel" ? gambelWheel(lobby.seed, client.id, at, money) : gambelFlip(lobby.seed, client.id, at, money);
+	const res = kind === "wheel" ? gambelWheel(lobby.seed, client.id, at, money) : gambelFlip(lobby.seed, client.id, at, money, choice);
 	if (res.ok) client.gambelBetAnte = at;
 	client.sendAction({
 		action: "gambelBetResult",
@@ -382,6 +382,9 @@ const gambelBetAction = (
 		stake: "stake" in res ? res.stake : undefined,
 		delta: res.delta,
 		amount: "amount" in res ? res.amount : undefined,
+		drawn: "drawn" in res ? res.drawn : undefined,
+		suit: "suit" in res ? res.suit : undefined,
+		choice: "choice" in res ? res.choice : undefined,
 	});
 };
 

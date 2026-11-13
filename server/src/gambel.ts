@@ -103,13 +103,33 @@ function finiteMoney(money: unknown): number {
 	return Math.floor(n);
 }
 
-export function gambelFlip(seed: unknown, id: unknown, ante: unknown, money: unknown) {
+const ACES = ["H", "D", "S", "C"] as const;
+
+/** 32-bit FNV-1a. Same mix as mod/networking/gambel_rules.lua.
+ *  gambelRoll's multiply is not a fair coin on the Lua side, so the Ace uses this. */
+function fnv32(s: string): number {
+	let h = 2166136261;
+	for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619) >>> 0;
+	return h;
+}
+
+function mix(seed: unknown, ante: unknown, salt: string): number {
+	const s = `${seed ?? "house"}:${Math.floor(Number(ante) || 1)}:${salt}`;
+	return fnv32(s);
+}
+
+/** One Ace. Red is hearts or diamonds, black is spades or clubs.
+ *  A missing or other guess still wins on red. The guess is not part of the mix. */
+export function gambelFlip(seed: unknown, id: unknown, ante: unknown, money: unknown, choice?: unknown) {
 	const cash = finiteMoney(money);
 	const stake = gambelStake(cash);
-	if (stake < 1) return { ok: false, reason: "low" as const, stake: 0, delta: 0, money: cash };
-	const won = gambelRoll(seed, ante, `flip:${id}`, 2) === 1;
+	if (stake < 1) return { ok: false as const, reason: "low" as const, stake: 0, delta: 0, money: cash };
+	const suit = ACES[mix(seed, ante, `ace:${id}`) % 4];
+	const drawn = suit === "H" || suit === "D" ? "red" as const : "black" as const;
+	const picked = choice === "red" ? "red" as const : choice === "black" ? "black" as const : undefined;
+	const won = picked ? picked === drawn : drawn === "red";
 	const delta = won ? stake : -stake;
-	return { ok: true, won, stake, delta, money: cash + delta };
+	return { ok: true as const, won, stake, delta, money: cash + delta, drawn, suit, choice: picked };
 }
 
 export function gambelWheel(seed: unknown, id: unknown, ante: unknown, money: unknown) {

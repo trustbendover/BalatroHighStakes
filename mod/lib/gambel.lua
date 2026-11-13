@@ -129,26 +129,31 @@ local function joker_flags()
 	return give, room
 end
 
-function R.bet(kind)
-	if not R.active() or MP.GAME.gambel_bet_sent then return end
-	if kind ~= "wheel" and kind ~= "double" then return end
+function R.bet(kind, choice)
+	if not R.active() or MP.GAME.gambel_bet_sent then return false end
+	if kind ~= "wheel" and kind ~= "double" then return false end
 	local money = dollars()
-	if kind == "double" and money < 2 then return end
+	if kind == "double" and money < 2 then return false end
+	if kind == "double" and choice ~= "red" and choice ~= "black" then choice = nil end
 	local give, room = joker_flags()
 	local ante = G and G.GAME and G.GAME.round_resets and G.GAME.round_resets.ante or 1
 	local online = MP.STEAM_P2P and MP.LOBBY and MP.LOBBY.code and Client and Client.send
 	if online then
 		MP.GAME.gambel_bet_sent = true
-		Client.send({ action = "gambelBet", kind = kind, money = money, ante = ante, give = give, room = room })
+		local msg = { action = "gambelBet", kind = kind, money = money, ante = ante, give = give, room = room }
+		if kind == "double" then msg.choice = choice end
+		Client.send(msg)
+		R.mute_shop_buttons()
 		R.clear_shop()
-		return
+		return true
 	end
 	local seed = (G and G.GAME and (G.GAME.pseudorandom_seed or G.GAME.seed)) or "house"
 	local id = (MP.LOBBY and MP.LOBBY.my_id) or "solo"
-	local res = kind == "wheel" and R.wheel(seed, id, ante, money) or R.flip(seed, id, ante, money)
+	local res = kind == "wheel" and R.wheel(seed, id, ante, money) or R.flip(seed, id, ante, money, choice)
 	res.kind = kind
 	R.apply_bet(res)
 	R.clear_shop()
+	return true
 end
 
 local WHEEL_TAGS = { "tag_uncommon", "tag_holo", "tag_foil", "tag_investment", "tag_charm", "tag_meteor", "tag_standard", "tag_economy", "tag_ethereal", "tag_juggle" }
@@ -237,16 +242,30 @@ function R.apply_bet(msg)
 	MP.GAME.gambel_bet_sent = false
 	if not msg or msg.ok == false then
 		if msg and msg.reason == "once" then MP.GAME.gambel_bet_sent = true end
+		if R.double_view and R.double_view.picked then R.finish_double(nil) end
 		R.clear_shop()
 		return
 	end
 	MP.GAME.gambel_bet_sent = true
+	R.mute_shop_buttons()
 	if msg.kind == "double" or msg.id == "cash" or msg.id == "tax" or msg.won ~= nil then
 		R.apply_delta(msg.delta)
 	end
-	if msg.won == true then R.flash(L("b_gambel_double", "Double or Nothing") .. " +$" .. tostring(msg.stake or ""))
-	elseif msg.won == false then R.flash(L("k_gambel_house", "The House holds") .. " -$" .. tostring(msg.stake or ""))
-	elseif msg.id then R.play_wheel(msg) end
+	local line
+	if msg.won == true then line = "+$" .. tostring(msg.stake or "")
+	elseif msg.won == false then line = "-$" .. tostring(msg.stake or "") end
+	local showing = R.double_view and R.double_view.picked and (msg.kind == "double" or msg.drawn) and G and G.OVERLAY_MENU
+	if line and not showing then
+		local title = msg.won and L("b_gambel_double", "Double or Nothing") or L("k_gambel_house", "The House holds")
+		R.flash(title .. " " .. line)
+	elseif line then
+		if MP.GAME then MP.GAME.gambel_shop_note = line end
+		R.toast(line)
+	elseif msg.id then
+		R.play_wheel(msg)
+	end
+	if showing then R.reveal_double(msg, line)
+	elseif R.double_view and R.double_view.picked then R.double_view = nil end
 	R.clear_shop()
 end
 
@@ -276,6 +295,179 @@ function R.apply_hit(msg)
 			end
 		end
 	end
+end
+
+function R.mute_shop_buttons()
+	local boxes = G and G.I and G.I.UIBOX
+	if type(boxes) ~= "table" then return end
+	for _, box in pairs(boxes) do
+		if box and box.get_UIE_by_ID then
+			for _, id in ipairs({ "mp_gambel_double", "mp_gambel_wheel" }) do
+				local el = box:get_UIE_by_ID(id)
+				if el and el.config then
+					el.config.button = nil
+					el.config.colour = (G.C.UI and G.C.UI.BACKGROUND_INACTIVE) or G.C.GREY
+				end
+			end
+		end
+	end
+end
+
+--- Shop click opens this. Backing out before Red or Black does not spend the ante's bet.
+function R.can_double()
+	if not R.active() or (MP.GAME and MP.GAME.gambel_bet_sent) then return false end
+	return R.stake(dollars()) >= 1
+end
+
+function R.open_double()
+	if R.double_view or not R.can_double() then return end
+	if not (G and G.FUNCS and G.FUNCS.overlay_menu) then return end
+	local stake = R.stake(dollars())
+	R.double_view = {
+		stake = stake, picked = false, show_close = false,
+		prompt = L("k_gambel_pick", "Pick Red or Black"),
+		result = "", card_name = "",
+	}
+	G.FUNCS.overlay_menu({ definition = R.double_definition() })
+end
+
+function R.close_double()
+	R.double_view = nil
+	if G and G.FUNCS and G.FUNCS.exit_overlay_menu and G.OVERLAY_MENU then
+		pcall(function() G.FUNCS.exit_overlay_menu() end)
+	end
+end
+
+function R.pick_double(choice)
+	local view = R.double_view
+	if not view or view.picked or view.show_close then return end
+	if choice ~= "red" and choice ~= "black" then return end
+	if not R.can_double() then
+		R.close_double()
+		return
+	end
+	view.picked = choice
+	local menu = G and G.OVERLAY_MENU
+	if menu and menu.get_UIE_by_ID then
+		for _, id in ipairs({ "mp_gambel_red", "mp_gambel_black", "mp_gambel_back" }) do
+			local el = menu:get_UIE_by_ID(id)
+			if el and el.config then
+				el.config.button = nil
+				el.config.colour = (G.C.UI and G.C.UI.BACKGROUND_INACTIVE) or G.C.GREY
+			end
+		end
+	end
+	if not R.bet("double", choice) then
+		view.picked = false
+		R.close_double()
+	end
+end
+
+function R.reveal_double(msg, line)
+	local view = R.double_view
+	if not view then return end
+	local suit = msg and msg.suit
+	if suit ~= "H" and suit ~= "D" and suit ~= "S" and suit ~= "C" then
+		suit = (msg and msg.drawn == "black") and "S" or "H"
+	end
+	local key = suit .. "_A"
+	view.card_name = key
+	view.result = line or ""
+	view.show_close = true
+	local card = view.card
+	if card and G and G.P_CARDS and G.P_CARDS[key] then
+		pcall(function()
+			if card.set_base then card:set_base(G.P_CARDS[key]) end
+			card.facing = "back"
+			card.sprite_facing = "back"
+			if card.flip then card:flip() end
+		end)
+	end
+end
+
+function R.finish_double(line)
+	local view = R.double_view
+	if not view then return end
+	view.result = line or L("k_gambel_house", "The House holds")
+	view.show_close = true
+end
+
+local function ace_node()
+	local view = R.double_view
+	local caption = { n = G.UIT.R, config = { align = "cm", padding = 0.04 }, nodes = {
+		{ n = G.UIT.T, config = { ref_table = view, ref_value = "card_name", scale = 0.4, colour = G.C.WHITE, shadow = true } },
+	} }
+	local function fallback()
+		view.card_name = "?"
+		return { n = G.UIT.R, config = { align = "cm", padding = 0.08 }, nodes = {
+			{ n = G.UIT.C, config = { align = "cm", minw = 1.55, minh = 2.15, r = 0.08, colour = G.C.BLUE, emboss = 0.08 }, nodes = {
+				{ n = G.UIT.T, config = { ref_table = view, ref_value = "card_name", scale = 0.45, colour = G.C.WHITE, shadow = true } },
+			} },
+		} }
+	end
+	if not (Card and CardArea and G and G.P_CARDS and G.P_CENTERS and G.P_CENTERS.c_base and G.CARD_W and G.CARD_H) then
+		return fallback()
+	end
+	local ok, area = pcall(function()
+		local ar = CardArea(0, 0, G.CARD_W * 1.35, G.CARD_H * 1.15, {
+			card_limit = 1, type = "title", highlight_limit = 0, card_w = G.CARD_W,
+		})
+		local def = G.P_CARDS.H_A or G.P_CARDS["H_A"]
+		local card = Card(0, 0, G.CARD_W, G.CARD_H, def, G.P_CENTERS.c_base)
+		card.facing = "back"
+		card.sprite_facing = "back"
+		ar:emplace(card)
+		view.area = ar
+		view.card = card
+		return ar
+	end)
+	if not ok or not area then return fallback() end
+	return { n = G.UIT.C, config = { align = "cm" }, nodes = {
+		{ n = G.UIT.R, config = { align = "cm", padding = 0.04 }, nodes = {
+			{ n = G.UIT.O, config = { object = area } },
+		} },
+		caption,
+	} }
+end
+
+function R.double_definition()
+	local view = R.double_view or { stake = 0, prompt = "", result = "", card_name = "" }
+	local stake = tostring(view.stake or 0)
+	local stake_txt = L("k_gambel_stake", "Stake: $") .. stake
+	local odds = L("k_gambel_win", "Win +$") .. stake .. " / " .. L("k_gambel_lose", "Lose -$") .. stake
+	local function btn(id, func, label, colour, minw)
+		return { n = G.UIT.C, config = { align = "cm", padding = 0.05 }, nodes = {
+			UIBox_button({ id = id, button = func, label = { label }, minw = minw or 2.15, minh = 0.55, scale = 0.36, colour = colour, col = true }),
+		} }
+	end
+	return { n = G.UIT.ROOT, config = { align = "cm", colour = G.C.CLEAR, padding = 0.08 }, nodes = {
+		{ n = G.UIT.C, config = { align = "cm", padding = 0.12, r = 0.1, colour = G.C.BLACK, emboss = 0.05, minw = 7.2 }, nodes = {
+			{ n = G.UIT.R, config = { align = "cm", padding = 0.06 }, nodes = {
+				{ n = G.UIT.T, config = { text = L("b_gambel_double", "Double or Nothing"), scale = 0.48, colour = G.C.WHITE, shadow = true } },
+			} },
+			{ n = G.UIT.R, config = { align = "cm", padding = 0.02 }, nodes = {
+				{ n = G.UIT.T, config = { text = stake_txt, scale = 0.36, colour = G.C.GOLD or G.C.WHITE } },
+			} },
+			{ n = G.UIT.R, config = { align = "cm", padding = 0.02 }, nodes = {
+				{ n = G.UIT.T, config = { text = odds, scale = 0.32, colour = G.C.UI and G.C.UI.TEXT_LIGHT or G.C.WHITE } },
+			} },
+			{ n = G.UIT.R, config = { align = "cm", padding = 0.02 }, nodes = {
+				{ n = G.UIT.T, config = { ref_table = view, ref_value = "prompt", scale = 0.34, colour = G.C.UI and G.C.UI.TEXT_LIGHT or G.C.WHITE } },
+			} },
+			{ n = G.UIT.R, config = { align = "cm", padding = 0.06 }, nodes = { ace_node() } },
+			{ n = G.UIT.R, config = { align = "cm", padding = 0.04, minh = 0.4 }, nodes = {
+				{ n = G.UIT.T, config = { ref_table = view, ref_value = "result", scale = 0.46, colour = G.C.GOLD or G.C.WHITE, shadow = true } },
+			} },
+			{ n = G.UIT.R, config = { id = "mp_gambel_choices", align = "cm", padding = 0.04, func = "mp_gambel_choices_vis" }, nodes = {
+				btn("mp_gambel_red", "mp_gambel_pick_red", L("b_gambel_red", "Red Ace"), G.C.RED, 2.2),
+				btn("mp_gambel_black", "mp_gambel_pick_black", L("b_gambel_black", "Black Ace"), G.C.BLACK, 2.2),
+				btn("mp_gambel_back", "mp_gambel_double_back", L("b_gambel_back", "Back"), G.C.GREY, 1.6),
+			} },
+			{ n = G.UIT.R, config = { id = "mp_gambel_continue", align = "cm", padding = 0.04, func = "mp_gambel_continue_vis" }, nodes = {
+				btn("mp_gambel_continue", "mp_gambel_double_close", L("b_gambel_continue", "Continue"), G.C.BLUE, 2.4),
+			} },
+		} },
+	} }
 end
 
 function R.clear_shop()
@@ -374,11 +566,32 @@ function R.register_ui()
 	G.FUNCS = G.FUNCS or {}
 	function G.FUNCS.mp_gambel_double(e)
 		if not MP.GAMBEL then return end
-		MP.GAMBEL.bet("double")
-		if e and e.config then e.config.button = nil; e.config.colour = G.C.UI.BACKGROUND_INACTIVE end
+		MP.GAMBEL.open_double()
+	end
+	function G.FUNCS.mp_gambel_pick_red()
+		if MP.GAMBEL then MP.GAMBEL.pick_double("red") end
+	end
+	function G.FUNCS.mp_gambel_pick_black()
+		if MP.GAMBEL then MP.GAMBEL.pick_double("black") end
+	end
+	function G.FUNCS.mp_gambel_double_back()
+		if not (MP.GAMBEL and MP.GAMBEL.double_view) or MP.GAMBEL.double_view.picked then return end
+		MP.GAMBEL.close_double()
+	end
+	function G.FUNCS.mp_gambel_double_close()
+		if MP.GAMBEL then MP.GAMBEL.close_double() end
+	end
+	function G.FUNCS.mp_gambel_choices_vis(e)
+		local view = MP.GAMBEL and MP.GAMBEL.double_view
+		if e and e.states then e.states.visible = not (view and view.show_close) end
+	end
+	function G.FUNCS.mp_gambel_continue_vis(e)
+		local view = MP.GAMBEL and MP.GAMBEL.double_view
+		if e and e.states then e.states.visible = view and view.show_close and true or false end
 	end
 	function G.FUNCS.mp_gambel_wheel(e)
 		if not MP.GAMBEL then return end
+		if MP.GAMBEL.double_view and not MP.GAMBEL.double_view.picked then MP.GAMBEL.close_double() end
 		MP.GAMBEL.bet("wheel")
 		if e and e.config then e.config.button = nil; e.config.colour = G.C.UI.BACKGROUND_INACTIVE end
 	end
@@ -391,6 +604,8 @@ function R.register_ui()
 		if MP.GAMBEL and MP.GAMBEL.active and MP.GAMBEL.active() and G and G.STATES then
 			MP.GAMBEL.hook_shop()
 			if G.STATE ~= G.STATES.SHOP then MP.GAMBEL.clear_shop() end
+			local view = MP.GAMBEL.double_view
+			if view and not view.picked and not G.OVERLAY_MENU then MP.GAMBEL.double_view = nil end
 		end
 		return r
 	end
