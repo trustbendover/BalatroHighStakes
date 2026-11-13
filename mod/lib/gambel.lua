@@ -28,7 +28,7 @@ function R.show_notice(text)
 	pcall(function()
 		if not attention_text or text == "" then return end
 		attention_text({
-			scale = 0.8, text = text, hold = 2.4, align = "cm", offset = { x = 0, y = -2.6 },
+			scale = 0.65, text = text, hold = 2.4, align = "cm", offset = { x = 0, y = -2.6 }, maxw = 10,
 			major = (G and (G.ROOM_ATTACH or G.play)) or nil,
 		})
 	end)
@@ -172,6 +172,7 @@ function R.reset()
 		MP.GAME.gambel_applied_ante = nil
 		MP.GAME.gambel_spin_delta = nil
 	end
+	if R.drop_cards then R.drop_cards(R.double_view) end
 	R.double_view = nil
 	R.wheel_view = nil
 	R.state = {}
@@ -877,7 +878,7 @@ end
 --- Rebuild the modal once the hold ends, keeping the Ace that is already face up.
 function R.reshow_double()
 	local view = R.double_view
-	if not (view and G and G.FUNCS and G.FUNCS.overlay_menu) then return end
+	if not (view and G and G.OVERLAY_MENU and G.FUNCS and G.FUNCS.overlay_menu) then return end
 	if view.face == "front" then R.hold_ace(view) end
 	local area, card = view.area, view.card
 	local area_remove = area and area.remove
@@ -1433,8 +1434,11 @@ function R.register_ui()
 			if G.STATE ~= G.STATES.SHOP then MP.GAMBEL.clear_shop() end
 			local view = MP.GAMBEL.double_view
 			if view and not G.OVERLAY_MENU then
+				if view.flip and not view.flip.done and view.flip.line and view.flip.line ~= "" then
+					MP.GAMBEL.flash(view.flip.line)
+				end
 				MP.GAMBEL.drop_cards(view)
-				if not view.picked then MP.GAMBEL.double_view = nil end
+				MP.GAMBEL.double_view = nil
 			end
 			MP.GAMBEL.tick(dt)
 			local wheel = MP.GAMBEL.wheel_view

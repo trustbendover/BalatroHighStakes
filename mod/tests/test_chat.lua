@@ -257,4 +257,18 @@ root.children = { child_a, child_b }
 CH.sync_visual(root)
 ok(order[1] == "a" and order[2] == "bar" and order[3] == "b", "sync walks children in order and snaps the scrollbar object")
 
+CH.state = { view = "match", lobby = {}, match = {
+	{ id = 1, text = "already" },
+	{ id = 2, text = "while open" },
+	{ id = 3, text = "also open" },
+} }
+CH.open = true
+CH.seen = 1
+CH.focused = false
+CH.close()
+ok(CH.open == false and CH.seen == 3, "Close marks lines that arrived while chat was open as read")
+ok(CH.unread() == 0, "those lines do not light an unread badge")
+CH.state.match[#CH.state.match + 1] = { id = 4, text = "after" }
+ok(CH.unread() == 1, "a line that arrives after Close still counts as unread")
+
 print("PASS: chat")

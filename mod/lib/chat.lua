@@ -354,6 +354,7 @@ function CH.toggle()
 end
 
 function CH.close()
+	CH.seen = #CH.current()
 	CH.open = false
 	CH.refresh(true)
 end
