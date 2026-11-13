@@ -472,14 +472,48 @@ function MS.ui(st)
 	return create_UIBox_generic_options({ back_func = "mp_ms_close", back_label = back, contents = contents })
 end
 
+function MS.match_over()
+	if not (G and MP and MP.GAME) then return false end
+	return G.STATES and G.STATE == G.STATES.GAME_OVER or MP.GAME.won or MP.GAME.match_finished or (MP.GAME.lives or 0) <= 0
+end
+
+--- One row from this machine when the host table has not arrived yet.
+function MS.local_summary()
+	local g = G and G.GAME or {}
+	local rep = {}
+	pcall(function() rep = MS.collect(g, G and G.jokers and G.jokers.cards) or {} end)
+	local me = (MP.LOBBY and MP.LOBBY.my_id) or "you"
+	local name = (MP.LOBBY and (MP.LOBBY.username or MP.LOBBY.name)) or "You"
+	local lives = MP.GAME and MP.GAME.lives
+	local won = MP.GAME and MP.GAME.won and true or false
+	return {
+		action = "matchStats",
+		gameMode = MP.LOBBY and MP.LOBBY.config and MP.LOBBY.config.gamemode,
+		winnerId = won and me or nil,
+		rows = { {
+			id = me, name = name, place = 1, out = not won and (lives or 0) <= 0,
+			dealt = 0, pvps = 0, pvpWon = 0, livesLost = 0,
+			best = rep.best or "0", bestHand = rep.bestHand,
+			jokers = rep.jokers or 0, seen = rep.seen or 0, money = rep.money or 0,
+			ante = rep.ante or (g.round_resets and g.round_resets.ante) or 1,
+			lives = lives, lineup = rep.lineup,
+		} },
+		awards = {},
+	}
+end
+
 function MS.open()
 	if not MS.last then
-		pcall(sendWarnMessage, L("k_ms_later", "Match stats appear when the match is over"), "MULTIPLAYER")
-		pcall(function()
-			attention_text({ scale = 0.6, text = L("k_ms_later", "Match stats appear when the match is over"), hold = 3,
-				align = "cm", offset = { x = 0, y = -2.5 }, major = G.ROOM_ATTACH })
-		end)
-		return
+		if MS.match_over() then
+			MS.last = MS.local_summary()
+		else
+			pcall(sendWarnMessage, L("k_ms_later", "Match stats appear when the match is over"), "MULTIPLAYER")
+			pcall(function()
+				attention_text({ scale = 0.6, text = L("k_ms_later", "Match stats appear when the match is over"), hold = 3,
+					align = "cm", offset = { x = 0, y = -2.5 }, major = (G and (G.OVERLAY_MENU or G.ROOM_ATTACH)) })
+			end)
+			return
+		end
 	end
 	MS.show_at, MS.tab, MS.page = nil, "awards", 1
 	if MP.SPECTATE and MP.SPECTATE.state.active then MP.SPECTATE.state.active = false end

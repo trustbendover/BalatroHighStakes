@@ -423,7 +423,11 @@ function Server:check_game_over_inner(L)
 		end
 		ending = n <= 1
 	elseif house then
-		ending = false
+		local living = 0
+		for _, p in ipairs(L.players) do
+			if not p.eliminated and (p.lives or 0) > 0 and not spared[p] then living = living + 1 end
+		end
+		ending = living == 0
 	else
 		local living = 0
 		for _, p in ipairs(L.players) do
@@ -1810,6 +1814,7 @@ function H.setAnte(S, c, a)
 		sendA(c, { action = "winGame", reason = "house" })
 		L.winnerId = c.id
 		L.isInGame, L.blindActive = false, false
+		S:stats_finish(L)
 	end
 end
 function H.setLocation(S, c, a) S:set_location(c, a.location) end

@@ -803,9 +803,10 @@ class Lobby {
 			for (const p of dying) if (p.score.greaterThan(best)) best = p.score;
 			for (const p of dying) if (!best.greaterThan(p.score) && !p.score.greaterThan(best)) spared.add(p);
 		}
+		const soloOver = house && this.players.filter((p) => !p.eliminated && p.lives > 0).length === 0;
 		for (const p of dying) {
 			p.eliminated = true;
-			if (!spared.has(p)) p.sendAction({ action: "loseGame" });
+			if (!spared.has(p)) p.sendAction({ action: "loseGame", ...(soloOver ? { finished: true } : {}) });
 			for (const o of this.players) {
 				if (o.id !== p.id) o.sendAction({ action: "playerEliminated", playerId: p.id, username: p.username });
 			}

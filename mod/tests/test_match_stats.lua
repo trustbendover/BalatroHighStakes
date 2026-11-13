@@ -336,6 +336,25 @@ do
 	}
 	local v = MS.view(st, "b")
 	ok(v.winner == "Ann wins!" and v.title == "Match stats", "winner line")
+	local solo_view = MS.view({ winnerId = "a", rows = { { id = "a", name = "Ada", place = 1, dealt = 0, best = "100", ante = 6, livesLost = 2 } }, awards = {} }, "a")
+	ok(#solo_view.awards == 0 and #solo_view.rows == 1 and solo_view.winner == "Ada wins!", "one player has a row and no awards")
+	_G.G = { STATES = { GAME_OVER = 1, MENU = 0 }, STATE = 1, GAME = { round_resets = { ante = 6 }, round_scores = {} }, jokers = { cards = {} } }
+	MP.GAME.lives = 0
+	MP.GAME.won = false
+	MP.LOBBY.my_id = "ada"
+	local summary = MS.local_summary()
+	local shown = MS.view(summary, "ada")
+	ok(#summary.rows == 1 and summary.rows[1].ante == 6 and #shown.awards == 0 and #shown.rows == 1, "a finished solo run can build a one-player table locally")
+	MS.last = nil
+	G.STATE = G.STATES.MENU
+	MP.GAME.lives = 3
+	MP.GAME.won = false
+	MP.GAME.match_finished = false
+	local warned
+	_G.attention_text = function(t) warned = t end
+	G.OVERLAY_MENU = { id = "game_end" }
+	MS.open()
+	ok(not MS.last and warned and warned.major == G.OVERLAY_MENU, "mid-match the notice sits on the overlay, not behind it")
 	ok(#v.awards == 7 and v.awards[1].label == "Most damage" and v.awards[1].name == "Bob" and v.awards[1].value == "100K"
 		and v.awards[1].colour == "red" and v.awards[1].you, "award lines: label, colour, name, value, you")
 	ok(v.awards[2].value == "54K (Flush)" and v.awards[5].value == "4/6" and v.awards[6].value == "$200", "award values")
@@ -407,6 +426,20 @@ do
 	_G.create_UIBox_generic_options = function(a) generic = a; return { n = 0, nodes = a.contents } end
 	_G.UIBox_button = function(a) return { n = 1, button = a.button } end
 	_G.localize = function(k) if k == "b_back" then return "Back" end return "ERROR" end
+	MS.last = nil
+	G.STATES = G.STATES or {}
+	G.STATES.GAME_OVER = 1
+	G.STATE = 1
+	G.GAME = { round_resets = { ante = 4 }, round_scores = {} }
+	G.jokers = { cards = {} }
+	G.FUNCS = G.FUNCS or {}
+	local opened
+	G.FUNCS.overlay_menu = function(args) opened = args end
+	MP.GAME.lives = 0
+	MP.GAME.won = true
+	MP.LOBBY.my_id = "ada"
+	MS.open()
+	ok(opened and opened.definition and MS.last and MS.last.winnerId == "ada" and #MS.last.rows == 1, "Match stats opens a one-player screen when the host table has not arrived")
 	local function find_all(node, pred, out)
 		out = out or {}
 		if type(node) ~= "table" then return out end
