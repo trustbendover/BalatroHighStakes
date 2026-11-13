@@ -400,7 +400,7 @@ function R.reveal_double(msg, line)
 	view.show_close = false
 	view.prompt = L("k_gambel_flipping", "Flipping...")
 	view.flip = {
-		t = 0, dur = 0.45, swapped = false, done = false,
+		t = 0, flip_dur = 0.70, hold_dur = 0.55, swapped = false, opened = false, done = false,
 		suit = suit, key = key, drawn = drawn, line = line or "",
 		prompt = L("k_gambel_you_picked", "You picked ") .. picked .. L("k_gambel_drawn_mid", " — Drawn: ") .. drawn,
 	}
@@ -420,16 +420,24 @@ function R.tick_double(dt)
 	local view = R.double_view
 	local flip = view and view.flip
 	if not flip or flip.done then return end
-	local step = (tonumber(dt) or 0) / (flip.dur or 0.45)
-	flip.t = math.min(1, (flip.t or 0) + step)
+	local turn = flip.flip_dur or 0.70
+	local hold = flip.hold_dur or 0.55
+	flip.t = math.min(turn + hold, (flip.t or 0) + (tonumber(dt) or 0))
 	local card = view.card
 	local full = card and card.T and card.T.w or 0
+	-- pinch.x stays false. Moveable:move_wh shrinks the card whenever pinch.x is true,
+	-- which fought the opening half and snapped the face into the payout.
+	if card and card.pinch then card.pinch.x = false end
 	if card and full > 0 then
-		local span = flip.t < 0.5 and (1 - flip.t / 0.5) or ((flip.t - 0.5) / 0.5)
-		if card.pinch then card.pinch.x = flip.t < 1 end
+		local span = 1
+		if flip.t < turn * 0.5 then
+			span = 1 - flip.t / (turn * 0.5)
+		elseif flip.t < turn then
+			span = (flip.t - turn * 0.5) / (turn * 0.5)
+		end
 		set_card_width(card, full * span)
 	end
-	if not flip.swapped and flip.t >= 0.5 then
+	if not flip.swapped and flip.t >= turn * 0.5 then
 		flip.swapped = true
 		view.face = "front"
 		view.pip = "A"
@@ -442,20 +450,23 @@ function R.tick_double(dt)
 				card.facing = "front"
 				card.sprite_facing = "front"
 				card.flipping = nil
+				if card.pinch then card.pinch.x = false end
 				if card.states then card.states.visible = true end
 				R.mute_ace(card, view.area)
 			end)
 		end
 		if play_sound then pcall(play_sound, "card1") end
 	end
-	if flip.t >= 1 then
-		flip.done = true
+	if not flip.opened and flip.t >= turn then
+		flip.opened = true
 		if card and card.T then
 			if card.pinch then card.pinch.x = false end
 			set_card_width(card, card.T.w)
-			if card.VT and card.T.h then card.VT.h = card.T.h end
 		end
 		view.card_name = flip.drawn
+	end
+	if flip.t >= turn + hold then
+		flip.done = true
 		view.prompt = flip.prompt
 		view.result = flip.line or ""
 		view.show_close = true

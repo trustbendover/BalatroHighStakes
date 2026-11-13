@@ -5,7 +5,8 @@ local C = dofile("networking/chat_rules.lua")
 local Core = dofile("networking/p2p_server.lua")
 ok(Core.CHAT and Core.CHAT.accept("hi") == "hi", "the host loads the chat rules")
 ok(C.accept("   ") == nil and select(2, C.accept("  ")) == "empty", "empty is refused")
-ok(select(2, C.accept(string.rep("a", 81))) == "long", "over 80 characters is refused")
+ok(C.accept(string.rep("a", 550)) == string.rep("a", 550), "550 characters are kept")
+ok(select(2, C.accept(string.rep("a", 551))) == "long", "over 550 characters is refused")
 ok(C.accept("  hello   there ") == "hello there", "a short line is kept, as one line")
 ok(not C.body({ text = "hi" }, "(watching)"):find("ABCDE", 1, true), "a line has no lobby code")
 
@@ -27,27 +28,22 @@ ok(nl.b_chat_send == "Stuur" and nl.k_chat_prompt == "Bericht" and nl.k_chat_wat
 local core = io.open("core.lua"):read("*a")
 ok(core:find('Core.CHAT = MP.load_mp_file("networking/chat_rules.lua")', 1, true), "Steamodded loads the chat rules onto the host")
 local ui = io.open("lib/chat.lua"):read("*a")
-ok(ui:find('align = "tri"', 1, true) and ui:find("y = 2.7", 1, true) and ui:find("x = -0.2", 1, true)
-	and ui:find("callback = function() CH.send() end", 1, true)
-	and ui:find("text_input_hook", 1, true) and ui:find("blank_letters", 1, true)
+ok(ui:find("function CH.pin()", 1, true) and ui:find("right - w - 0.12", 1, true) and ui:find("top + 0.12", 1, true)
 	and ui:find("function CH.draw_front()", 1, true) and ui:find("love.draw", 1, true)
 	and ui:find("if not CH._painting then return end", 1, true) and ui:find("CH._painting = true", 1, true)
-	and ui:find("function CH.drop_box", 1, true) and ui:find("function CH.sync_visual", 1, true)
-	and ui:find("box.VT.x, box.VT.y = pos.x, pos.y", 1, true)
-	and ui:find('id = "mp_chat_drag"', 1, true) and ui:find("CH.clamp_pos", 1, true) and ui:find("CH.pos", 1, true)
+	and ui:find("function CH.drop_box", 1, true) and ui:find("function CH.wrap_message", 1, true)
+	and ui:find("CH.VIEW_LINES = 6", 1, true) and ui:find('id = "mp_chat_scroll"', 1, true)
+	and ui:find("love.wheelmoved", 1, true) and ui:find("love.textinput", 1, true)
 	and ui:find("love.graphics.getWidth", 1, true) and ui:find("G.TILE_W", 1, true)
 	and ui:find("G.WINDOWTRANS", 1, true) and ui:find('get_UIE_by_ID("mp_chat_open")', 1, true)
 	and ui:find("G.ROOM.T.x", 1, true) and ui:find("get_cursor_collision", 1, true)
-	and ui:find("drag.swallowed", 1, true) and ui:find("CH.expire_suppress", 1, true)
-	and ui:find("name_colour", 1, true) and ui:find('row.name .. ":"', 1, true)
-	and not ui:find("chip_fill", 1, true) and not ui:find("r = 0.2", 1, true)
+	and ui:find("name_colour", 1, true) and not ui:find("chip_fill", 1, true) and not ui:find("r = 0.2", 1, true)
 	and ui:find("CH.LOBBY_W = 5.6", 1, true) and ui:find("CH.MATCH_W = 5.4", 1, true)
-	and ui:find("h = 0.48", 1, true) and ui:find("minw = 1.3", 1, true)
+	and ui:find("minh = 0.48", 1, true) and ui:find("minw = 1.3", 1, true)
 	and ui:find("minw = 1.8, minh = 0.42", 1, true)
-	and ui:find("panel_nodes(wide, 0.32, 4.2, false)", 1, true)
-	and ui:find("panel_nodes(wide, 0.32, 2.9, true)", 1, true)
-	and not ui:find("maxw = 3.2", 1, true) and ui:find("lobby_row", 1, true),
-	"lobby chat is compact with input and Send on one row, and the match drawer stays inside the screen")
+	and ui:find("panel_nodes(wide, 0.32, 3.6, false)", 1, true)
+	and not ui:find("maxw = 3.2", 1, true) and not ui:find("mp_chat_drag", 1, true) and ui:find("lobby_row", 1, true),
+	"match chat is a fixed top-right log with a scrollbar, and the field stays a fixed width")
 
 local function client(S, name)
 	local msgs = {}
@@ -90,7 +86,7 @@ ok(C.name_color(host_line.col) ~= C.name_color(guest_line.col), "those names use
 ok(bob.lives == lives, "chat does not change lives")
 local before = ann.count("chat")
 S:receive(bob, { action = "chat", text = "   " })
-S:receive(bob, { action = "chat", text = string.rep("b", 81) })
+S:receive(bob, { action = "chat", text = string.rep("b", 551) })
 ok(bob.last("chatReject").reason == "long", "too long is rejected")
 ok(ann.count("chat") == before, "empty and too-long lines are not sent on")
 local rejected = 0
@@ -144,27 +140,28 @@ local left, top, right = CH.screen_span()
 ok(math.abs(left - (-1.47 + 0.05)) < 1e-6, "the screen span is room-local on the left")
 ok(math.abs(top - (-0.7 + 0.05)) < 1e-6, "the screen span is room-local on the top")
 ok(math.abs(right - (22.94 - 1.47 - 0.05)) < 1e-6, "the right edge subtracts the room offset")
-CH.open = false
-CH.refresh = function() end
-CH.pos = { x = 100, y = 100 }
-CH.box = { T = { x = 0, y = 0, w = 2, h = 1 }, VT = { x = 0, y = 0 }, states = { visible = true } }
-CH.clamp_pos()
-ok(math.abs(CH.pos.x - (right - 2)) < 1e-6, "a drag cannot push the bubble past the room-local right edge")
-ok(CH.pos.x > 0, "the clamped bubble is still on the playfield, not a window-space overshoot")
-CH.open = false
-CH.drag = { moved = true }
-G.FUNCS = G.FUNCS or {}
+CH.box = { T = { x = 0, y = 0, w = 5.4, h = 3 }, VT = {}, states = { visible = true }, REMOVED = false }
+CH.pin()
+ok(math.abs(CH.box.T.x - (right - 5.4 - 0.12)) < 1e-6, "the panel is pinned to the top-right")
+ok(math.abs(CH.box.T.y - (top + 0.12)) < 1e-6, "the panel starts just under the top edge")
+local wrapped = CH.wrap_message("Ann", string.rep("word ", 20), 1, 12)
+ok(#wrapped > 1 and wrapped[1].name == "Ann:" and wrapped[2].name == "", "a long line wraps under the coloured name")
+ok(CH.scroll_max(10) == 4, "six visible lines leave four lines to scroll")
+ok(CH.thumb_top(0, 10) > CH.thumb_top(4, 10), "scroll 0 puts the thumb at the newest end")
+CH.draft = { text = "", caret = 0 }
+CH.insert_text(string.rep("q", 600))
+ok(#CH.draft.text == 550, "the field stops at 550 characters")
+CH.focused = true
+CH.on_key("backspace")
+ok(#CH.draft.text == 549, "backspace edits the fixed-width field")
+Controller = { get_cursor_collision = function(self) self.collision_list = {} end }
 CH.registered = nil
 CH._cursor = nil
 CH._draw = true
-Controller = { get_cursor_collision = function(self) self.collision_list = {} end }
+CH._text = true
+CH._keys = true
+CH._wheel = true
 CH.register()
-G.FUNCS.mp_chat_toggle()
-ok(CH.drag.swallowed and CH.open == false, "releasing a drag does not open the chat")
-CH.tick_drag()
-ok(CH.drag == nil and not CH.suppress_click, "that release does not swallow the next click")
-G.FUNCS.mp_chat_toggle()
-ok(CH.open == true, "the next click opens the chat")
 CH.box.collides_with_point = function(_, p) return p.x > 22.5 and p.x < 23.5 end
 CH.box.get_UIE_by_ID = function(_, id)
 	if id == "mp_chat_open" then

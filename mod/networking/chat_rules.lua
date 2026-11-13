@@ -10,8 +10,8 @@
 -- in that same 1..25 blind palette, stable by player id.
 local C = {}
 
-C.MAX = 80
-C.KEEP = 30
+C.MAX = 550
+C.KEEP = 100
 C.PALETTE = 25
 
 function C.display_name(u)

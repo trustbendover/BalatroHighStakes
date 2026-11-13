@@ -1,5 +1,5 @@
 // Same chat rules as mod/networking/chat_rules.lua.
-export const CHAT_MAX = 80;
+export const CHAT_MAX = 550;
 export const CHAT_KEEP = 30;
 export const CHAT_PALETTE = 25;
 

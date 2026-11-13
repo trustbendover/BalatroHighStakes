@@ -13,7 +13,11 @@ CH.seen = CH.seen or 0
 -- Compact sizes. A container maxw shrinks Balatro text, so these panels use minw only.
 CH.LOBBY_W = 5.6
 CH.MATCH_W = 5.4
-CH.SHOW = 4
+CH.VIEW_LINES = 6
+CH.INPUT_W = 3.6
+CH.scroll = CH.scroll or 0
+CH.field = CH.field or { show = "" }
+CH.draft.caret = CH.draft.caret or 0
 
 local function rules()
 	if CH.RULES then return CH.RULES end
@@ -63,55 +67,183 @@ function CH.current()
 	return R.current(CH.state)
 end
 
-function CH.rows(scale, wide)
-	local R = rules()
-	local all = CH.current()
-	local out, ui = {}, CH.chrome()
+function CH.cols_for(wide, scale)
 	scale = scale or 0.32
-	wide = wide or CH.LOBBY_W
-	local from = math.max(1, #all - CH.SHOW + 1)
-	for i = from, #all do
-		local m = all[i]
+	return math.max(12, math.floor(((wide or CH.MATCH_W) - 0.35) / math.max(0.12, scale * 0.5)))
+end
+
+--- Name stays on the first line. The body wraps onto following lines instead of ending in "...".
+function CH.wrap_message(name, body, col, cols)
+	cols = math.max(8, tonumber(cols) or 24)
+	name = tostring(name or "")
+	if name ~= "" and not name:find(":$") then name = name .. ":" end
+	body = tostring(body or "")
+	local lines = {}
+	local function push(n, b, first)
+		lines[#lines + 1] = { name = n, body = b, col = col or 1, first = first and true or false }
+	end
+	local function take(text, width)
+		if text == "" then return "", "" end
+		local n = math.max(1, width)
+		return text:sub(1, n), text:sub(n + 1)
+	end
+	local room = math.max(4, cols - #name - 1)
+	local head, rest = take(body, room)
+	push(name, head, true)
+	while rest ~= "" do
+		local piece
+		piece, rest = take(rest, cols)
+		push("", piece, false)
+	end
+	return lines
+end
+
+function CH.wrapped(wide, scale)
+	local R = rules()
+	local ui = CH.chrome()
+	local cols = CH.cols_for(wide, scale)
+	local lines = {}
+	for _, m in ipairs(CH.current()) do
 		local body = R and R.body(m, ui.watching) or tostring(m.text or "")
 		local name = R and R.display_name(m.name) or tostring(m.name or "?")
-		if MP.FIT and MP.FIT.ellipsize then
-			name = MP.FIT.ellipsize(name, scale, 1.7)
-			body = MP.FIT.ellipsize(body, scale, math.max(1.5, wide - 1.9))
+		for _, line in ipairs(CH.wrap_message(name, body, tonumber(m.col) or 1, cols)) do
+			lines[#lines + 1] = line
 		end
-		out[#out + 1] = { name = name, body = body, col = tonumber(m.col) or 1, watch = m.watch and true or false }
 	end
-	return out
+	return lines
 end
 
-local function message_row(row, scale, wide)
-	local name = row.name ~= "" and (row.name .. ":") or ""
-	return { n = G.UIT.R, config = { align = "cl", padding = 0.03, minw = wide }, nodes = {
-		{ n = G.UIT.C, config = { align = "cl", minw = 1.6 }, nodes = {
-			{ n = G.UIT.T, config = { text = name, scale = scale, colour = CH.name_colour(row.col), shadow = true } },
-		} },
-		{ n = G.UIT.C, config = { align = "cl", minw = 0.08 } },
-		{ n = G.UIT.C, config = { align = "cl" }, nodes = {
-			{ n = G.UIT.T, config = { text = row.body or "", scale = scale, colour = CH.body_ink(), shadow = true } },
-		} },
-	} }
+function CH.scroll_max(total)
+	return math.max(0, (tonumber(total) or 0) - CH.VIEW_LINES)
 end
 
---- Title-free log plus one row: the message field and Send (and Close, in a match).
-function CH.panel_nodes(wide, scale, input_w, with_close)
-	local ui = CH.chrome()
+function CH.clamp_scroll(total)
+	local maxs = CH.scroll_max(total)
+	CH.scroll = tonumber(CH.scroll) or 0
+	if CH.scroll < 0 then CH.scroll = 0 elseif CH.scroll > maxs then CH.scroll = maxs end
+	return maxs
+end
+
+--- 0 means the thumb sits on the newest line. 1 means it sits on the oldest.
+function CH.thumb_top(scroll, total)
+	local view = CH.VIEW_LINES
+	total = tonumber(total) or 0
+	scroll = tonumber(scroll) or 0
+	local maxs = math.max(0, total - view)
+	local thumb = (total <= view or total == 0) and 1 or (view / total)
+	if maxs == 0 then return 0, thumb end
+	return (1 - scroll / maxs) * (1 - thumb), thumb
+end
+
+function CH.window_lines(wide, scale)
+	local lines = CH.wrapped(wide, scale)
+	CH.clamp_scroll(#lines)
+	local start = math.max(1, #lines - CH.VIEW_LINES - CH.scroll + 1)
+	local out = {}
+	for i = 0, CH.VIEW_LINES - 1 do
+		out[#out + 1] = lines[start + i] or { name = "", body = "", col = 1, first = false }
+	end
+	return out, #lines
+end
+
+function CH.ensure_slots()
+	CH.slots = CH.slots or {}
+	CH.slot_ink = CH.slot_ink or {}
+	for i = 1, CH.VIEW_LINES do
+		CH.slots[i] = CH.slots[i] or { name = "", body = "" }
+		CH.slot_ink[i] = CH.slot_ink[i] or {}
+	end
+	CH.field = CH.field or { show = "" }
+end
+
+function CH.paint_slots(wide, scale)
+	CH.ensure_slots()
+	local shown = CH.window_lines(wide, scale)
+	for i = 1, CH.VIEW_LINES do
+		local line = shown[i]
+		local slot = CH.slots[i]
+		slot.name = line.name or ""
+		slot.body = line.body or ""
+		local ink = CH.slot_ink[i]
+		if ink then ink.colour = (line.first and CH.name_colour(line.col)) or CH.body_ink() end
+	end
+end
+
+function CH.field_slice()
+	local text = CH.draft.text or ""
+	local caret = tonumber(CH.draft.caret) or #text
+	if caret < 0 then caret = 0 elseif caret > #text then caret = #text end
+	CH.draft.caret = caret
+	if text == "" and not CH.focused then return CH.chrome().prompt end
+	local cols = 18
+	local from = math.max(1, caret - cols + 1)
+	local vis = text:sub(from, math.max(from, caret))
+	local mark = ""
+	if CH.focused then
+		local t = 0
+		if love and love.timer and love.timer.getTime then
+			local ok, n = pcall(love.timer.getTime)
+			if ok and type(n) == "number" then t = n end
+		end
+		if math.floor(t * 2) % 2 == 0 then mark = "|" end
+	end
+	local extra = #text >= 100 and (" " .. #text .. "/550") or ""
+	return vis .. mark .. extra
+end
+
+function CH.paint_field()
+	CH.field = CH.field or { show = "" }
+	CH.field.show = CH.field_slice()
+end
+
+function CH.insert_text(s)
+	local R = rules()
+	local maxn = (R and R.MAX) or 550
+	s = tostring(s or ""):gsub("%c", "")
+	if s == "" then return end
+	local text = CH.draft.text or ""
+	local caret = tonumber(CH.draft.caret) or #text
+	local room = maxn - #text
+	if room <= 0 then return end
+	if #s > room then s = s:sub(1, room) end
+	CH.draft.text = text:sub(1, caret) .. s .. text:sub(caret + 1)
+	CH.draft.caret = caret + #s
+	CH.scroll = 0
+	CH.paint_field()
+end
+
+function CH.backspace()
+	local text = CH.draft.text or ""
+	local caret = tonumber(CH.draft.caret) or #text
+	if caret <= 0 then return end
+	CH.draft.text = text:sub(1, caret - 1) .. text:sub(caret + 1)
+	CH.draft.caret = caret - 1
+	CH.paint_field()
+end
+
+local function log_rows(wide, scale)
+	CH.ensure_slots()
 	local nodes = {}
-	local shown = CH.rows(scale, wide)
-	if #shown == 0 then
-		nodes[#nodes + 1] = { n = G.UIT.R, config = { align = "cl", padding = 0.04, minw = wide, minh = 0.32 }, nodes = {
-			{ n = G.UIT.T, config = { text = ui.prompt, scale = scale, colour = G.C.UI.TEXT_INACTIVE or CH.body_ink() } },
+	for i = 1, CH.VIEW_LINES do
+		local slot = CH.slots[i]
+		local ink = { ref_table = slot, ref_value = "name", scale = scale, colour = CH.body_ink(), shadow = true }
+		CH.slot_ink[i] = ink
+		nodes[#nodes + 1] = { n = G.UIT.R, config = { align = "cl", padding = 0.015, minw = wide, minh = 0.28 }, nodes = {
+			{ n = G.UIT.T, config = ink },
+			{ n = G.UIT.T, config = { text = " ", scale = scale, colour = CH.body_ink() } },
+			{ n = G.UIT.T, config = { ref_table = slot, ref_value = "body", scale = scale, colour = CH.body_ink() } },
 		} }
 	end
-	for _, row in ipairs(shown) do nodes[#nodes + 1] = message_row(row, scale, wide) end
+	CH.paint_slots(wide, scale)
+	return nodes
+end
+
+local function input_row(wide, scale, input_w, with_close)
+	CH.paint_field()
+	local ui = CH.chrome()
 	local controls = {
-		{ n = G.UIT.C, config = { align = "cm", padding = 0.02 }, nodes = {
-			create_text_input({ w = input_w, h = 0.48, max_length = 80, prompt_text = ui.prompt,
-				ref_table = CH.draft, ref_value = "text", extended_corpus = true, keyboard_offset = 1,
-				callback = function() CH.send() end }),
+		{ n = G.UIT.C, config = { id = "mp_chat_field", align = "cl", padding = 0.04, minw = input_w, minh = 0.48, r = 0.06, colour = G.C.WHITE, button = "mp_chat_focus", hover = true }, nodes = {
+			{ n = G.UIT.T, config = { ref_table = CH.field, ref_value = "show", scale = scale, colour = G.C.BLACK } },
 		} },
 		{ n = G.UIT.C, config = { align = "cm", padding = 0.02 }, nodes = {
 			UIBox_button({ id = "mp_chat_send", button = "mp_chat_send", label = { ui.send },
@@ -124,8 +256,13 @@ function CH.panel_nodes(wide, scale, input_w, with_close)
 				minw = 1.15, minh = 0.48, scale = scale, colour = G.C.RED, col = true }),
 		} }
 	end
-	nodes[#nodes + 1] = { n = G.UIT.R, config = { align = "cm", padding = 0.04, minw = wide }, nodes = controls }
-	return nodes
+	return { n = G.UIT.R, config = { align = "cm", padding = 0.04, minw = wide }, nodes = controls }
+end
+
+function CH.panel_nodes(wide, scale, input_w, with_close)
+	local log = log_rows(wide, scale)
+	log[#log + 1] = input_row(wide, scale, input_w, with_close)
+	return log
 end
 
 --- Lobby: compact panel under the start row. Input and Send share one row.
@@ -133,7 +270,7 @@ function CH.lobby_row()
 	local wide = CH.LOBBY_W
 	return { n = G.UIT.R, config = { align = "cm", padding = 0.06 }, nodes = {
 		{ n = G.UIT.C, config = { id = "mp_chat_lobby", align = "cm", minw = wide + 0.24, padding = 0.06, r = 0.1,
-			colour = G.C.BLACK, emboss = 0.05 }, nodes = CH.panel_nodes(wide, 0.32, 4.2, false) },
+			colour = G.C.BLACK, emboss = 0.05 }, nodes = CH.panel_nodes(wide, 0.32, 3.6, false) },
 	} }
 end
 
@@ -153,7 +290,7 @@ function CH.input_args(hook)
 end
 
 function CH.typing()
-	return CH.input_args() ~= nil
+	return CH.focused and true or false
 end
 
 function CH.release_input()
@@ -172,8 +309,10 @@ end
 function CH.send()
 	local text = tostring(CH.draft.text or "")
 	CH.draft.text = ""
+	CH.draft.caret = 0
+	CH.scroll = 0
 	CH.blank_letters()
-	CH.release_input()
+	CH.paint_field()
 	-- A host echo can arrive inside Client.send. Rebuilding the box in that call
 	-- frees the text field while Enter is still using it, so the redraw waits a frame.
 	CH._sending = true
@@ -182,11 +321,13 @@ function CH.send()
 	end
 	CH._sending = false
 	CH._pending = true
+	CH.paint_slots()
 end
 
 function CH.toggle()
 	CH.open = not CH.open
-	if CH.open then CH.seen = #CH.current() end
+	CH.focused = false
+	if CH.open then CH.seen = #CH.current(); CH.scroll = 0 end
 	CH.refresh(true)
 end
 
@@ -200,25 +341,38 @@ function CH.unread()
 	return math.max(0, #CH.current() - (CH.seen or 0))
 end
 
---- In a match the panel is a drawer inside the screen. "bl" without "i" sits below the room.
---- Closed: only the Chat button. Open: the log, with the field, Send, and Close on one row.
+--- Closed: the Chat button, pinned to the top-right. Open: the log grows downward from that corner.
 function CH.definition()
 	local ui = CH.chrome()
 	local wide = CH.MATCH_W
 	if not CH.open then
 		local n = CH.unread()
 		local label = n > 0 and (ui.open .. " " .. n) or ui.open
-		return { n = G.UIT.ROOT, config = { align = "cm", colour = G.C.CLEAR, padding = 0 }, nodes = {
+		return { n = G.UIT.ROOT, config = { align = "tr", colour = G.C.CLEAR, padding = 0 }, nodes = {
 			UIBox_button({ id = "mp_chat_open", button = "mp_chat_toggle", label = { label },
 				minw = 1.8, minh = 0.42, scale = 0.32, colour = G.C.BLUE, col = true }),
 		} }
 	end
 	CH.seen = #CH.current()
-	return { n = G.UIT.ROOT, config = { align = "cm", colour = G.C.CLEAR, padding = 0.04, minw = wide }, nodes = {
-		{ n = G.UIT.R, config = { id = "mp_chat_drag", align = "cm", padding = 0.04, minh = 0.32, r = 0.06, colour = G.C.RED, hover = true }, nodes = {
+	local bar = CH.make_bar and CH.make_bar()
+	local log = { n = G.UIT.C, config = { align = "tm", minw = wide }, nodes = log_rows(wide - 0.4, 0.32) }
+	local row = { n = G.UIT.R, config = { align = "cm", padding = 0.02 }, nodes = { log } }
+	if bar then
+		row.nodes[#row.nodes + 1] = { n = G.UIT.C, config = { id = "mp_chat_scroll", align = "cm", minw = 0.32, minh = 1.8 }, nodes = {
+			{ n = G.UIT.O, config = { object = bar } },
+		} }
+	end
+	return { n = G.UIT.ROOT, config = { align = "tr", colour = G.C.CLEAR, padding = 0.04, minw = wide }, nodes = {
+		{ n = G.UIT.R, config = { align = "cr", padding = 0.04, minh = 0.36 }, nodes = {
 			{ n = G.UIT.T, config = { text = ui.title, scale = 0.3, colour = G.C.WHITE, shadow = true } },
+			{ n = G.UIT.C, config = { align = "cm", minw = 0.15 } },
+			UIBox_button({ id = "mp_chat_close", button = "mp_chat_close", label = { ui.close },
+				minw = 1.15, minh = 0.36, scale = 0.28, colour = G.C.RED, col = true }),
 		} },
-		{ n = G.UIT.C, config = { align = "cm", padding = 0.05, r = 0.1, colour = G.C.BLACK, emboss = 0.05, minw = wide + 0.16 }, nodes = CH.panel_nodes(wide, 0.32, 2.9, true) },
+		{ n = G.UIT.C, config = { align = "tm", padding = 0.05, r = 0.1, colour = G.C.BLACK, emboss = 0.05, minw = wide }, nodes = {
+			row,
+			input_row(wide, 0.32, CH.INPUT_W, false),
+		} },
 	} }
 end
 
@@ -246,7 +400,12 @@ end
 
 function CH.refresh(force)
 	local stage = G and G.STAGE
-	if CH._sending or CH.typing() then
+	if CH.focused and not force then
+		CH.paint_slots()
+		CH.paint_field()
+		return
+	end
+	if CH._sending then
 		CH._pending = true
 		return
 	end
@@ -274,7 +433,7 @@ function CH.refresh(force)
 		CH.box_stage = G.STAGE
 		CH.silence(CH.box)
 		CH.raise()
-		CH.apply_pos()
+		CH.pin()
 	end)
 end
 
@@ -414,21 +573,76 @@ function CH.clamp_pos()
 	if pos.y < miny then pos.y = miny elseif pos.y > maxy then pos.y = maxy end
 end
 
---- A dragged panel is no longer welded to the room corner.
-function CH.apply_pos()
-	local box, pos = CH.box, CH.pos
-	if not box or box.REMOVED or not pos or not box.T then return end
+--- The panel is welded to the top-right of the window, in room-local coordinates.
+function CH.pin()
+	local box = CH.box
+	if not box or box.REMOVED or not box.T then return end
 	if box.set_role then pcall(function() box:set_role({ role_type = "Major" }) end) end
 	if box.alignment then
 		box.alignment.type = "a"
 		box.alignment.prev_type = "a"
 		if box.alignment.type_list then box.alignment.type_list.a = true end
 	end
-	CH.clamp_pos()
-	box.T.x, box.T.y = pos.x, pos.y
-	if box.VT then box.VT.x, box.VT.y = pos.x, pos.y end
+	local left, top, right, bottom = CH.screen_span()
+	local w, h = box.T.w or CH.MATCH_W, box.T.h or 0.42
+	local x = right - w - 0.12
+	local y = top + 0.12
+	if x < left then x = left end
+	if y + h > bottom then y = math.max(top, bottom - h) end
+	box.T.x, box.T.y = x, y
+	if box.VT then box.VT.x, box.VT.y = x, y end
 	if box.velocity then box.velocity.x, box.velocity.y = 0, 0 end
-	CH.sync_visual(box)
+end
+
+function CH.make_bar()
+	if not (Moveable and love and love.graphics and love.graphics.rectangle) then return nil end
+	local obj = Moveable(0, 0, 0.28, 1.8)
+	function obj:draw()
+		if not (love and love.graphics and love.graphics.rectangle) then return end
+		pcall(function()
+			local g = love.graphics
+			local T = self.VT or self.T
+			if not T then return end
+			local lines = CH.wrapped(CH.MATCH_W, 0.32)
+			local top, thumb = CH.thumb_top(CH.scroll, #lines)
+			local ts = G.TILESIZE or 20
+			local sc = G.TILESCALE or 1
+			g.push()
+			g.scale(sc, sc)
+			g.translate(T.x * ts, T.y * ts)
+			g.setColor(0.15, 0.12, 0.1, 0.9)
+			g.rectangle("fill", 0, 0, T.w * ts, T.h * ts, 3, 3)
+			local th = math.max(0.18, thumb) * T.h * ts
+			local ty = top * (T.h * ts - th)
+			g.setColor(0.95, 0.78, 0.35, 1)
+			g.rectangle("fill", 1, ty, T.w * ts - 2, th, 3, 3)
+			g.setColor(1, 1, 1, 1)
+			g.pop()
+		end)
+	end
+	return obj
+end
+
+function CH.tick_scroll()
+	if not (CH.open and CH.box and love and love.mouse and love.mouse.isDown) then
+		CH.scroll_drag = nil
+		return
+	end
+	local down = love.mouse.isDown(1)
+	local x, y = CH.cursor()
+	if not down or not y then CH.scroll_drag = nil; return end
+	if not CH.scroll_drag then
+		if CH.over("mp_chat_scroll", x, y) then CH.scroll_drag = { y = y } end
+		return
+	end
+	local lines = CH.wrapped(CH.MATCH_W, 0.32)
+	local maxs = CH.scroll_max(#lines)
+	local dy = y - CH.scroll_drag.y
+	CH.scroll_drag.y = y
+	if maxs > 0 then
+		CH.scroll = math.max(0, math.min(maxs, (CH.scroll or 0) - dy / 1.8 * maxs))
+		CH.paint_slots(CH.MATCH_W, 0.32)
+	end
 end
 
 --- Children keep the position calculated before the drag. Snap T and VT to the box.
@@ -488,7 +702,7 @@ function CH.hook_cursor()
 		if not box or box.REMOVED or not cursor_trans then return end
 		if box.states and box.states.visible == false then return end
 		self.collision_list = self.collision_list or {}
-		local ids = { "mp_chat_open", "mp_chat_drag", "mp_chat_send", "mp_chat_close", "text_input" }
+		local ids = { "mp_chat_open", "mp_chat_send", "mp_chat_close", "mp_chat_field", "mp_chat_scroll" }
 		if box.get_UIE_by_ID then
 			for _, id in ipairs(ids) do
 				local el = box:get_UIE_by_ID(id)
@@ -507,40 +721,54 @@ function CH.expire_suppress()
 	end
 end
 
-function CH.tick_drag()
-	if CH.typing() or not (CH.box and CH.box.T and love and love.mouse and love.mouse.isDown) then
-		CH.expire_suppress()
-		return
+function CH.on_key(key)
+	if not CH.focused then return false end
+	local text = CH.draft.text or ""
+	local caret = tonumber(CH.draft.caret) or #text
+	if key == "return" or key == "kpenter" then CH.send(); return true end
+	if key == "escape" then CH.focused = false; CH.paint_field(); return true end
+	if key == "backspace" then CH.backspace(); return true end
+	if key == "delete" then
+		if caret < #text then
+			CH.draft.text = text:sub(1, caret) .. text:sub(caret + 2)
+			CH.paint_field()
+		end
+		return true
 	end
+	if key == "left" then CH.draft.caret = math.max(0, caret - 1); CH.paint_field(); return true end
+	if key == "right" then CH.draft.caret = math.min(#text, caret + 1); CH.paint_field(); return true end
+	if key == "v" and love and love.keyboard and love.keyboard.isDown and (love.keyboard.isDown("lctrl") or love.keyboard.isDown("rctrl") or love.keyboard.isDown("lgui")) then
+		local clip = ""
+		if love.system and love.system.getClipboardText then
+			local ok, s = pcall(love.system.getClipboardText)
+			if ok and type(s) == "string" then clip = s end
+		end
+		CH.insert_text(clip)
+		return true
+	end
+	return true
+end
+
+function CH.on_wheel(dy)
+	if not CH.over_panel() then return false end
+	local lines = CH.wrapped(CH.MATCH_W, 0.32)
+	local maxs = CH.scroll_max(#lines)
+	local step = (tonumber(dy) or 0) > 0 and 1 or -1
+	CH.scroll = math.max(0, math.min(maxs, (CH.scroll or 0) + step))
+	CH.paint_slots(CH.MATCH_W, 0.32)
+	return true
+end
+
+function CH.over_panel()
 	local x, y = CH.cursor()
-	if not x then
-		CH.expire_suppress()
-		return
+	local box = CH.box
+	if not x or not box or not box.T then return false end
+	local rx = (G and G.ROOM and G.ROOM.T and G.ROOM.T.x) or 0
+	local ry = (G and G.ROOM and G.ROOM.T and G.ROOM.T.y) or 0
+	local function inside(px, py)
+		return px >= box.T.x and px <= box.T.x + (box.T.w or 0) and py >= box.T.y and py <= box.T.y + (box.T.h or 0)
 	end
-	local down = love.mouse.isDown(1)
-	if down and not CH.drag then
-		local on_handle = CH.over("mp_chat_drag", x, y) or CH.over("mp_chat_open", x, y)
-		local on_control = CH.over("mp_chat_send", x, y) or CH.over("mp_chat_close", x, y) or CH.over("text_input", x, y)
-		if on_handle and not on_control then
-			CH.drag = { x = x, y = y, bx = CH.box.T.x, by = CH.box.T.y, moved = false }
-		end
-	elseif down and CH.drag then
-		local dx, dy = x - CH.drag.x, y - CH.drag.y
-		if math.abs(dx) + math.abs(dy) > 0.12 then CH.drag.moved = true end
-		if CH.drag.moved then
-			CH.pos = { x = CH.drag.bx + dx, y = CH.drag.by + dy }
-			CH.apply_pos()
-		end
-	elseif CH.drag then
-		-- The click handler already ran and saw drag.moved. Do not arm a second swallow.
-		if CH.drag.moved and not CH.drag.swallowed then
-			CH.suppress_click = (love.timer and love.timer.getTime and love.timer.getTime()) or true
-		end
-		CH.drag = nil
-	elseif not down then
-		CH.expire_suppress()
-	end
-	if CH.pos then CH.apply_pos() end
+	return inside(x, y) or inside(x - rx, y - ry)
 end
 
 function CH.sig()
@@ -554,13 +782,13 @@ function CH.register()
 	CH.registered = true
 	G = G or {}
 	G.FUNCS = G.FUNCS or {}
-	G.FUNCS.mp_chat_toggle = function()
-		-- The click is dispatched before this frame's drag tick, while the drag is still recorded.
-		if CH.drag and CH.drag.moved then CH.drag.swallowed = true; return end
-		if CH.suppress_click then CH.suppress_click = nil; return end
-		CH.toggle()
+	G.FUNCS.mp_chat_toggle = function() CH.toggle() end
+	G.FUNCS.mp_chat_focus = function()
+		CH.focused = true
+		CH.draft.caret = #(CH.draft.text or "")
+		CH.paint_field()
 	end
-	G.FUNCS.mp_chat_close = function() CH.close() end
+	G.FUNCS.mp_chat_close = function() CH.focused = false; CH.close() end
 	G.FUNCS.mp_chat_send = function() CH.send() end
 	if MP.register_action then
 		MP.register_action("chat", function(p) CH.apply(p) end)
@@ -569,6 +797,30 @@ function CH.register()
 		MP.register_action("chatReject", function() end)
 	end
 	CH.hook_cursor()
+	if love and love.textinput and not CH._text then
+		CH._text = true
+		local textin = love.textinput
+		function love.textinput(t)
+			if CH.focused then CH.insert_text(t); return end
+			if textin then return textin(t) end
+		end
+	end
+	if love and love.keypressed and not CH._keys then
+		CH._keys = true
+		local keyp = love.keypressed
+		function love.keypressed(key, scancode, rep)
+			if CH.on_key(key) then return end
+			if keyp then return keyp(key, scancode, rep) end
+		end
+	end
+	if love and love.wheelmoved and not CH._wheel then
+		CH._wheel = true
+		local wheel = love.wheelmoved
+		function love.wheelmoved(x, y)
+			if CH.on_wheel(y) then return end
+			if wheel then return wheel(x, y) end
+		end
+	end
 	if love and love.draw and not CH._draw then
 		CH._draw = true
 		local draw = love.draw
@@ -589,7 +841,8 @@ function CH.register()
 				end
 				CH.refresh()
 				CH.raise()
-				CH.tick_drag()
+				CH.pin()
+				CH.tick_scroll()
 			elseif CH.box then
 				CH.drop_box(CH.box)
 				CH.box, CH._sig = nil, nil
