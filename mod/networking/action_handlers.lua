@@ -460,6 +460,7 @@ local function action_start_game(p)
 	MP.SP.practice = false
 	MP.GHOST.clear()
 
+	if MP.GAMBEL and MP.GAMBEL.reset then MP.GAMBEL.reset() end
 	MP.reset_game_states()
 	if MP.REJOIN then MP.REJOIN.on_start(p) end
 	if MP.SPECTATE then MP.SPECTATE.on_match_start() end
@@ -859,6 +860,7 @@ local function action_rematch(p)
 	-- Same Steam lobby and reconnect token. The old run checkpoint must not come back.
 	if type(p.config) == "table" then adopt_match_settings(p.config) end
 	MP.GAME.match_finished = false
+	if MP.GAMBEL and MP.GAMBEL.reset then MP.GAMBEL.reset() end
 	if MP.REJOIN then MP.REJOIN.clear(); MP.REJOIN.reset() end
 	if MP.SPECTATE then MP.SPECTATE.on_match_end() end
 	MP.enemy_disconnect_countdown = nil
@@ -876,6 +878,7 @@ end
 
 local function action_stop_game()
 	clear_reconnect_info()
+	if MP.GAMBEL and MP.GAMBEL.reset then MP.GAMBEL.reset() end
 	if MP.REJOIN then MP.REJOIN.clear(); MP.REJOIN.reset() end
 	if MP.SPECTATE then MP.SPECTATE.on_match_end() end
 	MP.enemy_disconnect_countdown = nil
@@ -1665,10 +1668,14 @@ function MP.ACTIONS.play_hand(score, hands_left)
 		MP.GAME.highest_score = insane_int_score
 	end
 
+	local give, room = false, false
+	if MP.GAMBEL and MP.GAMBEL.joker_flags then give, room = MP.GAMBEL.joker_flags() end
 	Client.send({
 		action = "playHand",
 		score = fixed_score,
 		handsLeft = hands_left,
+		give = give and true or false,
+		room = room and true or false,
 	})
 end
 
@@ -1951,7 +1958,7 @@ local HANDLERS = {
 	endPvP = action_end_pvp,
 	playerInfo = action_player_info,
 	winGame = action_win_game,
-	gambelTable = function(p) if MP.GAMBEL and MP.GAMBEL.apply_table then MP.GAMBEL.apply_table(p.spin) end end,
+	gambelTable = function(p) if MP.GAMBEL and MP.GAMBEL.apply_table then MP.GAMBEL.apply_table(p.spin, p.ante) end end,
 	gambelTwist = function(p)
 		if not MP.GAMBEL then return end
 		MP.GAME.gambel_twist = p.twist

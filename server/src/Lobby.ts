@@ -4,7 +4,7 @@ import GameModes from "./GameMode.js";
 import { type KothEvent, type KothState, kothConfig, kothSnapshot, newKothState, resolveKoth } from "./koth.js";
 import { type Team, TEAM_LETTERS, assignTeams, resolveTeams, teamsPlan } from "./teams.js";
 import { type ChatLine, acceptChat, chatColors, displayName, pushChat } from "./chat.js";
-import { gambelResolve, gambelTwist } from "./gambel.js";
+import { gambelPayout, gambelResolve, gambelTwist } from "./gambel.js";
 import { loserCount, pvpLosers } from "./pvpRules.js";
 import type {
 	ActionLobbyInfo,
@@ -592,6 +592,18 @@ class Lobby {
 		this.teamLives = null;
 		this.elimOrder = [];
 		this.winnerId = null;
+		this.gambelTable = null;
+		this.gambelAnte = 0;
+		this.gambelTwist = null;
+		this.gambelBossAnte = 0;
+		this.gambelBossOpen = false;
+		this.gambelSabotaged = null;
+		this.gambelLives = 1;
+		for (const p of this.players) {
+			p.gambelBetAnte = -1;
+			p.jokerGive = false;
+			p.jokerRoom = false;
+		}
 		for (const t of this.graceTimers.values()) clearTimeout(t);
 		this.graceTimers.clear();
 		this.tcgBets.clear();
@@ -776,9 +788,22 @@ class Lobby {
 	};
 
 	/** Mark players with 0 lives eliminated; end the game if <=1 remains. */
-	/** One seated player in Gambel Time is playing The House, not a Nemesis. */
-	gambelSolo = (): boolean =>
-		this.gameMode === "gambel_time" && this.players.length + this.disconnectedSlots.length <= 1;
+	/** Highest ante among living seated players. Spectators and eliminated players do not move the table. */
+	matchAnte = (): number => {
+		let a = 1;
+		for (const p of this.players) {
+			if (!p.eliminated && !p.spectator) a = Math.max(a, Number(p.ante) || 1);
+		}
+		return a;
+	};
+
+	/** One seated player in Gambel Time is playing The House, not a Nemesis. Spectators do not count. */
+	gambelSolo = (): boolean => {
+		if (this.gameMode !== "gambel_time") return false;
+		const seated = this.players.filter((p) => !p.spectator).length
+			+ this.disconnectedSlots.filter((s) => !s.old.spectator).length;
+		return seated <= 1;
+	};
 
 	checkGameOver = (): boolean => {
 		if (!this.isInGame) return true;
@@ -959,10 +984,12 @@ class Lobby {
 		}
 		const timerLosers = alive.filter((p) => p.pvpTimerFailed);
 		let roundLosers: Client[] = [];
+		let gambelPay: ReturnType<typeof gambelPayout<InsaneInt>> = null;
 		if (timerLosers.length === 0 && this.gameMode === "gambel_time") {
 			const entries = alive.map((p) => ({ id: p.id, score: p.score, hands: p.handsPlayed, give: p.jokerGive, room: p.jokerRoom }));
 			const res = gambelResolve(entries, this.gambelTwist ?? undefined, (a, b) => a.greaterThan(b));
 			this.gambelLives = res.lives;
+			gambelPay = gambelPayout(entries, this.gambelTwist ?? undefined, res.losers, (a, b) => a.greaterThan(b));
 			roundLosers = res.hold ? [] : alive.filter((p) => res.losers.includes(p.id));
 		} else if (timerLosers.length === 0) {
 			// 2-5 players: the single lowest score; 6-8: the bottom two (pvpRules.ts)
@@ -984,6 +1011,23 @@ class Lobby {
 		const kothEv = this.kothResolve(alive, roundLosers);
 		if (kothEv?.shieldedId) roundLosers = roundLosers.filter((p) => p.id !== kothEv.shieldedId);
 		for (const p of roundLosers) p.loseLife("round", this.gameMode === "gambel_time" ? this.gambelLives : 1);
+		if (gambelPay) {
+			const pay = gambelPay;
+			for (const p of alive) {
+				let role: "take" | "give" | null = pay.to === p.id ? "take" : null;
+				if (pay.from.includes(p.id)) role = "give";
+				if (role) {
+					p.sendAction({
+						action: "gambelHit",
+						kind: pay.kind,
+						amount: pay.cash,
+						...(pay.payout != null ? { payout: pay.payout } : {}),
+						joker: pay.joker,
+						role,
+					});
+				}
+			}
+		}
 		this.penalizeDeathmatchAbsent(absent);
 
 		for (const p of alive) {

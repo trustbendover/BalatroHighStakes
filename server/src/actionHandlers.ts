@@ -315,10 +315,11 @@ const failRoundAction = (client: Client) => {
 	const lobby = client.lobby;
 	if (!lobby) return;
 	if (lobby.gambelSolo()) {
-		const cost = lobby.gambelBossOpen && lobby.gambelTwist === "double" ? 2 : 1;
+		const open = lobby.gambelBossOpen;
+		const cost = open && lobby.gambelTwist === "double" ? 2 : 1;
 		lobby.gambelBossOpen = false;
 		client.loseLife("round", cost);
-		if (lobby.gambelTwist === "house") client.sendAction({ action: "gambelHit", kind: "tax", amount: 5 });
+		if (open && lobby.gambelTwist === "house") client.sendAction({ action: "gambelHit", kind: "tax", amount: 5 });
 	} else if (lobby.options.death_on_round_loss) lobby.loseLifeFor(client, "round");
 	lobby.checkGameOver();
 };
@@ -330,10 +331,26 @@ const setAnteAction = (
 	client.ante = ante;
 	const lobby = client.lobby;
 	if (!lobby || lobby.gameMode !== "gambel_time") return;
-	if (lobby.host?.id === client.id && lobby.gambelAnte !== ante) {
-		lobby.gambelAnte = ante;
-		lobby.gambelTable = gambelTable(lobby.seed, ante);
-		lobby.broadcastAction({ action: "gambelTable", ante, spin: lobby.gambelTable });
+	if (lobby.isInGame) {
+		const matchAnte = lobby.matchAnte();
+		if (lobby.gambelAnte !== matchAnte || !lobby.gambelTable) {
+			lobby.gambelAnte = matchAnte;
+			lobby.gambelTable = gambelTable(lobby.seed, matchAnte);
+			lobby.broadcastAction({ action: "gambelTable", ante: matchAnte, spin: lobby.gambelTable });
+		}
+	}
+	if (lobby.gambelBossOpen) {
+		const boss = Number(lobby.gambelBossAnte) || 0;
+		const at = Number(client.ante) || 1;
+		const still = !lobby.gambelSolo() && lobby.alivePlayers().some((p) => !p.spectator && (Number(p.ante) || 1) <= boss);
+		if (boss > 0 && at > boss && !still) {
+			if (lobby.gambelSolo() && lobby.gambelTwist === "allin" && client.lives > 0) {
+				client.sendAction({ action: "gambelHit", kind: "allin", payout: 2, role: "take" });
+			}
+			lobby.gambelBossOpen = false;
+			lobby.gambelTwist = null;
+			lobby.gambelSabotaged = null;
+		}
 	}
 	if (lobby.gambelSolo() && lobby.isInGame && client.lives > 0 && ante > gambelAnte(lobby.options)) {
 		client.sendAction({ action: "winGame", reason: "house" });
@@ -352,7 +369,7 @@ const gambelBossAction = ({ ante }: { ante?: number }, client: Client) => {
 		client.sendAction({ action: "gambelTwist", twist: lobby.gambelTwist, ante: at });
 		return;
 	}
-	const n = lobby.gambelSolo() ? 1 : lobby.alivePlayers().length;
+	const n = lobby.gambelSolo() ? 1 : lobby.alivePlayers().filter((p) => !p.spectator).length;
 	lobby.gambelTwist = gambelTwist(lobby.seed, at, at, n);
 	lobby.gambelBossAnte = at;
 	lobby.gambelBossOpen = true;
@@ -364,7 +381,7 @@ const gambelBetAction = (
 	client: Client,
 ) => {
 	const lobby = client.lobby;
-	if (!lobby || lobby.gameMode !== "gambel_time" || client.eliminated) return;
+	if (!lobby || lobby.gameMode !== "gambel_time" || client.eliminated || client.spectator) return;
 	const at = Math.floor(Number(ante) || client.ante || 1);
 	if (client.gambelBetAnte === at) {
 		client.sendAction({ action: "gambelBetResult", ok: false, reason: "once" });

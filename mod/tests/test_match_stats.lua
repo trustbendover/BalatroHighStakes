@@ -355,6 +355,25 @@ do
 	G.OVERLAY_MENU = { id = "game_end" }
 	MS.open()
 	ok(not MS.last and warned and warned.major == G.OVERLAY_MENU, "mid-match the notice sits on the overlay, not behind it")
+	MS.last = nil
+	G.STATE = G.STATES.GAME_OVER
+	MP.GAME.lives = 0
+	MP.GAME.won = false
+	MP.GAME.match_finished = false
+	MP.LOBBY.player_list = { { id = "ada" }, { id = "bob" } }
+	MP.LOBBY.player_count = 2
+	warned = nil
+	MS.open()
+	ok(not MS.last and warned, "an eliminated player in a live multiplayer match does not see a solo 1st-place table")
+	MP.GAME.match_finished = true
+	MS.last = nil
+	MS.open()
+	ok(MS.last and MS.last.rows[1].place == 1, "once the match is finished the local table can fill in")
+	MP.LOBBY.player_list = nil
+	MP.LOBBY.player_count = nil
+	MP.GAME.match_finished = false
+	MP.GAME.lives = 3
+	G.STATE = G.STATES.MENU
 	ok(#v.awards == 7 and v.awards[1].label == "Most damage" and v.awards[1].name == "Bob" and v.awards[1].value == "100K"
 		and v.awards[1].colour == "red" and v.awards[1].you, "award lines: label, colour, name, value, you")
 	ok(v.awards[2].value == "54K (Flush)" and v.awards[5].value == "4/6" and v.awards[6].value == "$200", "award values")

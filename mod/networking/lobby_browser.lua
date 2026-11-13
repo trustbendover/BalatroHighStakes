@@ -23,7 +23,7 @@ M.NAME_MAX = 24
 
 M.MODES = {
 	attrition = true, duel = true, teams = true, showdown = true,
-	koth = true, deathmatch = true, survival = true,
+	koth = true, deathmatch = true, survival = true, gambel_time = true,
 }
 
 -- Cleared (empty value removes the key on Steam) whenever the lobby is not public.

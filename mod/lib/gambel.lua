@@ -4,6 +4,7 @@
 local R = MP.load_mp_file and MP.load_mp_file("networking/gambel_rules.lua") or nil
 if not R then return end
 MP.GAMBEL = R
+R.state = {}
 
 local function L(key, fallback)
 	local ok, s = pcall(localize, key)
@@ -16,33 +17,57 @@ function R.active()
 	return R.is_mode(mode)
 end
 
+--- A Gambel overlay is on screen. A notice must not pause the game or replace that menu.
+function R.notice_blocked()
+	if not (G and G.OVERLAY_MENU) then return false end
+	if R.double_view or R.wheel_view then return true end
+	return false
+end
+
+function R.show_notice(text)
+	pcall(function()
+		if not attention_text or text == "" then return end
+		attention_text({
+			scale = 0.8, text = text, hold = 2.4, align = "cm", offset = { x = 0, y = -2.6 },
+			major = (G and (G.ROOM_ATTACH or G.play)) or nil,
+		})
+	end)
+end
+
 function R.toast(text)
 	if type(text) ~= "string" or text == "" then return end
-	MP.GAME.gambel_notice = text
-	if MP.UI and MP.UI.UTILS and MP.UI.UTILS.overlay_message then
-		pcall(MP.UI.UTILS.overlay_message, text)
-	end
+	if MP.GAME then MP.GAME.gambel_notice = text end
+	if R.notice_blocked() then return end
+	R.show_notice(text)
 end
 
 local SPIN_NAME = {
-	double_interest = "Double Interest",
-	inflation = "Inflation",
-	golden_hour = "Golden Hour",
-	wild_odds = "Wild Odds",
-	high_roller = "High Roller",
-	slim_hands = "Slim Hands",
+	double_interest = { "k_gambel_spin_double_interest", "Double Interest" },
+	inflation = { "k_gambel_spin_inflation", "Inflation" },
+	golden_hour = { "k_gambel_spin_golden_hour", "Golden Hour" },
+	wild_odds = { "k_gambel_spin_wild_odds", "Wild Odds" },
+	high_roller = { "k_gambel_spin_high_roller", "High Roller" },
+	slim_hands = { "k_gambel_spin_slim_hands", "Slim Hands" },
 }
 local TWIST_NAME = {
-	reverse = "Reverse Stakes",
-	double = "Double Trouble",
-	pot = "Joker Pot",
-	house = "House Twist",
-	sabotage = "Hot Potato",
-	allin = "All-In",
+	reverse = { "k_gambel_twist_reverse", "Reverse Stakes" },
+	double = { "k_gambel_twist_double", "Double Trouble" },
+	pot = { "k_gambel_twist_pot", "Joker Pot" },
+	house = { "k_gambel_twist_house", "House Twist" },
+	sabotage = { "k_gambel_twist_sabotage", "Hot Potato" },
+	allin = { "k_gambel_twist_allin", "All-In" },
 }
 
-function R.spin_name(id) return SPIN_NAME[id] or tostring(id or "") end
-function R.twist_name(id) return TWIST_NAME[id] or tostring(id or "") end
+function R.spin_name(id)
+	local row = SPIN_NAME[id]
+	if not row then return tostring(id or "") end
+	return L(row[1], row[2])
+end
+function R.twist_name(id)
+	local row = TWIST_NAME[id]
+	if not row then return tostring(id or "") end
+	return L(row[1], row[2])
+end
 
 local function dollars()
 	if G and G.GAME and G.GAME.dollars ~= nil and to_big then
@@ -59,39 +84,164 @@ function R.apply_delta(delta)
 	pcall(ease_dollars, delta)
 end
 
-function R.apply_table(spin)
+--- Hands and discards that survive vanilla new_round live on round_resets, not the current counters.
+local function bump_rounds(hands, discards)
+	local game = G and G.GAME
+	local rr = game and game.round_resets
+	local cr = game and game.current_round
+	local applied_h, applied_d = 0, 0
+	if hands ~= 0 and rr and type(rr.hands) == "number" then
+		local next_h = rr.hands + hands
+		if next_h >= 1 then
+			rr.hands = next_h
+			if cr and type(cr.hands_left) == "number" then cr.hands_left = math.max(0, cr.hands_left + hands) end
+			applied_h = hands
+		end
+	end
+	if discards ~= 0 and rr and type(rr.discards) == "number" then
+		local next_d = math.max(0, rr.discards + discards)
+		applied_d = next_d - rr.discards
+		rr.discards = next_d
+		if applied_d ~= 0 and cr and type(cr.discards_left) == "number" then
+			cr.discards_left = math.max(0, cr.discards_left + applied_d)
+		end
+	end
+	return applied_h, applied_d
+end
+
+function R.undo_table()
+	local game = MP and MP.GAME
+	local delta = game and game.gambel_spin_delta
+	if game then game.gambel_spin_delta = nil end
+	if not delta or not (G and G.GAME) then return end
+	if delta.interest_amount ~= nil and type(G.GAME.interest_amount) == "number" then
+		G.GAME.interest_amount = delta.interest_amount
+	end
+	if delta.interest_cap ~= nil and type(G.GAME.interest_cap) == "number" then
+		G.GAME.interest_cap = delta.interest_cap
+	end
+	if delta.inflation and type(G.GAME.inflation) == "number" then
+		G.GAME.inflation = G.GAME.inflation - delta.inflation
+	end
+	if delta.hands or delta.discards then
+		bump_rounds(-(delta.hands or 0), -(delta.discards or 0))
+	end
+end
+
+function R.sync_state()
+	local g = MP and MP.GAME or {}
+	R.state = {
+		table_spin = g.gambel_table,
+		ante = g.gambel_applied_ante,
+		twist = g.gambel_twist,
+		wild = g.gambel_wild and true or false,
+		gold_paid = g.gambel_gold_paid and true or false,
+		bet_sent = g.gambel_bet_sent and true or false,
+		bet_for = g.gambel_bet_for,
+		discard_pending = g.gambel_discard_pending and true or false,
+		discard_restore = g.gambel_discard_restore,
+	}
+end
+
+--- Put a temporary -1 Discard back, then forget it. Used when the penalty round ends and when a match resets.
+function R.clear_discard_penalty()
+	if not (MP and MP.GAME) then return end
+	local n = tonumber(MP.GAME.gambel_discard_restore) or 0
+	if n > 0 and (MP.GAME.gambel_discard_pending or MP.GAME.gambel_discard_armed)
+		and G and G.GAME and G.GAME.round_resets and type(G.GAME.round_resets.discards) == "number" then
+		G.GAME.round_resets.discards = G.GAME.round_resets.discards + n
+	end
+	MP.GAME.gambel_discard_pending = false
+	MP.GAME.gambel_discard_restore = nil
+	MP.GAME.gambel_discard_armed = false
+end
+
+function R.reset()
+	if R.undo_table then R.undo_table() end
+	if R.clear_discard_penalty then R.clear_discard_penalty() end
+	if MP and MP.GAME then
+		MP.GAME.gambel_table = nil
+		MP.GAME.gambel_wild = false
+		MP.GAME.gambel_gold_paid = false
+		MP.GAME.gambel_bet_sent = false
+		MP.GAME.gambel_bet_for = nil
+		MP.GAME.gambel_phase_mark = nil
+		MP.GAME.gambel_twist = nil
+		MP.GAME.gambel_notice = nil
+		MP.GAME.gambel_applied_spin = nil
+		MP.GAME.gambel_applied_ante = nil
+		MP.GAME.gambel_spin_delta = nil
+	end
+	R.double_view = nil
+	R.wheel_view = nil
+	R.state = {}
+end
+
+function R.apply_table(spin, ante)
 	if not spin or not (G and G.GAME) then return end
+	MP.GAME = MP.GAME or {}
+	ante = tonumber(ante) or tonumber(G.GAME.round_resets and G.GAME.round_resets.ante)
+	if MP.GAME.gambel_applied_spin == spin and MP.GAME.gambel_applied_ante == ante then
+		R.sync_state()
+		return
+	end
+	-- The same rule on the next ante keeps its numbers. Re-applying would stack interest, inflation, and hands.
+	if MP.GAME.gambel_applied_spin == spin then
+		MP.GAME.gambel_applied_ante = ante
+		MP.GAME.gambel_table = spin
+		MP.GAME.gambel_gold_paid = false
+		R.sync_state()
+		R.toast(R.spin_name(spin))
+		return
+	end
+	R.undo_table()
 	MP.GAME.gambel_table = spin
 	MP.GAME.gambel_wild = spin == "wild_odds"
 	MP.GAME.gambel_gold_paid = false
-	MP.GAME.gambel_bet_sent = false
-	MP.GAME.gambel_bet_for = nil
+	MP.GAME.gambel_applied_spin = spin
+	MP.GAME.gambel_applied_ante = ante
+	local delta = {}
 	if spin == "double_interest" then
-		if type(G.GAME.interest_amount) == "number" then G.GAME.interest_amount = G.GAME.interest_amount * 2 end
-		if type(G.GAME.interest_cap) == "number" then G.GAME.interest_cap = G.GAME.interest_cap * 2 end
+		if type(G.GAME.interest_amount) == "number" then
+			delta.interest_amount = G.GAME.interest_amount
+			G.GAME.interest_amount = G.GAME.interest_amount * 2
+		end
+		if type(G.GAME.interest_cap) == "number" then
+			delta.interest_cap = G.GAME.interest_cap
+			G.GAME.interest_cap = G.GAME.interest_cap * 2
+		end
 	elseif spin == "inflation" and type(G.GAME.inflation) == "number" then
+		delta.inflation = 1
 		G.GAME.inflation = G.GAME.inflation + 1
 	elseif spin == "high_roller" then
-		if ease_hands then pcall(ease_hands, 1) end
-		if ease_discard then pcall(ease_discard, 1) end
+		local hands, discards = bump_rounds(1, 1)
+		delta.hands, delta.discards = hands, discards
 	elseif spin == "slim_hands" then
-		if G.hand and G.hand.config and type(G.hand.config.card_limit) == "number" then
-			G.hand.config.card_limit = math.max(1, G.hand.config.card_limit - 1)
-		end
+		local hands = bump_rounds(-1, 0)
+		delta.hands = hands
 		R.apply_delta(5)
 	end
+	MP.GAME.gambel_spin_delta = delta
+	R.sync_state()
 	R.toast(R.spin_name(spin))
 end
 
 function R.on_new_round()
-	if MP.GAME and MP.GAME.gambel_discard_pending and G and G.GAME and G.GAME.current_round and G.GAME.round_resets then
-		local cap = G.GAME.round_resets.discards
-		if type(cap) == "number" and type(G.GAME.current_round.discards_left) == "number" and G.GAME.current_round.discards_left > cap then
-			G.GAME.current_round.discards_left = cap
+	if MP.GAME and G and G.GAME and G.GAME.round_resets then
+		if MP.GAME.gambel_discard_armed then
+			local n = tonumber(MP.GAME.gambel_discard_restore) or 1
+			if type(G.GAME.round_resets.discards) == "number" then
+				G.GAME.round_resets.discards = G.GAME.round_resets.discards + n
+			end
+			MP.GAME.gambel_discard_pending = false
+			MP.GAME.gambel_discard_restore = nil
+			MP.GAME.gambel_discard_armed = false
+		elseif MP.GAME.gambel_discard_pending then
+			-- This round is the one that plays with one fewer discard. The round after gives it back.
+			MP.GAME.gambel_discard_armed = true
 		end
-		MP.GAME.gambel_discard_pending = false
 	end
-	if not R.active() or MP.GAME.gambel_table ~= "golden_hour" or MP.GAME.gambel_gold_paid then return end
+	if not (MP.GAME and R.active()) or MP.GAME.gambel_table ~= "golden_hour" or MP.GAME.gambel_gold_paid then return end
 	if not (G and G.GAME and G.GAME.blind and G.GAME.chips and to_big) then return end
 	local ok, cleared = pcall(function()
 		return to_big(G.GAME.chips) >= to_big(G.GAME.blind.chips) and to_big(G.GAME.blind.chips) > to_big(0)
@@ -118,7 +268,7 @@ function R.on_blind(key)
 	if boss and MP.ACTIONS and MP.ACTIONS.gambel_boss then MP.ACTIONS.gambel_boss() end
 end
 
-local function joker_flags()
+function R.joker_flags()
 	local give, room = false, false
 	if G and G.jokers and G.jokers.cards and G.jokers.config then
 		local limit = tonumber(G.jokers.config.card_limit) or #G.jokers.cards
@@ -136,7 +286,7 @@ function R.bet(kind, choice)
 	local money = dollars()
 	if kind == "double" and money < 2 then return false end
 	if kind == "double" and choice ~= "red" and choice ~= "black" then choice = nil end
-	local give, room = joker_flags()
+	local give, room = R.joker_flags()
 	local ante = G and G.GAME and G.GAME.round_resets and G.GAME.round_resets.ante or 1
 	local online = MP.STEAM_P2P and MP.LOBBY and MP.LOBBY.code and Client and Client.send
 	if online then
@@ -160,9 +310,9 @@ end
 
 local WHEEL_TAGS = { "tag_uncommon", "tag_holo", "tag_foil", "tag_investment", "tag_charm", "tag_meteor", "tag_standard", "tag_economy", "tag_ethereal", "tag_juggle" }
 local WHEEL_EDITIONS = {
-	{ foil = true, label = "Foil" },
-	{ holo = true, label = "Holographic" },
-	{ polychrome = true, label = "Polychrome" },
+	{ foil = true, key = "k_gambel_foil", label = "Foil" },
+	{ holo = true, key = "k_gambel_holo", label = "Holographic" },
+	{ polychrome = true, key = "k_gambel_polychrome", label = "Polychrome" },
 }
 
 local function plain_joker()
@@ -182,10 +332,16 @@ local function mortal_joker()
 end
 
 function R.arm_discard()
+	MP.GAME = MP.GAME or {}
+	if MP.GAME.gambel_discard_pending or MP.GAME.gambel_discard_armed then return end
 	MP.GAME.gambel_discard_pending = true
+	MP.GAME.gambel_discard_restore = 0
 	if G and G.GAME and G.GAME.round_resets and type(G.GAME.round_resets.discards) == "number" then
-		G.GAME.round_resets.discards = math.max(0, G.GAME.round_resets.discards - 1)
+		local before = G.GAME.round_resets.discards
+		G.GAME.round_resets.discards = math.max(0, before - 1)
+		MP.GAME.gambel_discard_restore = before - G.GAME.round_resets.discards
 	end
+	R.sync_state()
 end
 
 function R.play_wheel(msg, quiet)
@@ -218,7 +374,7 @@ function R.play_wheel(msg, quiet)
 				G.CONTROLLER.locks.edition = false
 				card:set_edition(edition, true, true)
 			end)
-			return say(pick.label)
+			return say(L(pick.key, pick.label))
 		end
 		R.apply_delta(8)
 		return say("+$8")
@@ -279,7 +435,14 @@ end
 function R.apply_hit(msg)
 	if not msg or not G then return end
 	if msg.kind == "tax" then R.apply_delta(-(tonumber(msg.amount) or 4)) end
-	if msg.kind == "allin" and G.GAME and G.GAME.blind and type(G.GAME.blind.dollars) == "number" then
+	-- Joker Pot moves cash only when a card did not change hands. Losers pay, the winner is paid.
+	if msg.kind == "pot" and not msg.joker then
+		local cash = tonumber(msg.amount) or 0
+		if msg.role == "give" then R.apply_delta(-cash)
+		elseif msg.role == "take" then R.apply_delta(cash) end
+	end
+	-- All-In doubles the boss reward for the winner only. A loss or a tie pays nothing.
+	if msg.kind == "allin" and msg.role == "take" and G.GAME and G.GAME.blind and type(G.GAME.blind.dollars) == "number" then
 		G.GAME.blind.dollars = G.GAME.blind.dollars * (tonumber(msg.payout) or 2)
 	end
 	if msg.joker and G.jokers and G.jokers.cards then
@@ -1035,9 +1198,19 @@ function R.arm_wheel(msg, label)
 		return
 	end
 	view.index = R.wheel_index(msg)
-	view.target_angle = R.wheel_rotation(view.index, 4)
+	local current = tonumber(view.angle) or 0
+	local dest = R.wheel_rotation(view.index, 4)
+	-- The wheel is already turning while the host answers. Keep that angle; do not snap it back to 0.
+	if view.spinning and current ~= 0 then
+		local land = R.wheel_rotation(view.index, 0)
+		dest = land - 4 * 2 * math.pi
+		while dest > current - (2 * math.pi) do dest = dest - 2 * math.pi end
+		view.start_angle = current
+	else
+		view.start_angle = 0
+	end
+	view.target_angle = dest
 	view.pending_label = label
-	view.angle = 0
 	view.t = 0
 	view.duration = 2.4
 	view.spinning = true
@@ -1072,7 +1245,8 @@ function R.tick_wheel(dt)
 	if not view.spinning or view.landed or not view.target_angle then return end
 	local step = (tonumber(dt) or 0.016) / (view.duration or 2.4)
 	view.t = math.min(1, (view.t or 0) + step)
-	view.angle = view.target_angle * R.wheel_ease(view.t)
+	local from = view.start_angle or 0
+	view.angle = from + (view.target_angle - from) * R.wheel_ease(view.t)
 	if view.t >= 1 then
 		view.angle = view.target_angle
 		view.landed = true
@@ -1120,13 +1294,6 @@ function R.flash(text)
 	text = tostring(text or "")
 	if MP.GAME then MP.GAME.gambel_shop_note = text end
 	R.toast(text)
-	if attention_text and text ~= "" then
-		pcall(attention_text, {
-			text = text, scale = 0.9, hold = 1.3,
-			major = (G and (G.shop or G.play)) or nil,
-			align = "cm", backdrop_colour = G and G.C and G.C.GOLD or nil,
-		})
-	end
 end
 
 local function shop_button(id, func, label, colour, enabled)

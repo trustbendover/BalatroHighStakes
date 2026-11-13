@@ -89,4 +89,36 @@ do
 	ok(gone and gone.kind == "gone" and cy.lives == cy_lives, "when the grace ends the status is gone and the others keep their lives")
 end
 
+G = { FUNCS = {}, UIT = { R = 1, C = 2, T = 3 }, GAME = { skips = 0 }, SETTINGS = {},
+	C = { JOKER_GREY = {}, MULT = {}, PURPLE = {}, L_BLACK = {}, UI = { TEXT_LIGHT = {} } } }
+function darken(c) return c end
+function localize() return "ERROR" end
+MP.UI = { Disableable_Toggle = function() end }
+MP.THREEP = {
+	lobby_player = function() return { username = "Bob" } end,
+	seat_index = function() return 2 end,
+	seat_count = function() return 2 end,
+}
+MP.INSANE_INT = { to_string = function() return "0" end }
+MP.LOBBY = {
+	player_list = { { id = "a" }, { id = "b", username = "Bob" } },
+	my_id = "a", is_host = true, config = {},
+}
+MP.GAME = {
+	enemy = { lives = 4, highest_score = 0, skips = 0 },
+	enemies = { b = { away = true, lives = 3, real_score = 0, skips = 1 } },
+	lives = 4, highest_score = 0,
+}
+MP.PRESENCE = P
+dofile("ui/game/lobby_info.lua")
+local function row_text(node, acc)
+	acc = acc or {}
+	if type(node) ~= "table" then return acc end
+	if node.config and type(node.config.text) == "string" then acc[#acc + 1] = node.config.text end
+	if node.nodes then for _, child in ipairs(node.nodes) do row_text(child, acc) end end
+	return acc
+end
+local row = table.concat(row_text(MP.UI.create_UIBox_player_row("guest")), "|")
+ok(row:find("Waiting to rejoin", 1, true), "the player row reads the live away state, not a nil global")
+
 print("PASS: presence")

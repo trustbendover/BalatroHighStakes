@@ -198,6 +198,10 @@ export type ActionPlayHand = {
 	score: string
 	handsLeft: number
 	hasSpeedrun: boolean
+	/** Joker Pot: this player can give a non-eternal joker. */
+	give?: boolean
+	/** Joker Pot: this player has an empty joker slot. */
+	room?: boolean
 }
 export type ActionGameInfoRequest = { action: 'gameInfo' }
 export type ActionPlayerInfoRequest = { action: 'playerInfo' }

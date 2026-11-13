@@ -63,6 +63,11 @@ do
 end
 local teams = Browser.accept(sample({ mp3p_mode = "teams", mp3p_fmt = "2", mp3p_max = "4" }), { version = ver })
 ok(teams and teams.mode_key == "k_teams2", "2v2 uses the teams format name")
+local gpub = Browser.publish({ gameMode = "gambel_time", isInGame = false, players = { { username = "Ada" } }, options = {} },
+	{ public = true, version = ver, max_players = function() return 8 end })
+ok(gpub.mp3p_discover == "1" and gpub.mp3p_mode == "gambel_time", "a public Gambel Time lobby is discoverable")
+local grow = Browser.accept(sample({ mp3p_mode = "gambel_time" }), { version = ver })
+ok(grow and grow.mode == "gambel_time" and grow.mode_key == "k_gambel_time", "the browser keeps a Gambel Time row")
 local wait = Browser.accept(sample(), { version = ver })
 ok(Browser.action(wait) == "join", "a waiting lobby with room can be joined")
 local full = Browser.accept(sample({ mp3p_players = "8" }), { version = ver })

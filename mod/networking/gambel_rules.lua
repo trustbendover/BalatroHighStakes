@@ -31,14 +31,32 @@ function G.is_mode(mode)
 	return mode == G.KEY or mode == "gamemode_mp_" .. G.KEY
 end
 
+local function u32(n)
+	n = n % 4294967296
+	if n < 0 then n = n + 4294967296 end
+	return n
+end
+
+--- Low 32 bits of a product. Lua numbers are doubles, so this is split into 16-bit halves.
+--- A raw `h * 16777619` passes 2^53 and drops the low bits, so G.roll must use this.
+local function mul32(a, b)
+	a, b = u32(a), u32(b)
+	local a0, b0 = a % 65536, b % 65536
+	local a1 = (a - a0) / 65536
+	local b1 = (b - b0) / 65536
+	local mid = (a1 * b0 + a0 * b1) % 65536
+	return u32(a0 * b0 + mid * 65536)
+end
+
 --- Stable 1-based index in 1..n from a seed, an ante, and a salt.
+--- Same bits as Math.imul on the reference server: multiply in 32 bits, then add the byte.
 function G.roll(seed, ante, salt, n)
 	n = math.floor(tonumber(n) or 1)
 	if n < 1 then return 1 end
 	local s = tostring(seed or "house") .. ":" .. tostring(math.floor(tonumber(ante) or 1)) .. ":" .. tostring(salt or "")
 	local h = 2166136261
 	for i = 1, #s do
-		h = (h * 16777619 + s:byte(i)) % 4294967296
+		h = (mul32(h, 16777619) + s:byte(i)) % 4294967296
 	end
 	return (h % n) + 1
 end
@@ -199,22 +217,6 @@ function G.stake(money)
 	money = G.money(money)
 	if money < 2 then return 0 end
 	return math.min(G.STAKE_CAP, math.floor(money / 2))
-end
-
-local function u32(n)
-	n = n % 4294967296
-	if n < 0 then n = n + 4294967296 end
-	return n
-end
-
---- Low 32 bits of a product. Lua numbers are doubles, so this is split into 16-bit halves.
-local function mul32(a, b)
-	a, b = u32(a), u32(b)
-	local a0, b0 = a % 65536, b % 65536
-	local a1 = (a - a0) / 65536
-	local b1 = (b - b0) / 65536
-	local mid = (a1 * b0 + a0 * b1) % 65536
-	return u32(a0 * b0 + mid * 65536)
 end
 
 local function bxor(a, b)

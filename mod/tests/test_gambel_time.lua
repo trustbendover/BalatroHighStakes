@@ -120,6 +120,37 @@ ok(R.wheel_index({ id = "cash", amount = 20 }) == 2 and R.wheel_index({ id = "ta
 ok(R.wheel_ease(0) == 0 and R.wheel_ease(1) == 1 and R.wheel_ease(0.5) > 0.7, "the spin starts fast and eases out")
 ok(R.keep_bet(1, 1, true) == true and R.keep_bet(1, 2, true) == false and R.keep_bet(nil, 1, false) == false, "a shop bet lasts for that ante only")
 
+-- Same 32-bit multiply as Math.imul. A double multiply repeats the same wedge most of the time.
+local vectors = {
+	{ 1, 1, 7, 4 },
+	{ 2, 2, 7, 2 },
+	{ 3, 3, 7, 5 },
+	{ 7, 1, 6, 5 },
+	{ 12, 1, 5, 1 },
+}
+for _, v in ipairs(vectors) do
+	ok(R.roll("house", v[1], "table", 6) == v[2], "table roll ante " .. v[1] .. " matches the reference server")
+	ok(R.roll("house", v[1], "wheel:p", 7) == v[3], "wheel roll ante " .. v[1] .. " matches the reference server")
+	ok(R.roll("seed", v[1], "twist:1", 5) == v[4], "twist roll ante " .. v[1] .. " matches the reference server")
+end
+local prev, repeats, seen = nil, 0, {}
+for ante = 1, 240 do
+	local spin_i = R.roll("house", ante, "table", 6)
+	seen[spin_i] = true
+	if spin_i == prev then repeats = repeats + 1 end
+	prev = spin_i
+end
+local kinds = 0
+for _ in pairs(seen) do kinds = kinds + 1 end
+ok(kinds == 6 and repeats < 40, "table spins cover all six and do not stick (" .. repeats .. " repeats)")
+local wprev, wrep = nil, 0
+for ante = 1, 200 do
+	local w = R.roll("house", ante, "wheel:ada", 7)
+	if w == wprev then wrep = wrep + 1 end
+	wprev = w
+end
+ok(wrep < 40, "wheel prizes do not stick (" .. wrep .. " repeats)")
+
 local spin = R.table_spin("house", 2)
 local found = false
 for _, id in ipairs(R.SPINS) do if id == spin then found = true end end
@@ -261,6 +292,10 @@ ok(en.k_gambel_lose == "LOSE -$" and nl.k_gambel_lose == "VERLIES -$", "a loss b
 ok(en.k_gambel_half == "BET HALF YOUR CASH - WIN IT OR LOSE IT" and nl.k_gambel_half == "ZET DE HELFT VAN JE GELD IN - WIN HET OF VERLIES HET", "the tagline sits under the bar")
 ok(en.k_gambel_wheel_tax == "-$4 Tax" and nl.k_gambel_wheel_tax == "-$4 Belasting", "the tax wedge is named")
 ok(en.k_gambel_wheel_discard == "-1 Discard" and nl.k_gambel_wheel_discard == "-1 Weggooi", "the discard wedge is named")
+ok(en.k_gambel_spin_double_interest == "Double Interest" and nl.k_gambel_spin_double_interest == "Dubbele Rente", "spin names are localized")
+ok(en.k_gambel_spin_slim_hands == "Slim Hands" and nl.k_gambel_spin_slim_hands == "Krappe Handen", "slim hands has a Dutch name")
+ok(en.k_gambel_twist_pot == "Joker Pot" and nl.k_gambel_twist_sabotage == "Hete Aardappel" and nl.k_gambel_twist_allin == "All-in", "twist names are localized")
+ok(en.k_gambel_foil == "Foil" and nl.k_gambel_foil == "Folie" and nl.k_gambel_holo == "Holografisch" and nl.k_gambel_polychrome == "Polychroom", "edition names are localized")
 local shop = io.open("lib/gambel.lua"):read("*a")
 ok(shop:find("G.UIDEF.shop", 1, true) and shop:find("n = G.UIT.R", 1, true) and shop:find("mp_gambel_double", 1, true) and shop:find("mp_gambel_wheel", 1, true), "both shop buttons are a row inside the shop")
 ok(shop:find("set_edition", 1, true) and shop:find("add_tag", 1, true) and shop:find("set_perishable", 1, true) and shop:find("arm_discard", 1, true), "wheel prizes change the run, they are not only a toast")
@@ -388,5 +423,167 @@ R.double_view.outcome = "house"
 R.double_view.result = ""
 ok(table.concat(collect_text(R.double_definition()), "|"):find("The House holds", 1, true), "a house timeout stays a neutral bar")
 G = saved_g
+
+-- Table spins undo the previous rule, survive new_round via round_resets, and do not re-open the shop bet.
+G = { GAME = {
+	interest_amount = 1, interest_cap = 5, inflation = 0, dollars = 40,
+	round_resets = { hands = 4, discards = 3, ante = 1 },
+	current_round = { hands_left = 4, discards_left = 3 },
+	blind = { dollars = 5 },
+} }
+G.C = G.C or {}
+MP.GAME = {}
+MP.UI = { UTILS = {} }
+local blocked = false
+MP.UI.UTILS.overlay_message = function() blocked = true; G.SETTINGS = { paused = true } end
+G.SETTINGS = {}
+local noticed
+_G.attention_text = function(t) noticed = t end
+_G.ease_dollars = function(d) G.GAME.dollars = (tonumber(G.GAME.dollars) or 0) + d end
+R.apply_table("double_interest", 1)
+ok(G.GAME.interest_amount == 2 and G.GAME.interest_cap == 10 and noticed and noticed.text == "Double Interest", "double interest applies once and the notice does not open a modal")
+ok(not blocked and not G.SETTINGS.paused, "a gambel notice does not pause the game")
+noticed = nil
+R.apply_table("double_interest", 1)
+ok(G.GAME.interest_amount == 2 and noticed == nil, "the same ante and spin, including a rejoin sync, does not stack")
+R.apply_table("inflation", 2)
+ok(G.GAME.interest_amount == 1 and G.GAME.interest_cap == 5 and G.GAME.inflation == 1, "the previous spin is undone before the next one")
+MP.GAME.gambel_bet_sent = true
+MP.GAME.gambel_bet_for = 2
+R.apply_table("high_roller", 3)
+ok(MP.GAME.gambel_bet_sent and MP.GAME.gambel_bet_for == 2, "a table spin does not reset the shop bet")
+ok(G.GAME.inflation == 0 and G.GAME.round_resets.hands == 5 and G.GAME.round_resets.discards == 4, "high roller stays on the round resets")
+ok(G.GAME.current_round.hands_left == 5 and G.GAME.current_round.discards_left == 4, "high roller also reaches the round in progress")
+R.apply_table("high_roller", 4)
+ok(G.GAME.round_resets.hands == 5 and G.GAME.round_resets.discards == 4, "the same high roller on the next ante does not stack")
+R.apply_table("slim_hands", 5)
+ok(G.GAME.round_resets.hands == 3 and G.GAME.round_resets.discards == 3 and G.GAME.dollars == 45, "slim hands replaces high roller and pays $5 once")
+R.arm_discard()
+ok(G.GAME.round_resets.discards == 2 and MP.GAME.gambel_discard_pending and MP.GAME.gambel_discard_restore == 1, "the wheel takes one discard from the persistent cap")
+R.on_new_round()
+ok(G.GAME.round_resets.discards == 2 and MP.GAME.gambel_discard_armed, "the penalty round keeps the missing discard")
+R.on_new_round()
+ok(G.GAME.round_resets.discards == 3 and not MP.GAME.gambel_discard_pending and not MP.GAME.gambel_discard_armed, "the following round gives the discard back")
+R.apply_hit({ kind = "pot", amount = 8, role = "give", joker = false })
+ok(G.GAME.dollars == 37, "joker pot cash comes out of the loser when no card moves")
+R.apply_hit({ kind = "pot", amount = 8, role = "take", joker = false })
+ok(G.GAME.dollars == 45, "joker pot cash is paid to the winner")
+R.apply_hit({ kind = "allin", payout = 2, role = "give" })
+ok(G.GAME.blind.dollars == 5, "all-in does not pay the loser")
+R.apply_hit({ kind = "allin", payout = 2, role = "take" })
+ok(G.GAME.blind.dollars == 10, "all-in doubles the boss reward for the winner")
+G.OVERLAY_MENU = { id = "wheel" }
+R.wheel_view = { spinning = true }
+noticed = nil
+blocked = false
+R.toast("Spin")
+ok(MP.GAME.gambel_notice == "Spin" and noticed == nil and not blocked, "a toast waits while the wheel overlay is open")
+R.wheel_view = nil
+G.OVERLAY_MENU = nil
+love = { graphics = { polygon = function() end } }
+R.wheel_view = { spinning = true, angle = -3.5 }
+R.arm_wheel({ id = "tag" }, "Tag")
+ok(R.wheel_view.start_angle == -3.5 and R.wheel_view.angle == -3.5, "the wheel does not snap back to 0 when the result arrives")
+R.tick_wheel(0.05)
+ok(R.wheel_view.angle < -3.5, "the spin continues forward from where it was")
+love = nil
+R.wheel_view = nil
+MP.GAME.gambel_twist = "pot"
+R.sync_state()
+ok(R.state.twist == "pot" and R.state.bet_sent == true, "client gambel state is tracked for the match")
+R.reset()
+ok(not R.state.table_spin and not R.state.twist and not MP.GAME.gambel_bet_sent and not MP.GAME.gambel_twist, "a new match clears the client gambel state")
+ok(G.GAME.inflation == 0 and G.GAME.round_resets.hands == 4, "reset undoes the table spin on the run")
+
+local captured
+MP.Gamemode = function(def) captured = def; return { inject = function() end } end
+dofile("gamemodes/gambel_time.lua")
+MP.LOBBY = { player_count = 2, player_list = { { id = "a" }, { id = "s", spectator = true } } }
+local _, _, boss = captured:get_blinds_by_ante(1)
+ok(boss == nil, "a spectator does not turn a solo run into a Nemesis")
+MP.LOBBY.player_list = { { id = "a" }, { id = "b" } }
+_, _, boss = captured:get_blinds_by_ante(1)
+ok(boss == "bl_mp_nemesis", "two seated players still fight the Nemesis")
+
+-- Host: table spin follows the highest living ante, boss twists end, spectators cannot bet.
+S = server()
+local spin_host = player(S, "Ada")
+S:receive(spin_host.c, { action = "createLobby", gameMode = "gambel_time" })
+local spin_code = spin_host.last("joinedLobby").code
+local spin_guest = player(S, "Bea")
+S:receive(spin_guest.c, { action = "joinLobby", code = spin_code })
+spin_guest.c.isReadyLobby = true
+S:receive(spin_host.c, { action = "startGame" })
+S:receive(spin_guest.c, { action = "setAnte", ante = 4 })
+ok(spin_host.last("gambelTable") and spin_host.last("gambelTable").ante == 4, "a guest ahead of the host still spins the table")
+spin_host.c.eliminated = true
+S:receive(spin_guest.c, { action = "setAnte", ante = 5 })
+ok(spin_guest.last("gambelTable").ante == 5, "an eliminated host does not freeze the table spin")
+spin_guest.c.gambelBetAnte = 5
+spin_guest.c.lobby.gambelTwist = "pot"
+spin_guest.c.lobby.gambelBossOpen = true
+spin_guest.c.lobby.gambelBossAnte = 5
+spin_guest.c.lobby.gambelSabotaged = spin_guest.c.id
+S:receive(spin_guest.c, { action = "stopGame" })
+ok(spin_guest.c.gambelBetAnte == nil and spin_guest.c.lobby.gambelTwist == nil and not spin_guest.c.lobby.gambelBossOpen
+	and spin_guest.c.lobby.gambelTable == nil and spin_guest.c.lobby.gambelAnte == nil and spin_guest.c.lobby.gambelSabotaged == nil,
+	"stopping the match clears gambel state for the next one")
+
+S = server()
+local house = player(S, "Cara")
+S:receive(house.c, { action = "createLobby", gameMode = "gambel_time" })
+S:receive(house.c, { action = "startGame" })
+S:receive(house.c, { action = "gambelBoss", ante = 1 })
+house.c.lobby.gambelTwist = "house"
+house.c.lobby.gambelBossOpen = false
+local hits = 0
+for _, m in ipairs(house.msgs) do if m.action == "gambelHit" then hits = hits + 1 end end
+S:receive(house.c, { action = "failRound" })
+local hits_after = 0
+for _, m in ipairs(house.msgs) do if m.action == "gambelHit" then hits_after = hits_after + 1 end end
+ok(hits_after == hits and house.c.lives == 2, "a house tax does not stick after the boss is closed")
+house.c.roundLivesBlocker = nil
+house.c.lobby.gambelTwist = "house"
+house.c.lobby.gambelBossOpen = true
+house.c.lobby.gambelBossAnte = 1
+S:receive(house.c, { action = "failRound" })
+ok(house.last("gambelHit").kind == "tax" and house.last("gambelHit").amount == 5, "the house tax still lands while the boss is open")
+house.c.roundLivesBlocker = nil
+S:receive(house.c, { action = "gambelBoss", ante = 2 })
+house.c.lobby.gambelTwist = "allin"
+house.c.lobby.gambelBossOpen = true
+house.c.lobby.gambelBossAnte = 2
+S:receive(house.c, { action = "setAnte", ante = 3 })
+ok(house.last("gambelHit").kind == "allin" and house.last("gambelHit").role == "take" and house.last("gambelHit").payout == 2, "solo all-in doubles the reward for clearing the boss")
+ok(not house.c.lobby.gambelBossOpen and house.c.lobby.gambelTwist == nil, "clearing the boss drops the twist")
+house.c.spectator = true
+local bets = 0
+for _, m in ipairs(house.msgs) do if m.action == "gambelBetResult" then bets = bets + 1 end end
+S:receive(house.c, { action = "gambelBet", kind = "double", money = 20, ante = 4 })
+local bets_after = 0
+for _, m in ipairs(house.msgs) do if m.action == "gambelBetResult" then bets_after = bets_after + 1 end end
+ok(bets_after == bets, "a spectator cannot place a gambel bet")
+
+S = server()
+local pot_a = player(S, "Ann")
+S:receive(pot_a.c, { action = "createLobby", gameMode = "gambel_time" })
+local pot_code = pot_a.last("joinedLobby").code
+local pot_b = player(S, "Bob")
+S:receive(pot_b.c, { action = "joinLobby", code = pot_code })
+pot_b.c.isReadyLobby = true
+S:receive(pot_a.c, { action = "startGame" })
+for _, p in ipairs({ pot_a, pot_b }) do S:receive(p.c, { action = "readyBlind" }) end
+pot_a.c.lobby.gambelTwist = "pot"
+S:receive(pot_a.c, { action = "playHand", score = "10", handsLeft = 0, give = true, room = false })
+S:receive(pot_b.c, { action = "playHand", score = "40", handsLeft = 0, give = false, room = true })
+local give_hit, take_hit = pot_a.last("gambelHit"), pot_b.last("gambelHit")
+ok(give_hit and give_hit.kind == "pot" and give_hit.role == "give" and give_hit.joker and give_hit.amount == 8, "the loser is told to give a joker")
+ok(take_hit and take_hit.kind == "pot" and take_hit.role == "take" and take_hit.joker, "the winner is told to take a joker")
+for _, p in ipairs({ pot_a, pot_b }) do S:receive(p.c, { action = "readyBlind" }) end
+pot_a.c.lobby.gambelTwist = "allin"
+S:receive(pot_a.c, { action = "playHand", score = "3", handsLeft = 0, give = false, room = false })
+S:receive(pot_b.c, { action = "playHand", score = "9", handsLeft = 0, give = false, room = false })
+ok(pot_a.last("gambelHit").role == "give" and pot_a.last("gambelHit").kind == "allin", "all-in marks the loser")
+ok(pot_b.last("gambelHit").role == "take" and pot_b.last("gambelHit").payout == 2, "all-in marks only the winner for the doubled reward")
 
 print("PASS: gambel time")

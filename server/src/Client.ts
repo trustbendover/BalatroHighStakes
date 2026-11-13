@@ -47,6 +47,8 @@ class Client {
 	jokerGive = false
 	jokerRoom = false
 	gambelBetAnte = -1
+	/** Watching a match. Not a seated player: ignored by Gambel Time solo checks and bets. */
+	spectator = false
 	ante = 1
 	skips = 0
 	furthestBlind = 0

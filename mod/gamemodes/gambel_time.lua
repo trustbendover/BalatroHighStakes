@@ -3,10 +3,21 @@
 MP.Gamemode({
 	key = "gambel_time",
 	get_blinds_by_ante = function(self, ante)
-		local n = 1
-		if MP.LOBBY then
-			n = tonumber(MP.LOBBY.player_count) or (MP.LOBBY.player_list and #MP.LOBBY.player_list) or 1
+		-- Seated players only. player_count also counts spectators, and a watcher must not force a Nemesis.
+		local n = 0
+		local list = MP.LOBBY and MP.LOBBY.player_list
+		if type(list) == "table" then
+			for _, pl in ipairs(list) do
+				if type(pl) ~= "table" or not pl.spectator then n = n + 1 end
+			end
 		end
+		local away = MP.LOBBY and MP.LOBBY.away
+		if type(away) == "table" then
+			for _, pl in ipairs(away) do
+				if type(pl) ~= "table" or not pl.spectator then n = n + 1 end
+			end
+		end
+		if n == 0 then n = tonumber(MP.LOBBY and MP.LOBBY.player_count) or 1 end
 		if n <= 1 then return nil, nil, nil end
 		return nil, nil, "bl_mp_nemesis"
 	end,

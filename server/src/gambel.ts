@@ -91,6 +91,42 @@ export function gambelResolve<S>(
 	return { losers, lives, hold };
 }
 
+const POT_CASH = 8;
+
+/** Cash moved by Joker Pot or All-In. A joker only moves when one winner can take a card and a loser can give one. */
+export function gambelPayout<S>(
+	entries: GambelEntry<S>[],
+	twist: string | undefined,
+	losers: string[],
+	better: (a: S, b: S) => boolean,
+): { kind: "allin" | "pot"; cash: number; payout?: number; from: string[]; to: string | null; joker: boolean } | null {
+	if (twist !== "pot" && twist !== "allin" && twist !== "house") return null;
+	const lost = new Set(losers);
+	const winners = entries.filter((e) => !lost.has(e.id));
+	let best: GambelEntry<S> | null = null;
+	let tied = false;
+	for (const e of winners) {
+		if (!best) best = e;
+		else if (better(e.score, best.score)) { best = e; tied = false; }
+		else if (!better(best.score, e.score)) tied = true;
+	}
+	const to = best && !tied ? best.id : null;
+	let joker = false;
+	if (twist === "pot" && to) {
+		const give = entries.some((e) => lost.has(e.id) && e.give);
+		const room = winners.some((e) => e.id === to && e.room);
+		joker = give && room;
+	}
+	return {
+		kind: twist === "allin" ? "allin" : "pot",
+		cash: POT_CASH,
+		payout: twist === "allin" ? 2 : undefined,
+		from: losers,
+		to,
+		joker,
+	};
+}
+
 export function gambelStake(money: unknown): number {
 	const n = finiteMoney(money);
 	if (n < 2) return 0;
@@ -106,7 +142,7 @@ function finiteMoney(money: unknown): number {
 const ACES = ["H", "D", "S", "C"] as const;
 
 /** 32-bit FNV-1a. Same mix as mod/networking/gambel_rules.lua.
- *  gambelRoll's multiply is not a fair coin on the Lua side, so the Ace uses this. */
+ *  The Ace uses this mix. gambelRoll is the shared 32-bit index roll (Math.imul). */
 function fnv32(s: string): number {
 	let h = 2166136261;
 	for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619) >>> 0;

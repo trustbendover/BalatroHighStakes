@@ -331,6 +331,11 @@ function Server:reset_players(L)
 	L.firstReadyAt, L.blindActive, L.slots = nil, false, {}
 	L.teamLives = nil
 	L.elimOrder, L.winnerId = nil, nil
+	L.gambelTwist, L.gambelBossAnte, L.gambelTable, L.gambelAnte = nil, nil, nil, nil
+	L.gambelBossOpen, L.gambelSabotaged, L.gambelLives, L.gambelPayout = false, nil, nil, nil
+	for _, p in ipairs(L.players) do
+		p.gambelBetAnte, p.jokerGive, p.jokerRoom = nil, nil, nil
+	end
 end
 
 --- Spectators become normal lobby members for the next match while there are free seats.
@@ -1782,14 +1787,35 @@ function H.lobbyOptions(S, c, a)
 	local teams_after = tostring(L.options.teams_order or "") .. "|" .. tostring(L.options.teams_size or "") .. "|" .. tostring(L.options.teams_format or "")
 	if L.gameMode == "teams" and not L.isInGame and teams_after ~= teams_before then S:lobby_info(L) end
 end
+--- The boss twist ends once every living player has moved past that ante.
+--- Solo All-In doubles the boss reward for clearing it.
+function Server:gambel_passed_boss(L, c)
+	if not L.gambelBossOpen then return end
+	local boss = tonumber(L.gambelBossAnte) or 0
+	local ante = tonumber(c.ante) or 1
+	if boss <= 0 or ante <= boss then return end
+	if not self:gambel_solo(L) then
+		for _, p in ipairs(self:alive(L)) do
+			if not p.spectator and (tonumber(p.ante) or 1) <= boss then return end
+		end
+	end
+	if self:gambel_solo(L) and L.gambelTwist == "allin" and (c.lives or 0) > 0 then
+		sendA(c, { action = "gambelHit", kind = "allin", payout = 2, role = "take" })
+	end
+	L.gambelBossOpen = false
+	L.gambelTwist = nil
+	L.gambelSabotaged = nil
+end
+
 function H.failRound(S, c, a)
 	local L = c.lobby
 	if not L or c.eliminated then return end
 	if S:gambel_solo(L) then
-		local cost = (L.gambelBossOpen and L.gambelTwist == "double") and 2 or 1
+		local open = L.gambelBossOpen and true or false
+		local cost = (open and L.gambelTwist == "double") and 2 or 1
 		L.gambelBossOpen = false
 		S:lose_life(c, "round", cost)
-		if L.gambelTwist == "house" then sendA(c, { action = "gambelHit", kind = "tax", amount = 5 }) end
+		if open and L.gambelTwist == "house" then sendA(c, { action = "gambelHit", kind = "tax", amount = 5 }) end
 	elseif L.options.death_on_round_loss then S:lose_life_for(c, "round") end
 	if S:check_game_over(L) then return end
 	-- 0.6.8: the others may already be Ready at the PvP blind, waiting only for this player.
@@ -1809,7 +1835,9 @@ function H.setAnte(S, c, a)
 	c.ante = tonumber(a.ante) or c.ante
 	local L = c.lobby
 	if not L or L.gameMode ~= "gambel_time" or not Core.GAMBEL then return end
-	if L.players[1] == c then S:gambel_table(L, c.ante) end
+	-- The table follows the furthest living player, so an eliminated host does not stop the spins.
+	if L.isInGame then S:gambel_table(L, Core.match_ante(L.players)) end
+	S:gambel_passed_boss(L, c)
 	if S:gambel_solo(L) and L.isInGame and (c.lives or 0) > 0 and (tonumber(c.ante) or 1) > Core.GAMBEL.ante_target(L.options) then
 		sendA(c, { action = "winGame", reason = "house" })
 		L.winnerId = c.id

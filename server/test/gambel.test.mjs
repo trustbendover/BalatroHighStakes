@@ -3,7 +3,7 @@
 import { spawn } from 'node:child_process'
 import net from 'node:net'
 import assert from 'node:assert/strict'
-import { gambelCut, gambelFlip, gambelLives, gambelMusic, gambelResolve, gambelStake } from '../dist/gambel.js'
+import { gambelCut, gambelFlip, gambelLives, gambelMusic, gambelPayout, gambelResolve, gambelRoll, gambelStake } from '../dist/gambel.js'
 import { startError } from '../dist/Lobby.js'
 
 assert.equal(gambelLives(9), 5)
@@ -34,6 +34,41 @@ for (let ante = 1; ante <= 48; ante++) {
 	if (f.drawn === 'red') reds++; else blacks++
 }
 assert.ok(reds >= 12 && blacks >= 12)
+const rollVectors = [[1, 1, 7, 4], [2, 2, 7, 2], [3, 3, 7, 5], [7, 1, 6, 5], [12, 1, 5, 1]]
+for (const [ante, table, wheel, twist] of rollVectors) {
+	assert.equal(gambelRoll('house', ante, 'table', 6), table)
+	assert.equal(gambelRoll('house', ante, 'wheel:p', 7), wheel)
+	assert.equal(gambelRoll('seed', ante, 'twist:1', 5), twist)
+}
+let tableRepeats = 0
+let prevTable = 0
+for (let ante = 1; ante <= 240; ante++) {
+	const spin = gambelRoll('house', ante, 'table', 6)
+	if (ante > 1 && spin === prevTable) tableRepeats++
+	prevTable = spin
+}
+assert.ok(tableRepeats < 40, `table spin repeats ${tableRepeats}`)
+const pot = gambelPayout(
+	[{ id: 'win', score: 20, room: true }, { id: 'lose', score: 5, give: true }],
+	'pot', ['lose'], (a, b) => a > b,
+)
+assert.equal(pot?.to, 'win')
+assert.equal(pot?.joker, true)
+assert.equal(pot?.cash, 8)
+const cashPot = gambelPayout(
+	[{ id: 'win', score: 20, room: false }, { id: 'lose', score: 5, give: false }],
+	'pot', ['lose'], (a, b) => a > b,
+)
+assert.equal(cashPot?.joker, false)
+assert.equal(cashPot?.to, 'win')
+const allIn = gambelPayout(
+	[{ id: 'win', score: 9 }, { id: 'lose', score: 1 }],
+	'allin', ['lose'], (a, b) => a > b,
+)
+assert.equal(allIn?.kind, 'allin')
+assert.equal(allIn?.payout, 2)
+assert.equal(allIn?.to, 'win')
+assert.deepEqual(allIn?.from, ['lose'])
 assert.equal(gambelCut(6), 2)
 assert.equal(gambelMusic({ mode: 'gamemode_mp_gambel_time', stage: 'run' }), 10)
 assert.equal(gambelMusic({ mode: 'attrition', stage: 'run' }), null)

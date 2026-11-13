@@ -502,9 +502,25 @@ function MS.local_summary()
 	}
 end
 
+--- A one-player table is only honest for a real solo match, or after the host has finished the match.
+function MS.solo_match()
+	local list = MP.LOBBY and MP.LOBBY.player_list
+	if type(list) == "table" and #list > 0 then
+		local n = 0
+		for _, pl in ipairs(list) do
+			if type(pl) ~= "table" or not pl.spectator then n = n + 1 end
+		end
+		return n <= 1
+	end
+	local pc = tonumber(MP.LOBBY and MP.LOBBY.player_count)
+	if pc then return pc <= 1 end
+	return true
+end
+
 function MS.open()
 	if not MS.last then
-		if MS.match_over() then
+		local finished = MP.GAME and MP.GAME.match_finished
+		if MS.match_over() and (MS.solo_match() or finished) then
 			MS.last = MS.local_summary()
 		else
 			pcall(sendWarnMessage, L("k_ms_later", "Match stats appear when the match is over"), "MULTIPLAYER")
