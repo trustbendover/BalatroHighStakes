@@ -28,7 +28,8 @@ ok(nl.b_chat_send == "Stuur" and nl.k_chat_prompt == "Bericht" and nl.k_chat_wat
 local core = io.open("core.lua"):read("*a")
 ok(core:find('Core.CHAT = MP.load_mp_file("networking/chat_rules.lua")', 1, true), "Steamodded loads the chat rules onto the host")
 local ui = io.open("lib/chat.lua"):read("*a")
-ok(ui:find("function CH.pin()", 1, true) and ui:find("right - w - 0.12", 1, true) and ui:find("top + 0.12", 1, true)
+ok(ui:find("function CH.pin()", 1, true) and ui:find("right - w - 0.15", 1, true) and ui:find("function CH.log_width()", 1, true)
+	and ui:find("if love and not CH._text", 1, true) and ui:find("if love and not CH._wheel", 1, true)
 	and ui:find("function CH.draw_front()", 1, true) and ui:find("love.draw", 1, true)
 	and ui:find("if not CH._painting then return end", 1, true) and ui:find("CH._painting = true", 1, true)
 	and ui:find("function CH.drop_box", 1, true) and ui:find("function CH.wrap_message", 1, true)
@@ -137,13 +138,12 @@ love = {
 	draw = function() end,
 }
 local left, top, right = CH.screen_span()
-ok(math.abs(left - (-1.47 + 0.05)) < 1e-6, "the screen span is room-local on the left")
-ok(math.abs(top - (-0.7 + 0.05)) < 1e-6, "the screen span is room-local on the top")
-ok(math.abs(right - (22.94 - 1.47 - 0.05)) < 1e-6, "the right edge subtracts the room offset")
+ok(left == 0 and top == 0, "the draw span starts at the window corner")
+ok(math.abs(right - 22.94) < 1e-6, "the right edge is the window width in tiles")
 CH.box = { T = { x = 0, y = 0, w = 5.4, h = 3 }, VT = {}, states = { visible = true }, REMOVED = false }
 CH.pin()
-ok(math.abs(CH.box.T.x - (right - 5.4 - 0.12)) < 1e-6, "the panel is pinned to the top-right")
-ok(math.abs(CH.box.T.y - (top + 0.12)) < 1e-6, "the panel starts just under the top edge")
+ok(math.abs(CH.box.T.x - (22.94 - 5.4 - 0.15)) < 1e-6, "the panel is pinned to the window's top-right")
+ok(math.abs(CH.box.T.y - 0.15) < 1e-6, "the panel starts just under the top of the window")
 local wrapped = CH.wrap_message("Ann", string.rep("word ", 20), 1, 12)
 ok(#wrapped > 1 and wrapped[1].name == "Ann:" and wrapped[2].name == "", "a long line wraps under the coloured name")
 ok(CH.scroll_max(10) == 4, "six visible lines leave four lines to scroll")
@@ -154,14 +154,32 @@ ok(#CH.draft.text == 550, "the field stops at 550 characters")
 CH.focused = true
 CH.on_key("backspace")
 ok(#CH.draft.text == 549, "backspace edits the fixed-width field")
+CH.draft = { text = "hello", caret = 0 }
+ok(CH.field_slice():sub(1, 1) == "|", "a caret at zero sits in front of the first letter")
+CH.on_key("end")
+ok(CH.draft.caret == 5 and CH.field_slice():find("hello|", 1, true), "end moves the caret to the last letter")
+CH.on_key("home")
+ok(CH.draft.caret == 0, "home moves the caret to the start")
+love.textinput = nil
+love.wheelmoved = nil
 Controller = { get_cursor_collision = function(self) self.collision_list = {} end }
 CH.registered = nil
 CH._cursor = nil
 CH._draw = true
-CH._text = true
+CH._text = nil
 CH._keys = true
-CH._wheel = true
+CH._wheel = nil
 CH.register()
+ok(type(love.textinput) == "function" and type(love.wheelmoved) == "function", "typing and the wheel hook install when Balatro left them empty")
+CH.open = true
+MP.LOBBY = MP.LOBBY or {}
+MP.LOBBY.code = "ROOM"
+CH.focused = true
+CH._was_down = false
+CH._pending = nil
+love.mouse.isDown = function() return true end
+CH.tick_focus()
+ok(CH.focused == false, "a click outside the field releases the keyboard")
 CH.box.collides_with_point = function(_, p) return p.x > 22.5 and p.x < 23.5 end
 CH.box.get_UIE_by_ID = function(_, id)
 	if id == "mp_chat_open" then

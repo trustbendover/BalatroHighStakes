@@ -156,8 +156,14 @@ function CH.ensure_slots()
 	CH.field = CH.field or { show = "" }
 end
 
+function CH.log_width()
+	if CH.in_lobby_menu and CH.in_lobby_menu() then return CH.LOBBY_W - 0.4 end
+	return CH.MATCH_W - 0.4
+end
+
 function CH.paint_slots(wide, scale)
 	CH.ensure_slots()
+	wide = wide or CH.log_width()
 	local shown = CH.window_lines(wide, scale)
 	for i = 1, CH.VIEW_LINES do
 		local line = shown[i]
@@ -175,9 +181,15 @@ function CH.field_slice()
 	if caret < 0 then caret = 0 elseif caret > #text then caret = #text end
 	CH.draft.caret = caret
 	if text == "" and not CH.focused then return CH.chrome().prompt end
-	local cols = 18
-	local from = math.max(1, caret - cols + 1)
-	local vis = text:sub(from, math.max(from, caret))
+	local extra = #text >= 100 and (" " .. #text .. "/550") or ""
+	local cols = extra ~= "" and 12 or 18
+	local win_start = caret - math.floor(cols / 2) + 1
+	if win_start < 1 then win_start = 1 end
+	if win_start + cols - 1 > #text then win_start = math.max(1, #text - cols + 1) end
+	local win_end = math.min(#text, win_start + cols - 1)
+	local window = text:sub(win_start, win_end)
+	local before_n = caret - win_start + 1
+	if before_n < 0 then before_n = 0 elseif before_n > #window then before_n = #window end
 	local mark = ""
 	if CH.focused then
 		local t = 0
@@ -187,8 +199,7 @@ function CH.field_slice()
 		end
 		if math.floor(t * 2) % 2 == 0 then mark = "|" end
 	end
-	local extra = #text >= 100 and (" " .. #text .. "/550") or ""
-	return vis .. mark .. extra
+	return window:sub(1, before_n) .. mark .. window:sub(before_n + 1) .. extra
 end
 
 function CH.paint_field()
@@ -260,9 +271,19 @@ local function input_row(wide, scale, input_w, with_close)
 end
 
 function CH.panel_nodes(wide, scale, input_w, with_close)
-	local log = log_rows(wide, scale)
-	log[#log + 1] = input_row(wide, scale, input_w, with_close)
-	return log
+	local lw = wide - 0.4
+	local log = { n = G.UIT.C, config = { align = "tm", minw = lw }, nodes = log_rows(lw, scale) }
+	local row_nodes = { log }
+	local bar = CH.make_bar and CH.make_bar()
+	if bar then
+		row_nodes[#row_nodes + 1] = { n = G.UIT.C, config = { id = "mp_chat_scroll", align = "cm", minw = 0.32, minh = 1.8 }, nodes = {
+			{ n = G.UIT.O, config = { object = bar } },
+		} }
+	end
+	return {
+		{ n = G.UIT.R, config = { align = "cm", padding = 0.02 }, nodes = row_nodes },
+		input_row(wide, scale, input_w, with_close),
+	}
 end
 
 --- Lobby: compact panel under the start row. Input and Send share one row.
@@ -311,6 +332,7 @@ function CH.send()
 	CH.draft.text = ""
 	CH.draft.caret = 0
 	CH.scroll = 0
+	CH.focused = false
 	CH.blank_letters()
 	CH.paint_field()
 	-- A host echo can arrive inside Client.send. Rebuilding the box in that call
@@ -354,25 +376,18 @@ function CH.definition()
 		} }
 	end
 	CH.seen = #CH.current()
-	local bar = CH.make_bar and CH.make_bar()
-	local log = { n = G.UIT.C, config = { align = "tm", minw = wide }, nodes = log_rows(wide - 0.4, 0.32) }
-	local row = { n = G.UIT.R, config = { align = "cm", padding = 0.02 }, nodes = { log } }
-	if bar then
-		row.nodes[#row.nodes + 1] = { n = G.UIT.C, config = { id = "mp_chat_scroll", align = "cm", minw = 0.32, minh = 1.8 }, nodes = {
-			{ n = G.UIT.O, config = { object = bar } },
-		} }
-	end
-	return { n = G.UIT.ROOT, config = { align = "tr", colour = G.C.CLEAR, padding = 0.04, minw = wide }, nodes = {
+	local body = CH.panel_nodes(wide, 0.32, CH.INPUT_W, false)
+	local nodes = {
 		{ n = G.UIT.R, config = { align = "cr", padding = 0.04, minh = 0.36 }, nodes = {
 			{ n = G.UIT.T, config = { text = ui.title, scale = 0.3, colour = G.C.WHITE, shadow = true } },
 			{ n = G.UIT.C, config = { align = "cm", minw = 0.15 } },
 			UIBox_button({ id = "mp_chat_close", button = "mp_chat_close", label = { ui.close },
 				minw = 1.15, minh = 0.36, scale = 0.28, colour = G.C.RED, col = true }),
 		} },
-		{ n = G.UIT.C, config = { align = "tm", padding = 0.05, r = 0.1, colour = G.C.BLACK, emboss = 0.05, minw = wide }, nodes = {
-			row,
-			input_row(wide, 0.32, CH.INPUT_W, false),
-		} },
+	}
+	for _, node in ipairs(body) do nodes[#nodes + 1] = node end
+	return { n = G.UIT.ROOT, config = { align = "tr", colour = G.C.CLEAR, padding = 0.04, minw = wide }, nodes = {
+		{ n = G.UIT.C, config = { align = "tm", padding = 0.05, r = 0.1, colour = G.C.BLACK, emboss = 0.05, minw = wide }, nodes = nodes },
 	} }
 end
 
@@ -502,15 +517,25 @@ function CH.cursor()
 	return nil
 end
 
-function CH.over(id, x, y)
+function CH.find(id)
 	local box = CH.box
-	if not (box and box.get_UIE_by_ID and x) then return false end
-	local el = box:get_UIE_by_ID(id)
+	if box and box.get_UIE_by_ID then
+		local el = box:get_UIE_by_ID(id)
+		if el then return el end
+	end
+	local menu = G and G.MAIN_MENU_UI
+	if menu and menu.get_UIE_by_ID then return menu:get_UIE_by_ID(id) end
+	return nil
+end
+
+function CH.over(id, x, y)
+	if not x then return false end
+	local el = CH.find(id)
 	return el and el.collides_with_point and el:collides_with_point({ x = x, y = y }) or false
 end
 
---- CH.box.T is G.ROOM-local. World x is box.T.x + G.ROOM.T.x (the window padding).
---- Returning a window span that starts at 0 pushes the bubble that padding too far right.
+--- draw_front paints in window tiles, after the room transform has been popped.
+--- The span is the window itself, not G.ROOM-local.
 function CH.screen_span()
 	local right, bottom
 	local scale = G and G.TILESCALE and G.TILESIZE and (G.TILESCALE * G.TILESIZE) or 0
@@ -537,11 +562,8 @@ function CH.screen_span()
 		right = (room.x or 0) + (room.w or 0) + ((G and G.ROOM_PADDING_W) or 1)
 		bottom = (room.y or 0) + (room.h or 0) + ((G and G.ROOM_PADDING_H) or 0.7)
 	end
-	local rx = (G and G.ROOM and G.ROOM.T and G.ROOM.T.x) or 0
-	local ry = (G and G.ROOM and G.ROOM.T and G.ROOM.T.y) or 0
-	local edge = 0.05
 	right, bottom = right or 0, bottom or 0
-	return -rx + edge, -ry + edge, right - rx - edge, bottom - ry - edge
+	return 0, 0, right, bottom
 end
 
 --- Closed, the root can be wider than the Chat button. Measure that button. Open, use the panel.
@@ -573,7 +595,7 @@ function CH.clamp_pos()
 	if pos.y < miny then pos.y = miny elseif pos.y > maxy then pos.y = maxy end
 end
 
---- The panel is welded to the top-right of the window, in room-local coordinates.
+--- Flush to the window's top-right. T is in the same tiles draw_front uses.
 function CH.pin()
 	local box = CH.box
 	if not box or box.REMOVED or not box.T then return end
@@ -583,12 +605,14 @@ function CH.pin()
 		box.alignment.prev_type = "a"
 		if box.alignment.type_list then box.alignment.type_list.a = true end
 	end
-	local left, top, right, bottom = CH.screen_span()
-	local w, h = box.T.w or CH.MATCH_W, box.T.h or 0.42
-	local x = right - w - 0.12
-	local y = top + 0.12
-	if x < left then x = left end
-	if y + h > bottom then y = math.max(top, bottom - h) end
+	local _, _, right, bottom = CH.screen_span()
+	local _, _, x1, y1 = CH.visible_extent(box)
+	local w = (x1 and x1 > 0) and x1 or (box.T.w or CH.MATCH_W)
+	local h = (y1 and y1 > 0) and y1 or (box.T.h or 0.42)
+	local x = right - w - 0.15
+	local y = 0.15
+	if x < 0 then x = 0 end
+	if y + h > bottom then y = math.max(0.15, bottom - h) end
 	box.T.x, box.T.y = x, y
 	if box.VT then box.VT.x, box.VT.y = x, y end
 	if box.velocity then box.velocity.x, box.velocity.y = 0, 0 end
@@ -603,7 +627,7 @@ function CH.make_bar()
 			local g = love.graphics
 			local T = self.VT or self.T
 			if not T then return end
-			local lines = CH.wrapped(CH.MATCH_W, 0.32)
+			local lines = CH.wrapped(CH.log_width(), 0.32)
 			local top, thumb = CH.thumb_top(CH.scroll, #lines)
 			local ts = G.TILESIZE or 20
 			local sc = G.TILESCALE or 1
@@ -623,8 +647,22 @@ function CH.make_bar()
 	return obj
 end
 
+function CH.jump_scroll(y)
+	local el = CH.find("mp_chat_scroll")
+	local lines = CH.wrapped(CH.log_width(), 0.32)
+	local maxs = CH.scroll_max(#lines)
+	if not el or not el.T or not el.T.h or el.T.h <= 0 or maxs == 0 then
+		CH.scroll = 0
+		return
+	end
+	local rel = (y - el.T.y) / el.T.h
+	if rel < 0 then rel = 0 elseif rel > 1 then rel = 1 end
+	CH.scroll = (1 - rel) * maxs
+	CH.paint_slots(CH.log_width(), 0.32)
+end
+
 function CH.tick_scroll()
-	if not (CH.open and CH.box and love and love.mouse and love.mouse.isDown) then
+	if not (love and love.mouse and love.mouse.isDown) then
 		CH.scroll_drag = nil
 		return
 	end
@@ -632,16 +670,19 @@ function CH.tick_scroll()
 	local x, y = CH.cursor()
 	if not down or not y then CH.scroll_drag = nil; return end
 	if not CH.scroll_drag then
-		if CH.over("mp_chat_scroll", x, y) then CH.scroll_drag = { y = y } end
+		if CH.over("mp_chat_scroll", x, y) then
+			CH.scroll_drag = { y = y }
+			CH.jump_scroll(y)
+		end
 		return
 	end
-	local lines = CH.wrapped(CH.MATCH_W, 0.32)
+	local lines = CH.wrapped(CH.log_width(), 0.32)
 	local maxs = CH.scroll_max(#lines)
 	local dy = y - CH.scroll_drag.y
 	CH.scroll_drag.y = y
 	if maxs > 0 then
 		CH.scroll = math.max(0, math.min(maxs, (CH.scroll or 0) - dy / 1.8 * maxs))
-		CH.paint_slots(CH.MATCH_W, 0.32)
+		CH.paint_slots(CH.log_width(), 0.32)
 	end
 end
 
@@ -737,6 +778,8 @@ function CH.on_key(key)
 	end
 	if key == "left" then CH.draft.caret = math.max(0, caret - 1); CH.paint_field(); return true end
 	if key == "right" then CH.draft.caret = math.min(#text, caret + 1); CH.paint_field(); return true end
+	if key == "home" then CH.draft.caret = 0; CH.paint_field(); return true end
+	if key == "end" then CH.draft.caret = #text; CH.paint_field(); return true end
 	if key == "v" and love and love.keyboard and love.keyboard.isDown and (love.keyboard.isDown("lctrl") or love.keyboard.isDown("rctrl") or love.keyboard.isDown("lgui")) then
 		local clip = ""
 		if love.system and love.system.getClipboardText then
@@ -751,24 +794,40 @@ end
 
 function CH.on_wheel(dy)
 	if not CH.over_panel() then return false end
-	local lines = CH.wrapped(CH.MATCH_W, 0.32)
+	local lines = CH.wrapped(CH.log_width(), 0.32)
 	local maxs = CH.scroll_max(#lines)
 	local step = (tonumber(dy) or 0) > 0 and 1 or -1
 	CH.scroll = math.max(0, math.min(maxs, (CH.scroll or 0) + step))
-	CH.paint_slots(CH.MATCH_W, 0.32)
+	CH.paint_slots(CH.log_width(), 0.32)
 	return true
 end
 
 function CH.over_panel()
 	local x, y = CH.cursor()
+	if not x then return false end
 	local box = CH.box
-	if not x or not box or not box.T then return false end
-	local rx = (G and G.ROOM and G.ROOM.T and G.ROOM.T.x) or 0
-	local ry = (G and G.ROOM and G.ROOM.T and G.ROOM.T.y) or 0
-	local function inside(px, py)
-		return px >= box.T.x and px <= box.T.x + (box.T.w or 0) and py >= box.T.y and py <= box.T.y + (box.T.h or 0)
+	if box and box.T and x >= box.T.x and x <= box.T.x + (box.T.w or 0) and y >= box.T.y and y <= box.T.y + (box.T.h or 0) then
+		return true
 	end
-	return inside(x, y) or inside(x - rx, y - ry)
+	return CH.over("mp_chat_lobby", x, y)
+end
+
+function CH.tick_focus()
+	if not (MP.LOBBY and MP.LOBBY.code) or (not CH.in_lobby_menu() and not CH.open) then
+		if CH.focused then CH.focused = false; CH.paint_field() end
+	end
+	if CH.focused then CH.paint_field() end
+	if not (love and love.mouse and love.mouse.isDown) then return end
+	local down = love.mouse.isDown(1) and true or false
+	if down and not CH._was_down and CH.focused then
+		local x, y = CH.cursor()
+		if not CH.over("mp_chat_field", x, y) and not CH.over("mp_chat_send", x, y) then
+			CH.focused = false
+			CH.paint_field()
+			if CH._pending then CH.refresh() end
+		end
+	end
+	CH._was_down = down
 end
 
 function CH.sig()
@@ -797,7 +856,7 @@ function CH.register()
 		MP.register_action("chatReject", function() end)
 	end
 	CH.hook_cursor()
-	if love and love.textinput and not CH._text then
+	if love and not CH._text then
 		CH._text = true
 		local textin = love.textinput
 		function love.textinput(t)
@@ -813,7 +872,7 @@ function CH.register()
 			if keyp then return keyp(key, scancode, rep) end
 		end
 	end
-	if love and love.wheelmoved and not CH._wheel then
+	if love and not CH._wheel then
 		CH._wheel = true
 		local wheel = love.wheelmoved
 		function love.wheelmoved(x, y)
@@ -844,9 +903,11 @@ function CH.register()
 				CH.pin()
 				CH.tick_scroll()
 			elseif CH.box then
+				CH.focused = false
 				CH.drop_box(CH.box)
 				CH.box, CH._sig = nil, nil
 			end
+			CH.tick_focus()
 			return r
 		end
 	end
