@@ -54,7 +54,7 @@ end
 local function player(name, ready)
 	local P = { name = name, msgs = {} }
 	P.b = backend(name)
-	P.r = P2P.new_router({ backend = P.b, Core = Core, json = json, now = now, version = "0.6.9", ready = ready,
+	P.r = P2P.new_router({ backend = P.b, Core = Core, json = json, now = now, version = "0.7.0", ready = ready,
 		Migration = (os.getenv("NO_MIGRATION") == nil) and dofile("networking/host_migration.lua") or nil,
 		push = function(s) P.msgs[#P.msgs + 1] = json.decode(s) end })
 	P.send = function(t) P.r.send(t) end
@@ -67,7 +67,7 @@ local all = { A, B, C }
 local function pump(n) for _ = 1, n or 6 do for _, p in ipairs(all) do p.r.update() end end end
 local function ok(c, m) assert(c, m); print("ok: " .. m) end
 
-for _, p in ipairs(all) do p.send({ action = "connect" }); p.send({ action = "username", username = p.name, modHash = "t" }); p.send({ action = "version", version = "0.6.9" }) end
+for _, p in ipairs(all) do p.send({ action = "connect" }); p.send({ action = "username", username = p.name, modHash = "t" }); p.send({ action = "version", version = "0.7.0" }) end
 ok(A.last("connected"), "local core says connected")
 A.send({ action = "createLobby", gameMode = "attrition" }); pump()
 local code = A.last("joinedLobby").code
@@ -142,7 +142,7 @@ ok(C.last("joinedLobby"), "code join still works")
 C.send({ action = "leaveLobby" }); pump()
 NET.launch = { dave = "Balatro.exe +connect_lobby " .. lid }
 local D = player("dave"); all[#all + 1] = D
-D.send({ action = "connect" }); D.send({ action = "username", username = "dave", modHash = "t" }); D.send({ action = "version", version = "0.6.9" })
+D.send({ action = "connect" }); D.send({ action = "username", username = "dave", modHash = "t" }); D.send({ action = "version", version = "0.7.0" })
 pump()
 ok(D.r.mode == "guest" and D.last("joinedLobby"), "game started with +connect_lobby joins automatically")
 -- invite to a non-3P / closed lobby
@@ -204,7 +204,7 @@ pump()
 local eight = {}
 for i = 1, 9 do eight[i] = player("p8_" .. i) end
 all = eight
-for _, p in ipairs(eight) do p.send({ action = "connect" }); p.send({ action = "username", username = p.name, modHash = "t" }); p.send({ action = "version", version = "0.6.9" }) end
+for _, p in ipairs(eight) do p.send({ action = "connect" }); p.send({ action = "username", username = p.name, modHash = "t" }); p.send({ action = "version", version = "0.7.0" }) end
 eight[1].send({ action = "createLobby", gameMode = "teams" }); pump()
 local code8 = eight[1].last("joinedLobby").code
 eight[1].send({ action = "lobbyOptions", teams_size = "4", starting_lives = "1" }); pump()
@@ -229,7 +229,7 @@ pump()
 local dm = {}
 for i = 1, 5 do dm[i] = player("dm_" .. i) end
 all = dm
-for _, p in ipairs(dm) do p.send({ action = "connect" }); p.send({ action = "username", username = p.name, modHash = "t" }); p.send({ action = "version", version = "0.6.9" }) end
+for _, p in ipairs(dm) do p.send({ action = "connect" }); p.send({ action = "username", username = p.name, modHash = "t" }); p.send({ action = "version", version = "0.7.0" }) end
 dm[1].send({ action = "createLobby", gameMode = "deathmatch" }); pump()
 local codedm = dm[1].last("joinedLobby").code
 dm[1].send({ action = "lobbyOptions", starting_lives = "1", deathmatch_grace = "10" }); pump()

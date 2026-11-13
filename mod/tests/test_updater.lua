@@ -21,6 +21,7 @@ ok(U.is_newer("v0.6.8", "0.6.7~3P") and not U.is_newer("v0.6.7", "0.6.8") and no
 ok(U.is_newer("v0.7", "0.6.9~3P") and U.is_newer("0.6.10", "0.6.9") and not U.is_newer("garbage", "0.6.6"), "version compare edge cases")
 ok(U.is_newer("v0.6.9", "0.6.8.2") and not U.is_newer("0.6.8.2", "v0.6.9") and not U.is_newer("v0.6.9", "0.6.9"), "0.6.9 is newer than 0.6.8.2 and not newer than itself")
 ok(U.is_newer("v0.6.9.1", "0.6.9") and U.is_newer("v0.6.9.1", "0.6.8.2"), "0.6.9.1 is newer than 0.6.9 and 0.6.8.2")
+ok(U.is_newer("v0.7.0", "0.6.9.1") and not U.is_newer("0.6.9.1", "v0.7.0") and not U.is_newer("v0.7.0", "0.7.0"), "0.7.0 is newer than 0.6.9.1 and not newer than itself")
 ok(U.parse_release('{"tag_name":"v0.6.7","draft":false,"prerelease":false,"assets":[{"name":"BalatroMultiplayer3P-v0.6.7-Installer.zip"}]}') == "v0.6.7", "parse release")
 ok(U.parse_release('{"tag_name":"v0.6.7","assets":[]}') == nil, "release without installer ignored")
 ok(U.parse_release('{"message":"Not Found"}') == nil and U.parse_release(nil) == nil, "404 / nil body")
