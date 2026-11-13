@@ -215,6 +215,9 @@ function CH.definition()
 	end
 	CH.seen = #CH.current()
 	return { n = G.UIT.ROOT, config = { align = "cm", colour = G.C.CLEAR, padding = 0.04, minw = wide }, nodes = {
+		{ n = G.UIT.R, config = { id = "mp_chat_drag", align = "cm", padding = 0.04, minh = 0.32, r = 0.06, colour = G.C.RED, hover = true }, nodes = {
+			{ n = G.UIT.T, config = { text = ui.title, scale = 0.3, colour = G.C.WHITE, shadow = true } },
+		} },
 		{ n = G.UIT.C, config = { align = "cm", padding = 0.05, r = 0.1, colour = G.C.BLACK, emboss = 0.05, minw = wide + 0.16 }, nodes = CH.panel_nodes(wide, 0.32, 2.9, true) },
 	} }
 end
@@ -268,7 +271,93 @@ function CH.refresh(force)
 			config = { align = "tri", offset = { x = -0.2, y = 2.7 }, major = G.ROOM_ATTACH, bond = "Weak" },
 		})
 		CH.box_stage = G.STAGE
+		CH.raise()
+		CH.apply_pos()
 	end)
+end
+
+--- Later boxes are drawn later and are tested first for the cursor.
+function CH.raise()
+	local list = G and G.I and G.I.UIBOX
+	local box = CH.box
+	if type(list) ~= "table" or not box then return end
+	for i, v in ipairs(list) do
+		if v == box then
+			table.remove(list, i)
+			list[#list + 1] = box
+			return
+		end
+	end
+end
+
+--- Draw again after love.draw, so cards, the deck, the shop, and the HUD stay behind it.
+function CH.draw_front()
+	local box = CH.box
+	if not box or box.REMOVED or not box.draw then return end
+	pcall(function() box:draw() end)
+end
+
+function CH.cursor()
+	local c = G and G.CURSOR and G.CURSOR.T
+	if c and c.x and c.y then return c.x, c.y end
+	return nil
+end
+
+function CH.over(id, x, y)
+	local box = CH.box
+	if not (box and box.get_UIE_by_ID and x) then return false end
+	local el = box:get_UIE_by_ID(id)
+	return el and el.collides_with_point and el:collides_with_point({ x = x, y = y }) or false
+end
+
+function CH.clamp_pos()
+	local pos, box = CH.pos, CH.box
+	if not pos or not box or not box.T or not (G and G.ROOM and G.ROOM.T) then return end
+	local w, h = box.T.w or 0, box.T.h or 0
+	local maxx = math.max(0, (G.ROOM.T.w or 0) - w)
+	local maxy = math.max(0, (G.ROOM.T.h or 0) - h)
+	if pos.x < 0 then pos.x = 0 elseif pos.x > maxx then pos.x = maxx end
+	if pos.y < 0 then pos.y = 0 elseif pos.y > maxy then pos.y = maxy end
+end
+
+--- A dragged panel is no longer welded to the room corner.
+function CH.apply_pos()
+	local box, pos = CH.box, CH.pos
+	if not box or box.REMOVED or not pos or not box.T then return end
+	if box.set_role then pcall(function() box:set_role({ role_type = "Major" }) end) end
+	if box.alignment then
+		box.alignment.type = "a"
+		box.alignment.prev_type = "a"
+		if box.alignment.type_list then box.alignment.type_list.a = true end
+	end
+	CH.clamp_pos()
+	box.T.x, box.T.y = pos.x, pos.y
+	if box.VT then box.VT.x, box.VT.y = pos.x, pos.y end
+end
+
+function CH.tick_drag()
+	if CH.typing() or not (CH.box and CH.box.T and love and love.mouse and love.mouse.isDown) then return end
+	local x, y = CH.cursor()
+	if not x then return end
+	local down = love.mouse.isDown(1)
+	if down and not CH.drag then
+		local on_handle = CH.over("mp_chat_drag", x, y) or CH.over("mp_chat_open", x, y)
+		local on_control = CH.over("mp_chat_send", x, y) or CH.over("mp_chat_close", x, y) or CH.over("text_input", x, y)
+		if on_handle and not on_control then
+			CH.drag = { x = x, y = y, bx = CH.box.T.x, by = CH.box.T.y, moved = false }
+		end
+	elseif down and CH.drag then
+		local dx, dy = x - CH.drag.x, y - CH.drag.y
+		if math.abs(dx) + math.abs(dy) > 0.12 then CH.drag.moved = true end
+		if CH.drag.moved then
+			CH.pos = { x = CH.drag.bx + dx, y = CH.drag.by + dy }
+			CH.apply_pos()
+		end
+	elseif CH.drag then
+		if CH.drag.moved then CH.suppress_click = true end
+		CH.drag = nil
+	end
+	if CH.pos then CH.apply_pos() end
 end
 
 function CH.sig()
@@ -282,7 +371,11 @@ function CH.register()
 	CH.registered = true
 	G = G or {}
 	G.FUNCS = G.FUNCS or {}
-	G.FUNCS.mp_chat_toggle = function() CH.toggle() end
+	G.FUNCS.mp_chat_toggle = function()
+		-- The click is dispatched before this frame's drag tick, while the drag is still recorded.
+		if (CH.drag and CH.drag.moved) or CH.suppress_click then CH.suppress_click = nil; return end
+		CH.toggle()
+	end
 	G.FUNCS.mp_chat_close = function() CH.close() end
 	G.FUNCS.mp_chat_send = function() CH.send() end
 	if MP.register_action then
@@ -291,6 +384,15 @@ function CH.register()
 		MP.register_action("chatState", function(p) CH.apply(p) end)
 		MP.register_action("chatReject", function() end)
 	end
+	if love and love.draw and not CH._draw then
+		CH._draw = true
+		local draw = love.draw
+		function love.draw(...)
+			local r = draw(...)
+			if MP.CHAT and MP.CHAT.draw_front then MP.CHAT.draw_front() end
+			return r
+		end
+	end
 	if Game and Game.update then
 		local upd = Game.update
 		function Game:update(dt)
@@ -298,6 +400,8 @@ function CH.register()
 			if MP.LOBBY and MP.LOBBY.code then
 				if CH.box and (CH.box.REMOVED or CH.box_stage ~= G.STAGE) then CH.box = nil; CH._sig = nil end
 				CH.refresh()
+				CH.raise()
+				CH.tick_drag()
 			elseif CH.box then
 				pcall(function() CH.box:remove() end)
 				CH.box, CH._sig = nil, nil
