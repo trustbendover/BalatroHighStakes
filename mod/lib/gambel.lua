@@ -565,7 +565,7 @@ function R.wheel_colours()
 end
 
 --- Draw is a no-op unless Love2D is present, so headless tests never touch the canvas.
-R.WHEEL_BOX = 4.2
+R.WHEEL_BOX = 5.0
 function R.make_wheel()
 	if not (Moveable and love and love.graphics and love.graphics.polygon) then return nil end
 	local size = R.WHEEL_BOX
@@ -625,11 +625,11 @@ function R.make_wheel()
 					local spin = mid + math.pi / 2
 					if math.sin(mid) > 0 then spin = spin + math.pi end
 					g.push()
-					g.translate(math.cos(mid) * radius * 0.68, math.sin(mid) * radius * 0.68)
+					g.translate(math.cos(mid) * radius * 0.74, math.sin(mid) * radius * 0.74)
 					g.rotate(spin)
-					g.scale(0.32, 0.32)
+					g.scale(0.16, 0.16)
 					g.setColor(0.08, 0.06, 0.05, 1)
-					g.printf(labels[i], -28, -fh / 2, 56, "center")
+					g.printf(labels[i], -22, -fh / 2, 44, "center")
 					g.pop()
 				end
 			end
@@ -654,7 +654,7 @@ local function wheel_face()
 	if obj and R.wheel_view then R.wheel_view.wheel = obj end
 	local inner = obj and { n = G.UIT.O, config = { object = obj } }
 		or { n = G.UIT.T, config = { text = L("b_gambel_wheel", "Gambel Wheel"), scale = 0.36, colour = GOLD_INK } }
-	return { n = G.UIT.C, config = { align = "cm", minw = R.WHEEL_BOX + 0.35, minh = R.WHEEL_BOX + 0.35, padding = 0.15 }, nodes = { inner } }
+	return { n = G.UIT.C, config = { align = "cm", minw = R.WHEEL_BOX + 0.6, minh = R.WHEEL_BOX + 0.6, padding = 0.2 }, nodes = { inner } }
 end
 
 local function wheel_legend()
@@ -667,7 +667,7 @@ local function wheel_legend()
 			{ n = G.UIT.T, config = { text = text, scale = 0.28, colour = G.C.WHITE } },
 		} }
 	end
-	return { n = G.UIT.C, config = { align = "tm", padding = 0.1, minw = 2.5, r = 0.08, colour = { 0.03, 0.08, 0.06, 1 }, emboss = 0.05 }, nodes = rows }
+	return { n = G.UIT.C, config = { align = "tm", padding = 0.12, minw = 2.7, r = 0.08, colour = { 0.03, 0.08, 0.06, 1 }, emboss = 0.05 }, nodes = rows }
 end
 
 function R.can_wheel()
@@ -781,12 +781,13 @@ end
 
 function R.wheel_definition()
 	local view = R.wheel_view or { prompt = "", result = "" }
-	return R.casino_frame(L("b_gambel_wheel", "Gambel Wheel"), 9.6, {
+	return R.casino_frame(L("b_gambel_wheel", "Gambel Wheel"), 11.2, {
 		{ n = G.UIT.R, config = { align = "cm", padding = 0.02 }, nodes = {
 			{ n = G.UIT.T, config = { ref_table = view, ref_value = "prompt", scale = 0.32, colour = G.C.WHITE } },
 		} },
-		{ n = G.UIT.R, config = { align = "cm", padding = 0.06 }, nodes = {
-			{ n = G.UIT.C, config = { align = "cm", padding = 0.04 }, nodes = { wheel_face() } },
+		{ n = G.UIT.R, config = { align = "cm", padding = 0.08 }, nodes = {
+			wheel_face(),
+			{ n = G.UIT.C, config = { align = "cm", minw = 0.45 } },
 			wheel_legend(),
 		} },
 		{ n = G.UIT.R, config = { align = "cm", padding = 0.04, minh = 0.4 }, nodes = {
