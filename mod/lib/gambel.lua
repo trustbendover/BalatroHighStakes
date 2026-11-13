@@ -391,16 +391,26 @@ function R.reveal_double(msg, line)
 		suit = (msg and msg.drawn == "black") and "S" or "H"
 	end
 	local key = suit .. "_A"
-	view.card_name = key
+	local picked = (view.picked == "black") and L("b_gambel_black", "Black Ace") or L("b_gambel_red", "Red Ace")
+	local drawn = R.ace_name(suit)
+	view.card_name = drawn
+	view.face = "front"
+	view.pip = "A"
+	view.suit_mark = suit
+	view.prompt = L("k_gambel_you_picked", "You picked ") .. picked .. L("k_gambel_drawn_mid", " — Drawn: ") .. drawn
 	view.result = line or ""
 	view.show_close = true
 	local card = view.card
-	if card and G and G.P_CARDS and G.P_CARDS[key] then
+	local def = G and G.P_CARDS and G.P_CARDS[key]
+	if card and def then
 		pcall(function()
-			if card.set_base then card:set_base(G.P_CARDS[key]) end
-			card.facing = "back"
-			card.sprite_facing = "back"
-			if card.flip then card:flip() end
+			if card.set_base then card:set_base(def) end
+			if card.set_sprites then card:set_sprites(nil, def) end
+			card.facing = "front"
+			card.sprite_facing = "front"
+			card.flipping = nil
+			if card.pinch then card.pinch.x = false; card.pinch.y = false end
+			if card.states then card.states.visible = true end
 		end)
 	end
 end
@@ -412,45 +422,62 @@ function R.finish_double(line)
 	view.show_close = true
 end
 
+function R.ace_name(suit)
+	local keys = { H = "k_gambel_ace_h", D = "k_gambel_ace_d", S = "k_gambel_ace_s", C = "k_gambel_ace_c" }
+	local fb = { H = "Ace of Hearts", D = "Ace of Diamonds", S = "Ace of Spades", C = "Ace of Clubs" }
+	return L(keys[suit] or "", fb[suit] or "")
+end
+
+local function ace_fallback(view)
+	local front = view.face == "front"
+	local red = view.suit_mark == "H" or view.suit_mark == "D"
+	local ink = front and (red and { 0.86, 0.16, 0.18, 1 } or { 0.08, 0.08, 0.1, 1 }) or { 0.95, 0.95, 0.98, 1 }
+	local paper = front and { 0.96, 0.94, 0.88, 1 } or { 0.12, 0.28, 0.62, 1 }
+	return { n = G.UIT.C, config = { align = "cm", minw = 1.7, minh = 2.35, r = 0.08, colour = paper, emboss = 0.08 }, nodes = {
+		{ n = G.UIT.R, config = { align = "cm" }, nodes = {
+			{ n = G.UIT.T, config = { ref_table = view, ref_value = "pip", scale = 0.7, colour = ink, shadow = true } },
+		} },
+		{ n = G.UIT.R, config = { align = "cm" }, nodes = {
+			{ n = G.UIT.T, config = { ref_table = view, ref_value = "suit_mark", scale = 0.42, colour = ink } },
+		} },
+	} }
+end
+
 local function ace_node()
 	local view = R.double_view
-	local caption = { n = G.UIT.R, config = { align = "cm", padding = 0.04 }, nodes = {
-		{ n = G.UIT.T, config = { ref_table = view, ref_value = "card_name", scale = 0.4, colour = G.C.WHITE, shadow = true } },
+	view.face = view.face or "back"
+	view.pip = view.pip or "?"
+	view.suit_mark = view.suit_mark or ""
+	local caption = { n = G.UIT.R, config = { align = "cm", padding = 0.04, minh = 0.4 }, nodes = {
+		{ n = G.UIT.T, config = { ref_table = view, ref_value = "card_name", scale = 0.38, colour = G.C.WHITE, shadow = true } },
 	} }
-	local function fallback()
-		view.card_name = "?"
-		return { n = G.UIT.R, config = { align = "cm", padding = 0.08 }, nodes = {
-			{ n = G.UIT.C, config = { align = "cm", minw = 1.55, minh = 2.15, r = 0.08, colour = G.C.BLUE, emboss = 0.08 }, nodes = {
-				{ n = G.UIT.T, config = { ref_table = view, ref_value = "card_name", scale = 0.45, colour = G.C.WHITE, shadow = true } },
-			} },
-		} }
+	local function shown(card_row)
+		return { n = G.UIT.C, config = { align = "cm" }, nodes = { card_row, caption } }
 	end
 	if not (Card and CardArea and G and G.P_CARDS and G.P_CENTERS and G.P_CENTERS.c_base and G.CARD_W and G.CARD_H) then
-		return fallback()
+		return shown(ace_fallback(view))
 	end
 	local card, area
 	local ok = pcall(function()
-		area = CardArea(0, 0, G.CARD_W * 1.35, G.CARD_H * 1.15, {
-			card_limit = 1, type = "title", highlight_limit = 0, card_w = G.CARD_W,
+		area = CardArea(0, 0, G.CARD_W * 1.5, G.CARD_H * 1.35, {
+			card_limit = 1, type = "title_2", highlight_limit = 0, card_w = G.CARD_W * 0.95,
 		})
 		local def = G.P_CARDS.H_A or G.P_CARDS["H_A"]
-		card = Card(0, 0, G.CARD_W, G.CARD_H, def, G.P_CENTERS.c_base)
+		card = Card(0, 0, G.CARD_W * 0.95, G.CARD_H * 0.95, def, G.P_CENTERS.c_base)
 		card.facing = "back"
 		card.sprite_facing = "back"
+		if card.states then card.states.visible = true end
 		area:emplace(card)
 	end)
 	if not ok or not area then
 		if area and area.remove then pcall(function() area:remove() end) end
 		if card and card.remove and not card.REMOVED then pcall(function() card:remove() end) end
-		return fallback()
+		return shown(ace_fallback(view))
 	end
 	view.area, view.card = area, card
-	return { n = G.UIT.C, config = { align = "cm" }, nodes = {
-		{ n = G.UIT.R, config = { align = "cm", padding = 0.04 }, nodes = {
-			{ n = G.UIT.O, config = { object = area } },
-		} },
-		caption,
-	} }
+	return shown({ n = G.UIT.R, config = { align = "cm", minw = G.CARD_W * 1.6, minh = G.CARD_H * 1.45 }, nodes = {
+		{ n = G.UIT.O, config = { object = area } },
+	} })
 end
 
 local FELT = { 0.05, 0.22, 0.14, 1 }
@@ -520,6 +547,11 @@ function R.wheel_labels()
 	}
 end
 
+--- Short marks that fit inside a wedge. The full names stay in the legend.
+function R.wheel_slices()
+	return { "+$8", "+$20", "TAG", "EDIT", "-$4", "-1D", "PERISH" }
+end
+
 function R.wheel_colours()
 	return {
 		{ 0.95, 0.78, 0.28, 1 },
@@ -533,9 +565,10 @@ function R.wheel_colours()
 end
 
 --- Draw is a no-op unless Love2D is present, so headless tests never touch the canvas.
+R.WHEEL_BOX = 4.2
 function R.make_wheel()
 	if not (Moveable and love and love.graphics and love.graphics.polygon) then return nil end
-	local size = 3.6
+	local size = R.WHEEL_BOX
 	local obj = Moveable(0, 0, size, size)
 	obj.config = obj.config or {}
 	if obj.states then
@@ -556,17 +589,18 @@ function R.make_wheel()
 			local n = (R.WHEEL and #R.WHEEL) or 7
 			local slice = (2 * math.pi) / n
 			local colours = R.wheel_colours()
-			local labels = R.wheel_labels()
-			local radius = (math.min(T.w, T.h) / 2 - 0.16) * ts
+			local labels = R.wheel_slices()
+			local half = math.min(T.w, T.h) / 2
+			local radius = (half - 0.28) * ts
 			g.push()
 			if self.translate_container then self:translate_container() end
 			g.scale(sc, sc)
 			g.translate((T.x + T.w / 2) * ts, (T.y + T.h / 2) * ts)
 			g.setColor(0.03, 0.10, 0.07, 1)
-			g.circle("fill", 0, 0, radius + 0.14 * ts)
+			g.circle("fill", 0, 0, radius + 0.08 * ts)
 			g.setColor(GOLD_INK[1], GOLD_INK[2], GOLD_INK[3], 1)
 			g.setLineWidth(1.5)
-			g.circle("line", 0, 0, radius + 0.14 * ts)
+			g.circle("line", 0, 0, radius + 0.08 * ts)
 			for i = 1, n do
 				local a0 = -math.pi / 2 + (i - 1) * slice + rot
 				local a1 = a0 + slice
@@ -587,12 +621,15 @@ function R.make_wheel()
 				if font and labels[i] then
 					local mid = (a0 + a1) / 2
 					local fh = font:getHeight()
+					-- Keep the word upright. A plain radial spin turns the bottom wedges over.
+					local spin = mid + math.pi / 2
+					if math.sin(mid) > 0 then spin = spin + math.pi end
 					g.push()
-					g.translate(math.cos(mid) * radius * 0.62, math.sin(mid) * radius * 0.62)
-					g.rotate(mid + math.pi / 2)
-					g.scale(0.45, 0.45)
-					g.setColor(1, 1, 1, 1)
-					g.printf(labels[i], -46, -fh / 2, 92, "center")
+					g.translate(math.cos(mid) * radius * 0.68, math.sin(mid) * radius * 0.68)
+					g.rotate(spin)
+					g.scale(0.32, 0.32)
+					g.setColor(0.08, 0.06, 0.05, 1)
+					g.printf(labels[i], -28, -fh / 2, 56, "center")
 					g.pop()
 				end
 			end
@@ -615,10 +652,9 @@ end
 local function wheel_face()
 	local obj = R.make_wheel()
 	if obj and R.wheel_view then R.wheel_view.wheel = obj end
-	if obj then return { n = G.UIT.O, config = { object = obj } } end
-	return { n = G.UIT.C, config = { align = "cm", minw = 3.2, minh = 3.2, r = 1.6, colour = FELT, emboss = 0.08 }, nodes = {
-		{ n = G.UIT.T, config = { text = L("b_gambel_wheel", "Gambel Wheel"), scale = 0.36, colour = GOLD_INK } },
-	} }
+	local inner = obj and { n = G.UIT.O, config = { object = obj } }
+		or { n = G.UIT.T, config = { text = L("b_gambel_wheel", "Gambel Wheel"), scale = 0.36, colour = GOLD_INK } }
+	return { n = G.UIT.C, config = { align = "cm", minw = R.WHEEL_BOX + 0.35, minh = R.WHEEL_BOX + 0.35, padding = 0.15 }, nodes = { inner } }
 end
 
 local function wheel_legend()
@@ -631,7 +667,7 @@ local function wheel_legend()
 			{ n = G.UIT.T, config = { text = text, scale = 0.28, colour = G.C.WHITE } },
 		} }
 	end
-	return { n = G.UIT.C, config = { align = "tm", padding = 0.06, r = 0.08, colour = { 0.03, 0.08, 0.06, 1 }, emboss = 0.05 }, nodes = rows }
+	return { n = G.UIT.C, config = { align = "tm", padding = 0.1, minw = 2.5, r = 0.08, colour = { 0.03, 0.08, 0.06, 1 }, emboss = 0.05 }, nodes = rows }
 end
 
 function R.can_wheel()
@@ -745,7 +781,7 @@ end
 
 function R.wheel_definition()
 	local view = R.wheel_view or { prompt = "", result = "" }
-	return R.casino_frame(L("b_gambel_wheel", "Gambel Wheel"), 8.4, {
+	return R.casino_frame(L("b_gambel_wheel", "Gambel Wheel"), 9.6, {
 		{ n = G.UIT.R, config = { align = "cm", padding = 0.02 }, nodes = {
 			{ n = G.UIT.T, config = { ref_table = view, ref_value = "prompt", scale = 0.32, colour = G.C.WHITE } },
 		} },
