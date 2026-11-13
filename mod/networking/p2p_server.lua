@@ -146,6 +146,67 @@ local function base_name(u)
 end
 Core.base_name = base_name
 
+-- os.time() is whole seconds. `now - since >= 1` then becomes true on the next
+-- integer boundary, so a 1s Deathmatch grace expires anywhere from ~0s to 1s
+-- after the drop. A test double (anything other than os.time) is exact: those
+-- clocks step by whole seconds on purpose. The game passes os.time, and the
+-- Lua test host used to as well.
+local ffi_now -- false = unavailable, function = monotonic seconds
+local function bind_ffi_now()
+	if ffi_now ~= nil then return ffi_now or nil end
+	ffi_now = false
+	local ok, ffi = pcall(require, "ffi")
+	if not ok or not ffi then return nil end
+	pcall(ffi.cdef, [[
+		typedef struct { long tv_sec; long tv_nsec; } hs_p2p_timespec;
+		int clock_gettime(int clk_id, hs_p2p_timespec *tp);
+	]])
+	local ts_ok, ts = pcall(ffi.new, "hs_p2p_timespec")
+	if not ts_ok then return nil end
+	local function bind(id)
+		local called, rc = pcall(ffi.C.clock_gettime, id, ts)
+		if not called or rc ~= 0 then return nil end
+		return function()
+			if ffi.C.clock_gettime(id, ts) ~= 0 then return nil end
+			return tonumber(ts.tv_sec) + tonumber(ts.tv_nsec) / 1e9
+		end
+	end
+	-- Linux CLOCK_MONOTONIC is 1. macOS uses 6 (Linux's 6 is the coarse clock, still sub-second).
+	local fn = bind(1) or bind(6)
+	if not fn then return nil end
+	ffi_now = fn
+	return fn
+end
+
+local function subsecond_now()
+	if love and love.timer and type(love.timer.getTime) == "function" then
+		local ok, t = pcall(love.timer.getTime)
+		if ok and type(t) == "number" then return t end
+	end
+	local fn = bind_ffi_now()
+	if fn then return fn() end
+	return nil
+end
+
+--- Seconds already counted toward a grace window.
+--- coarse: the clock only ticks once per second, so the partial second at the
+--- start must not count (a 1s grace needs the clock to move by 2).
+function Core.grace_spent(dt, coarse)
+	if type(dt) ~= "number" then return nil end
+	if dt < 0 then dt = 0 end
+	if coarse then return math.max(0, dt - 1) end
+	return dt
+end
+
+--- now function, and whether grace math must ignore a partial leading second.
+function Core.resolve_now(passed)
+	if type(passed) == "function" and passed ~= os.time then return passed, false end
+	if subsecond_now() then
+		return function() return subsecond_now() or os.time() end, false
+	end
+	return os.time, true
+end
+
 ---------------------------------------------------------------- server
 local Server = {}
 Server.__index = Server
@@ -154,10 +215,32 @@ function Core.new(opts)
 	opts = opts or {}
 	local self = setmetatable({}, Server)
 	self.lobbies = {}
-	self.now = opts.now or os.time
+	local now, coarse = Core.resolve_now(opts.now)
+	self.now = now
+	self.coarse_clock = coarse
 	self.log = opts.log or function() end
 	self.next_id = 0
 	return self
+end
+
+function Server:grace_spent(since, now)
+	now = now or self.now()
+	if type(since) ~= "number" or type(now) ~= "number" then return nil end
+	return Core.grace_spent(now - since, self.coarse_clock)
+end
+
+--- Stop the grace timer on every held copy of this seat. Rejoin must not leave
+--- a timestamp behind for the next tick to treat as "did not rejoin in time".
+function Server:drop_held(L, slot)
+	local id = slot and slot.old and slot.old.id
+	local token = slot and slot.reconnectToken
+	for i = #L.slots, 1, -1 do
+		local s = L.slots[i]
+		if s == slot or (token and s.reconnectToken == token) or (id and s.old and s.old.id == id) then
+			s.since = nil
+			table.remove(L.slots, i)
+		end
+	end
 end
 
 --- A new connection. send(tbl) delivers an action table to that client;
@@ -286,8 +369,9 @@ function Server:lobby_info(L)
 	local away = {}
 	local now, grace = self.now(), Core.rejoin_grace(L.options, L.gameMode)
 	for i, s in ipairs(L.slots) do
+		local spent = s.since and self:grace_spent(s.since, now)
 		away[i] = { id = s.old.id, username = s.old.username, lives = s.old.lives, eliminated = s.old.eliminated or nil,
-			left = (L.isInGame and s.since and not s.old.eliminated) and math.max(0, math.floor(grace - (now - s.since))) or nil }
+			left = (L.isInGame and spent and not s.old.eliminated) and math.max(0, math.floor(grace - spent)) or nil }
 	end
 	for _, p in ipairs(L.players) do
 		local a = { action = "lobbyInfo", host = host.username, hostHash = host.modHash, isHost = p == host,
@@ -515,8 +599,13 @@ end
 --- A held seat whose grace ran out counts as eliminated (all modes since 0.6.8; the seat stays,
 --- so a late reconnect comes back as a spectator of its own seat).
 function Server:expire_slot(L, slot)
-	local o = slot.old
-	if o.eliminated then return end
+	local o = slot and slot.old
+	-- since is cleared on rejoin; a seat already back at the table is not "away"
+	if not o or o.eliminated or not slot.since then return end
+	if find(L.players, function(p) return p == o or (o.id and p.id == o.id and not p.spectator) end) then
+		slot.since = nil
+		return
+	end
 	self.log("Player " .. tostring(o.username) .. " did not rejoin in time: eliminated")
 	o.eliminated, o.lives = true, 0
 	L.elimOrder = L.elimOrder or {}
@@ -1182,7 +1271,7 @@ function Server:send_resume(L, c, late)
 end
 
 function Server:reclaim(L, c, slot)
-	remove_value(L.slots, slot)
+	self:drop_held(L, slot)
 	L.emptySince = nil
 	local o = slot.old
 	for _, f in ipairs(SLOT_FIELDS) do c[f] = o[f] end
@@ -1302,7 +1391,8 @@ function Server:spectate(L, c)
 	sendA(c, { action = "joinedLobby", code = L.code, type = L.gameMode, reconnectToken = c.reconnectToken, spectator = true })
 	self:send_options(c)
 	local grace = Core.rejoin_grace(L.options, L.gameMode)
-	local hold = (held and held.since and not held.old.eliminated) and math.max(0, math.floor(grace - (self.now() - held.since))) or nil
+	local spent = held and held.since and self:grace_spent(held.since)
+	local hold = (spent and not held.old.eliminated) and math.max(0, math.floor(grace - spent)) or nil
 	self:lobby_info(L) -- names first, so the panel shows them immediately
 	sendA(c, { action = "spectateStart", code = L.code, gameMode = L.gameMode, blindActive = L.blindActive, reset = true,
 		heldSeat = hold and { left = hold, token = held_tok and held.old.reconnectToken or nil } or nil })
@@ -1926,8 +2016,9 @@ function Server:tick()
 		if L.isInGame and not L.migration then
 			local grace = Core.rejoin_grace(L.options, L.gameMode)
 			for _, sl in ipairs(L.slots) do
-				if L.isInGame and not sl.old.eliminated and not sl.old.spectator and sl.since and not sl.migration
-					and now - sl.since >= grace then self:expire_slot(L, sl) end
+				local spent = sl.since and self:grace_spent(sl.since, now)
+				if L.isInGame and sl.old and not sl.old.eliminated and not sl.old.spectator and sl.since and not sl.migration
+					and spent and spent >= grace then self:expire_slot(L, sl) end
 			end
 		end
 		if #L.players == 0 and L.emptySince and now - L.emptySince > Core.EMPTY_LOBBY_TTL then
