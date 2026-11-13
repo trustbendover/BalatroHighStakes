@@ -247,6 +247,7 @@ ok(shop:find("open_wheel", 1, true) and shop:find('R.bet("wheel")', 1, true) and
 ok(shop:find("if not (love and love.graphics", 1, true) and shop:find("love.graphics.polygon", 1, true) and shop:find("G.TILESIZE", 1, true), "the wheel canvas is skipped without Love2D and drawn in pixels")
 ok(shop:find("gambel_bet_for", 1, true) and shop:find("sync_bet_ante", 1, true) and shop:find("drop_cards", 1, true), "the ante lock survives a shop rebuild, and a closed card is removed")
 ok(shop:find("function R.make_double_card", 1, true) and shop:find('sprite_facing = "back"', 1, true) and shop:find("emplace(card, nil, true)", 1, true), "the card is created face down and emplace does not flip it")
+ok(shop:find("no_ui = true", 1, true) and shop:find("states.hover.can = false", 1, true) and shop:find("card.hover = function() end", 1, true), "hovering the Ace does not open the card tooltip")
 ok(shop:find("card:flip()", 1, true) and shop:find("set_sprites", 1, true) and shop:find('sprite_facing = "front"', 1, true) and shop:find("R.ace_name", 1, true), "Red or Black flips the drawn Ace face up and names it")
 ok(shop:find("R.WHEEL_BOX = 5.0", 1, true) and shop:find("wheel_slices", 1, true)
 	and shop:find("minw = R.WHEEL_BOX", 1, true) and shop:find("minw = 0.7", 1, true)

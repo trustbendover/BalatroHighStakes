@@ -422,6 +422,7 @@ function R.reveal_double(msg, line)
 				end
 			end
 			if card.states then card.states.visible = true end
+			R.mute_ace(card, view.area)
 		end)
 	end
 end
@@ -454,6 +455,24 @@ local function ace_fallback(view)
 	} }
 end
 
+--- The Ace is a prop. Hover must not open the chips/mult card tooltip.
+function R.mute_ace(card, area)
+	if area and area.states and area.states.hover then area.states.hover.can = false end
+	if not card then return end
+	card.no_ui = true
+	if card.states then
+		if card.states.hover then card.states.hover.can = false end
+		if card.states.drag then card.states.drag.can = false end
+		if card.states.click then card.states.click.can = false end
+	end
+	card.hover = function() end
+	if card.config then card.config.h_popup = nil end
+	if card.children and card.children.h_popup then
+		pcall(function() card.children.h_popup:remove() end)
+		card.children.h_popup = nil
+	end
+end
+
 --- Face down until reveal_double. emplace flips a face-down card up unless stay_flipped is set.
 function R.make_double_card(view)
 	if not (view and Card and CardArea and G and G.P_CARDS and G.P_CENTERS and G.P_CENTERS.c_base and G.CARD_W and G.CARD_H) then
@@ -480,6 +499,7 @@ function R.make_double_card(view)
 			card.children.back.VT.w = card.T.w
 			card.children.back.VT.h = card.T.h
 		end
+		R.mute_ace(card, area)
 	end)
 	if not ok or not area or not card then
 		if area and area.remove then pcall(function() area:remove() end) end
