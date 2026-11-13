@@ -23,3 +23,7 @@ Balatro High Stakes is a fork of **Balatro Multiplayer**, licensed under the GNU
 
 ## The game
 - **Balatro** by LocalThunk, published by Playstack. This mod is not affiliated with them.
+
+## Music
+- **GAMBEL TIME** — Produced & engineered by **B ass gas M**.
+

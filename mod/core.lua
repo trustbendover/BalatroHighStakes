@@ -359,6 +359,7 @@ if MP.SPECTATE and MP.SPECTATE.register then MP.SPECTATE.register() end
 if MP.REJOIN and MP.REJOIN.register then MP.REJOIN.register() end
 if MP.MATCH_STATS and MP.MATCH_STATS.register then MP.MATCH_STATS.register() end
 if MP.CHAT and MP.CHAT.register then MP.CHAT.register() end
+if MP.GAMBEL and MP.GAMBEL.register_ui then MP.GAMBEL.register_ui() end
 
 -- 0.6.8: Balatro High Stakes is Steam peer-to-peer ONLY. The host's Balatro runs the game server
 -- (networking/p2p_server.lua) and friends join with the lobby code over Steam. The old TCP client

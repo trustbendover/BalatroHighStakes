@@ -22,7 +22,15 @@ for _, mode in ipairs({ "attrition", "showdown", "koth", "survival", "deathmatch
 end
 
 ok(R.lives(nil) == 3 and R.lives(1) == 2 and R.lives(3) == 3 and R.lives(9) == 5, "lives stay inside 2-5")
-ok(R.ante_target({}) == 8 and R.ante_target({ gambel_ante = 4 }) == 4 and R.ante_target({ gambel_ante = 99 }) == 12, "target ante defaults to 8")
+ok(R.ante_target({}) == 6 and R.ante_target({ gambel_ante = 4 }) == 4 and R.ante_target({ gambel_ante = 99 }) == 12, "target ante defaults to 6")
+ok(R.blind_phase("Small") == "build" and R.blind_phase("Big") == "drop" and R.blind_phase("Boss") == "final", "small builds, big drops, the boss is the final drop")
+ok(R.phase_bonus("drop") == 3 and R.phase_bonus("build") == 0, "the drop pays a small cash bump")
+ok(R.prize_plan("edition", { plain_joker = true }).kind == "edition", "an open joker takes a real edition")
+ok(R.prize_plan("edition", {}).kind == "cash" and R.prize_plan("edition", {}).amount == 8, "no joker: the edition pays $8")
+ok(R.prize_plan("tag").kind == "tag" and R.prize_plan("discard").kind == "discard", "a tag and a discard are real effects")
+ok(R.prize_plan("perish", { mortal_joker = true }).kind == "perish", "a non-eternal joker can turn perishable")
+ok(R.prize_plan("perish", {}).kind == "tax" and R.prize_plan("perish", {}).amount == 4, "no joker: perish is a $4 tax")
+ok(R.prize_plan("cash", { amount = 20 }).amount == 20 and R.prize_plan("tax", { amount = 4 }).amount == 4, "cash and tax keep their amounts")
 ok(R.cut(1) == 0 and R.cut(2) == 1 and R.cut(5) == 1 and R.cut(6) == 2 and R.cut(8) == 2, "bottom 1 until 6, then bottom 2")
 
 local function row(id, score, hands) return { id = id, score = score, hands = hands or 1 } end
@@ -162,5 +170,13 @@ local en = dofile("localization/en-us.lua").misc.dictionary
 local nl = dofile("localization/nl.lua").misc.dictionary
 ok(en.k_gambel_time == "Gambel Time" and nl.k_gambel_time == "Gambel Time", "the mode name stays Gambel Time")
 ok(en.k_gambel_house_win:find("House", 1, true) and nl.k_gambel_house:find("Huis", 1, true), "The House has a Dutch name")
+local shop = io.open("lib/gambel.lua"):read("*a")
+ok(shop:find("n = G.UIT.R", 1, true) and shop:find("mp_gambel_double", 1, true) and shop:find("mp_gambel_wheel", 1, true), "the two shop buttons sit in one row")
+ok(shop:find("set_edition", 1, true) and shop:find("add_tag", 1, true) and shop:find("set_perishable", 1, true) and shop:find("arm_discard", 1, true), "wheel prizes change the run, they are not only a toast")
+ok(shop:find("pitch = 1", 1, true) and shop:find("sync = false", 1, true), "the song plays at its own pitch")
+ok(shop:find("function G.FUNCS.mp_gambel_double(e)", 1, true) and shop:find("function G.FUNCS.mp_gambel_wheel(e)", 1, true), "both buttons receive the click")
+ok(shop:find("box:remove()", 1, true), "the shop panel is removed when you leave")
+local credits = io.open("CREDITS.md"):read("*a")
+ok(credits:find("B ass gas M", 1, true), "the song credits B ass gas M")
 
 print("PASS: gambel time")

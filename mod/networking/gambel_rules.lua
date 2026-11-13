@@ -7,7 +7,8 @@ G.KEY = "gambel_time"
 G.MIN_PLAYERS = 1
 G.MAX_PLAYERS = 8
 G.DEFAULT_LIVES = 3
-G.DEFAULT_ANTE = 8
+G.DEFAULT_ANTE = 6
+G.TIMER = 45
 G.STAKE_CAP = 50
 G.POT_CASH = 8
 G.TAX = 4
@@ -58,6 +59,38 @@ function G.ante_target(options)
 	if n < 4 then return 4 end
 	if n > 12 then return 12 end
 	return n
+end
+
+--- Small blind is the build-up, Big blind is the drop, Boss is the final drop.
+function G.blind_phase(deck)
+	deck = tostring(deck or "")
+	if deck == "Boss" or deck:find("nemesis", 1, true) or deck:find("boss", 1, true) then return "final" end
+	if deck == "Big" or deck:find("big", 1, true) then return "drop" end
+	return "build"
+end
+
+--- Cash paid when a Big blind (the drop) starts. The boss pays through the Chaos Spin.
+function G.phase_bonus(phase)
+	if phase == "drop" then return 3 end
+	return 0
+end
+
+--- What a wheel prize actually does. An edition or a perishable needs a real joker; otherwise it is cash.
+function G.prize_plan(id, opts)
+	opts = opts or {}
+	if id == "edition" then
+		if opts.plain_joker then return { kind = "edition" } end
+		return { kind = "cash", amount = 8 }
+	end
+	if id == "perish" then
+		if opts.mortal_joker then return { kind = "perish" } end
+		return { kind = "tax", amount = 4 }
+	end
+	if id == "tag" then return { kind = "tag" } end
+	if id == "discard" then return { kind = "discard" } end
+	if id == "cash" then return { kind = "cash", amount = tonumber(opts.amount) or 0 } end
+	if id == "tax" then return { kind = "tax", amount = tonumber(opts.amount) or 4 } end
+	return { kind = tostring(id or "") }
 end
 
 --- How many of the lowest scores lose a life. 2-5: one. 6-8: two. Solo: none (The House).

@@ -36,7 +36,7 @@ export function gambelLives(n: unknown): number {
 
 export function gambelAnte(options: { gambel_ante?: unknown } | undefined): number {
 	const v = Number(options?.gambel_ante);
-	if (!Number.isFinite(v)) return 8;
+	if (!Number.isFinite(v)) return 6;
 	const i = Math.floor(v);
 	if (i < 4) return 4;
 	if (i > 12) return 12;

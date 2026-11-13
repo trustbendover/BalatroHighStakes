@@ -160,7 +160,7 @@ function MP.UI.create_lobby_options_tab()
 					"k_gambel_time",
 					0.85,
 					{ 4, 5, 6, 7, 8, 9, 10, 11, 12 },
-					tonumber(MP.LOBBY.config.gambel_ante) or 8,
+					tonumber(MP.LOBBY.config.gambel_ante) or 6,
 					"change_gambel_ante"
 				)
 			end)(),
