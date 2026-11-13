@@ -25,7 +25,7 @@ local function get_warnings()
 		table.insert(warnings, { localize({ type = "variable", key = n == 1 and "k_wait_ready_one" or "k_wait_ready", vars = { n } }), G.C.UI.TEXT_LIGHT, 0.3 })
 	end
 	-- 0.6.8: alone in the lobby (the mode's own player-count message covers 2+ players)
-	if MP.LOBBY.is_host and not MP.LOBBY.ready_to_start and MP.LOBBY.player_list and #MP.LOBBY.player_list < 2 then
+	if MP.LOBBY.is_host and not MP.LOBBY.ready_to_start and MP.LOBBY.player_list and #MP.LOBBY.player_list < ((MP.MODES and MP.MODES.limits and MP.MODES.limits().min) or 2) then
 		table.insert(warnings, { localize("k_wait_join"), G.C.UI.TEXT_LIGHT, 0.3 })
 	end
 

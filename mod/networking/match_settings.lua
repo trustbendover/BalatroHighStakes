@@ -101,6 +101,7 @@ M.OPTIONAL = {
 	koth_hold_target = "num",
 	koth_bounty_money = "num",
 	timer_base_multiplier = "num",
+	gambel_ante = "num",
 }
 
 -- Never taken from the network and never put on the wire.

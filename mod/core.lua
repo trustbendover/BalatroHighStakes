@@ -397,6 +397,7 @@ do
 		Core.KOTH = MP.load_mp_file("networking/koth_rules.lua") -- King of the Hill gamemode rules
 		Core.TEAMS = MP.load_mp_file("networking/teams_rules.lua") -- Teams gamemode rules
 		Core.PVP = MP.load_mp_file("networking/pvp_rules.lua") -- free-for-all life loss (2-8 players)
+		Core.GAMBEL = MP.load_mp_file("networking/gambel_rules.lua") -- Gambel Time table, bets, and boss twists
 		local backend, berr
 		if MP.DEV and MP.DEV.new_backend then backend, berr = MP.DEV.new_backend() else backend, berr = P2P.new_ffi_backend() end
 		if not backend then error(berr) end

@@ -60,6 +60,9 @@ function G.FUNCS.select_blind(e)
 	MP.GAME.end_pvp = false
 	MP.GAME.prevent_eval = false
 	select_blind_ref(e)
+	if MP.GAMBEL and MP.GAMBEL.on_blind and e and e.config and e.config.ref_table then
+		MP.GAMBEL.on_blind(e.config.ref_table.key or e.config.ref_table.name)
+	end
 	if MP.is_mp_or_ghost() then
 		MP.GAME.ante_key = tostring(math.random())
 		if not MP.GHOST.is_active() then

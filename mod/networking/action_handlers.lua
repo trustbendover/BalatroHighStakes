@@ -369,7 +369,9 @@ local function action_lobbyInfo(p)
 
 	-- Ready when the player count fits the mode (MP.MODES.start_problem) and every non-host is ready
 	if p.players then
-		local all_ready = #p.players >= 2
+	local minp = 2
+	if is_host and MP.MODES and MP.MODES.limits then minp = MP.MODES.limits().min or 2 end
+	local all_ready = #p.players >= minp
 		if is_host and MP.MODES and MP.MODES.start_problem(#p.players) then all_ready = false end
 		local unready = 0
 		for i = 2, #p.players do
@@ -943,7 +945,11 @@ local function action_player_info(p)
 	MP.GAME.lives = lives
 end
 
-local function action_win_game()
+local function action_win_game(p)
+	if p and p.reason == "house" and MP.GAMBEL and MP.GAMBEL.toast then
+		local s = localize("k_gambel_house_win")
+		MP.GAMBEL.toast(type(s) == "string" and s ~= "ERROR" and s or "You beat The House!")
+	end
 	MP.end_game_jokers_payload = ""
 	MP.nemesis_deck_string = ""
 	MP.end_game_jokers_received = false
@@ -1586,6 +1592,13 @@ function MP.ACTIONS.rematch()
 	Client.send({ action = "rematch" })
 end
 
+function MP.ACTIONS.gambel_boss()
+	Client.send({
+		action = "gambelBoss",
+		ante = G and G.GAME and G.GAME.round_resets and G.GAME.round_resets.ante or 1,
+	})
+end
+
 function MP.ACTIONS.fail_round(hands_used)
 	if MP.LOBBY.config.no_gold_on_round_loss then G.GAME.blind.dollars = 0 end
 	if hands_used == 0 then return end
@@ -1938,6 +1951,14 @@ local HANDLERS = {
 	endPvP = action_end_pvp,
 	playerInfo = action_player_info,
 	winGame = action_win_game,
+	gambelTable = function(p) if MP.GAMBEL and MP.GAMBEL.apply_table then MP.GAMBEL.apply_table(p.spin) end end,
+	gambelTwist = function(p)
+		if not MP.GAMBEL then return end
+		MP.GAME.gambel_twist = p.twist
+		if MP.GAMBEL.toast and MP.GAMBEL.twist_name then MP.GAMBEL.toast(MP.GAMBEL.twist_name(p.twist)) end
+	end,
+	gambelBetResult = function(p) if MP.GAMBEL and MP.GAMBEL.apply_bet then MP.GAMBEL.apply_bet(p) end end,
+	gambelHit = function(p) if MP.GAMBEL and MP.GAMBEL.apply_hit then MP.GAMBEL.apply_hit(p) end end,
 	loseGame = action_lose_game,
 	lobbyOptions = action_lobby_options,
 	enemyLocation = enemyLocation,

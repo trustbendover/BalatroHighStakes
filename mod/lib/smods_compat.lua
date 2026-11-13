@@ -33,7 +33,11 @@ end
 function MP.UTILS.wrap_probability_vars(get_vars)
 	return function(trigger_obj, base_numerator, base_denominator, identifier, from_roll, no_mod)
 		local bare = MP.UTILS.opponent_odds(trigger_obj)
-		return get_vars(trigger_obj, base_numerator, base_denominator, identifier, from_roll, no_mod or bare or nil)
+		local n, d = get_vars(trigger_obj, base_numerator, base_denominator, identifier, from_roll, no_mod or bare or nil)
+		if not bare and MP.GAME and MP.GAME.gambel_wild and type(n) == "number" and type(d) == "number" and d > 0 then
+			n = math.min(d, n * 2)
+		end
+		return n, d
 	end
 end
 

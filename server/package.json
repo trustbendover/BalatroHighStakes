@@ -2,8 +2,8 @@
 	"version": "0.6.9.1",
 	"scripts": {
 		"build": "tsc",
-		"test": "npm run build && node test/threePlayer.test.mjs && node test/rejoinLateJoin.test.mjs && node test/koth.test.mjs && node test/multiPlayer.test.mjs && node test/deathmatch.test.mjs && node test/rematch.test.mjs && node test/chat.test.mjs",
-		"test:lua": "SERVER_ENTRY=test/luaBridge.mjs node test/threePlayer.test.mjs && SERVER_ENTRY=test/luaBridge.mjs node test/rejoinLateJoin.test.mjs && SERVER_ENTRY=test/luaBridge.mjs node test/koth.test.mjs && SERVER_ENTRY=test/luaBridge.mjs node test/multiPlayer.test.mjs && SERVER_ENTRY=test/luaBridge.mjs node test/deathmatch.test.mjs && SERVER_ENTRY=test/luaBridge.mjs node test/rematch.test.mjs && SERVER_ENTRY=test/luaBridge.mjs node test/chat.test.mjs"
+		"test": "npm run build && node test/threePlayer.test.mjs && node test/rejoinLateJoin.test.mjs && node test/koth.test.mjs && node test/multiPlayer.test.mjs && node test/deathmatch.test.mjs && node test/rematch.test.mjs && node test/chat.test.mjs && node test/gambel.test.mjs",
+		"test:lua": "SERVER_ENTRY=test/luaBridge.mjs node test/threePlayer.test.mjs && SERVER_ENTRY=test/luaBridge.mjs node test/rejoinLateJoin.test.mjs && SERVER_ENTRY=test/luaBridge.mjs node test/koth.test.mjs && SERVER_ENTRY=test/luaBridge.mjs node test/multiPlayer.test.mjs && SERVER_ENTRY=test/luaBridge.mjs node test/deathmatch.test.mjs && SERVER_ENTRY=test/luaBridge.mjs node test/rematch.test.mjs && SERVER_ENTRY=test/luaBridge.mjs node test/chat.test.mjs && SERVER_ENTRY=test/luaBridge.mjs node test/gambel.test.mjs"
 	},
 	"dependencies": {
 		"better-sqlite3": "^12.10.0",

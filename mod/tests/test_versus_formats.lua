@@ -47,7 +47,7 @@ local g = MP.UI.gamemode_menu_groups()
 ok(g[1].name == "k_versus" and g[2].name == "k_ffa" and g[3].name == "k_challenge", "Versus first, then Free-for-all, Challenge")
 local ids = {}
 for _, grp in ipairs(g) do for _, b in ipairs(grp.buttons) do ids[#ids + 1] = b.button_id:match("(.+)_%w+_button") end end
-ok(table.concat(ids, ",") == "duel,teams2,teams3,teams4,teams,attrition,showdown,koth,deathmatch,survival", "entries in order, Teams can be 3v2 or 4v3")
+ok(table.concat(ids, ",") == "duel,teams2,teams3,teams4,teams,attrition,showdown,koth,deathmatch,gambel_time,survival", "entries in order, Teams can be 3v2 or 4v3")
 MP.UI.select_gamemode_entry("teams3")
 ok(MP.LOBBY.config.gamemode == "gamemode_mp_teams" and MP.LOBBY.config.teams_format == 3 and MP.LOBBY.config.teams_size == 3, "3v3 -> teams mode, format 3")
 MP.UI.select_gamemode_entry("teams")

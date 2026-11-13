@@ -361,6 +361,12 @@ const server = createServer((socket) => {
 					case 'failRound':
 						actionHandlers.failRound(client)
 						break
+					case 'gambelBoss':
+						actionHandlers.gambelBoss(actionArgs as { ante?: number }, client)
+						break
+					case 'gambelBet':
+						actionHandlers.gambelBet(actionArgs as { kind?: string; money?: number; ante?: number }, client)
+						break
 					case 'setAnte':
 						actionHandlers.setAnte(
 							actionArgs as ActionHandlerArgs<ActionSetAnte>,

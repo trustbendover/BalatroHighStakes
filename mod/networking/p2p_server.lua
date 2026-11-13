@@ -21,6 +21,12 @@ function Core.unready_count(players)
 end
 
 function Core.start_error(mode, n, options)
+	-- Gambel Time is the one mode a single player can start. Every other mode stays at 2.
+	if mode == "gambel_time" then
+		if n < 1 then return "Need at least 1 player to start." end
+		if n > Core.max_players(mode) then return "Too many players for this mode." end
+		return nil
+	end
 	if n < Core.MIN_PLAYERS then return "Need at least 2 players to start." end
 	if n > Core.max_players(mode) then return "Too many players for this mode." end
 	if mode == "duel" and n ~= 2 then return "1v1 Duel needs exactly 2 players." end
@@ -33,7 +39,7 @@ function Core.start_error(mode, n, options)
 	return nil
 end
 Core.SERVER_VERSION = "0.6.9.1"
-Core.STARTING_LIVES = { attrition = 4, showdown = 2, survival = 1, koth = 3, teams = 4, duel = 4, deathmatch = 4 }
+Core.STARTING_LIVES = { attrition = 4, showdown = 2, survival = 1, koth = 3, teams = 4, duel = 4, deathmatch = 4, gambel_time = 3 }
 -- Deathmatch: seconds a disconnected player may rejoin before counting as eliminated
 Core.DEATHMATCH_GRACE = 60
 function Core.deathmatch_grace(options)
@@ -191,7 +197,7 @@ function Server:set_location(c, loc)
 	end
 end
 
-function Server:lose_life(c, cause)
+function Server:lose_life(c, cause, amount)
 	cause = cause or "round"
 	-- 0.6.8: once the match is decided (or for a player already out) no life is lost any more
 	if c.eliminated or c.spectator or (c.lobby and not c.lobby.isInGame) then return end
@@ -203,9 +209,11 @@ function Server:lose_life(c, cause)
 		if c.roundLivesBlocker then return end
 		c.roundLivesBlocker = true
 	end
-	c.lives = math.max(0, c.lives - 1)
+	local n = math.floor(tonumber(amount) or 1)
+	if n < 1 then n = 1 end
+	c.lives = math.max(0, c.lives - n)
 	local b = c.lobby and self.book_entry and self:book_entry(c.lobby, c)
-	if b then b.livesLost = (b.livesLost or 0) + 1 end
+	if b then b.livesLost = (b.livesLost or 0) + n end
 	sendA(c, { action = "playerInfo", lives = c.lives })
 	if c.lobby then
 		local info = self:enemy_info(c, true)
@@ -383,7 +391,8 @@ function Server:check_game_over_inner(L)
 	-- 0.6.8 final: while a seat is still held nobody is declared winner or knocked out by the
 	-- final-score rule; decide once the seat rejoins (it is then the survivor) or its grace expires.
 	if survivors == 0 and #dying > 0 and #self:away_alive(L) > 0 then return false end
-	if survivors == 0 and #dying > 0 and not self:teams_active(L) then
+	local house = self:gambel_solo(L)
+	if survivors == 0 and #dying > 0 and not self:teams_active(L) and not house then
 		-- nobody left standing: the highest score among those dying now wins (ties: all of them)
 		local best = nil
 		for _, p in ipairs(dying) do if best == nil or s_gt(p.score, best) then best = p.score end end
@@ -413,6 +422,8 @@ function Server:check_game_over_inner(L)
 			if sl.old.team and not spared[sl.old] and not left[sl.old.team] then left[sl.old.team] = true; n = n + 1 end
 		end
 		ending = n <= 1
+	elseif house then
+		ending = false
 	else
 		local living = 0
 		for _, p in ipairs(L.players) do
@@ -449,6 +460,13 @@ function Server:check_game_over_inner(L)
 		end
 		if n <= 1 then
 			for _, p in ipairs(alive) do sendA(p, { action = "winGame", reason = "teams" }) end
+			L.isInGame, L.blindActive, L.slots = false, false, {}
+			return true
+		end
+		return false
+	end
+	if house then
+		if #alive == 0 and #dying > 0 then
 			L.isInGame, L.blindActive, L.slots = false, false, {}
 			return true
 		end
@@ -510,18 +528,53 @@ function Server:expire_slot(L, slot)
 end
 Server.deathmatch_expire = Server.expire_slot
 
+--- Solo Gambel Time is one seated player against The House. A held seat still counts.
+function Server:gambel_population(L)
+	local n = 0
+	for _, p in ipairs(L.players or {}) do if not p.spectator then n = n + 1 end end
+	for _, sl in ipairs(L.slots or {}) do if sl.old and not sl.old.spectator then n = n + 1 end end
+	return n
+end
+function Server:gambel_solo(L)
+	return L and L.gameMode == "gambel_time" and self:gambel_population(L) <= 1
+end
+function Server:gambel_table(L, ante)
+	if not Core.GAMBEL or L.gameMode ~= "gambel_time" then return end
+	ante = math.floor(tonumber(ante) or 1)
+	if L.gambelAnte == ante and L.gambelTable then return end
+	L.gambelAnte = ante
+	L.gambelTable = Core.GAMBEL.table_spin(L.seed, ante)
+	self:broadcast(L, { action = "gambelTable", ante = ante, spin = L.gambelTable })
+end
+function Server:gambel_sync(c)
+	local L = c.lobby
+	if not L or L.gameMode ~= "gambel_time" then return end
+	if L.gambelTable then sendA(c, { action = "gambelTable", ante = L.gambelAnte, spin = L.gambelTable }) end
+	if L.gambelTwist then sendA(c, { action = "gambelTwist", twist = L.gambelTwist, ante = L.gambelBossAnte }) end
+end
+
 function Server:try_start_blind(L)
 	if not L.isInGame or L.blindActive or L.migration then return false end
+	-- Solo Gambel Time plays vanilla blinds against The House. There is no Nemesis to start.
+	if self:gambel_solo(L) then return false end
 	local alive = self:alive(L)
 	if #alive == 0 or not every(alive, function(p) return p.isReady end) then return false end
 	L.blindSeq = L.blindSeq + 1
 	for _, p in ipairs(alive) do
 		p.sitOut, p.inPvp, p.blindSeq = false, true, L.blindSeq
 		p.isReady, p.score, p.handsLeft, p.playedThisBlind, p.pvpDone = false, ZERO(), 4, false, false
+		p.handsPlayed = 0
 		self:reset_blocker(p)
 	end
 	local first = find(alive, function(p) return p.firstReady end)
 	L.firstReadyAt, L.blindActive = nil, true
+	if L.gameMode == "gambel_time" and Core.GAMBEL then
+		local ante = alive[1] and alive[1].ante or 1
+		L.gambelTwist = Core.GAMBEL.twist(L.seed, ante, L.blindSeq, #alive)
+		L.gambelBossAnte = ante
+		L.gambelSabotaged = nil
+		self:broadcast(L, { action = "gambelTwist", twist = L.gambelTwist, ante = ante, blind = L.blindSeq })
+	end
 	self:broadcast(L, { action = "startBlind", firstPlayer = first and (first == L.players[1] and "host" or "guest") or nil,
 		firstPlayerId = first and first.id or nil })
 	return true
@@ -585,9 +638,20 @@ function Server:try_resolve_pvp(L)
 	local timerLosers = filter(alive, function(p) return p.pvpTimerFailed end)
 	local roundLosers = {}
 	if #timerLosers == 0 then
-		-- 2-5 players: the single lowest score; 6-8: the bottom two (networking/pvp_rules.lua)
 		local entries = {}
-		for i, p in ipairs(alive) do entries[i] = { id = p.id, score = p.score } end
+		for i, p in ipairs(alive) do entries[i] = { id = p.id, score = p.score, hands = p.handsPlayed or 0, give = p.jokerGive, room = p.jokerRoom } end
+		if L.gameMode == "gambel_time" and Core.GAMBEL then
+			local res = Core.GAMBEL.resolve(entries, L.gambelTwist, function(a, b) return s_gt(a, b) end)
+			L.gambelLives = res.lives
+			L.gambelPayout = Core.GAMBEL.payout(entries, L.gambelTwist, res.losers, function(a, b) return s_gt(a, b) end)
+			if res.hold then roundLosers = {}
+			else
+				local lose = {}
+				for _, id in ipairs(res.losers) do lose[id] = true end
+				roundLosers = filter(alive, function(p) return lose[p.id] end)
+			end
+		else
+		-- 2-5 players: the single lowest score; 6-8: the bottom two (networking/pvp_rules.lua)
 		local ids = Core.PVP and Core.PVP.losers(entries, function(a, b) return not s_gt(a, b) end) or {}
 		local lose = {}
 		for _, id in ipairs(ids) do lose[id] = true end
@@ -605,12 +669,27 @@ function Server:try_resolve_pvp(L)
 				end)
 			end
 		end
+		end
 	end
 	local koth_ev = self:koth_resolve(L, alive, roundLosers)
 	if koth_ev and koth_ev.shieldedId then
 		roundLosers = filter(roundLosers, function(p) return p.id ~= koth_ev.shieldedId end)
 	end
-	for _, p in ipairs(roundLosers) do self:lose_life(p, "round") end
+	for _, p in ipairs(roundLosers) do
+		self:lose_life(p, "round", L.gameMode == "gambel_time" and (L.gambelLives or 1) or 1)
+	end
+	if L.gambelPayout then
+		local pay = L.gambelPayout
+		for _, p in ipairs(alive) do
+			local role = pay.to == p.id and "take" or nil
+			for _, id in ipairs(pay.from or {}) do if id == p.id then role = "give" end end
+			if role then
+				sendA(p, { action = "gambelHit", kind = pay.kind, amount = pay.cash, payout = pay.payout,
+					joker = pay.joker and true or false, role = role })
+			end
+		end
+		L.gambelPayout = nil
+	end
 	self:penalize_absent(L, absent)
 	do
 		local lost = {}
@@ -1089,6 +1168,7 @@ function Server:send_resume(L, c, late)
 	sendA(c, { action = "playerInfo", lives = c.lives })
 	for _, o in ipairs(L.players) do if o ~= c and not o.spectator then sendA(c, self:enemy_info(o, true)) end end
 	for _, s in ipairs(L.slots) do if not s.old.spectator then sendA(c, self:enemy_info(s.old, true)) end end
+	self:gambel_sync(c)
 end
 
 function Server:reclaim(L, c, slot)
@@ -1505,6 +1585,31 @@ function Server:chat_say(c, text)
 	self:broadcast(L, msg)
 end
 
+function H.gambelBoss(S, c, a)
+	local L = c.lobby
+	if not L or L.gameMode ~= "gambel_time" or not Core.GAMBEL or c.eliminated then return end
+	local ante = math.floor(tonumber(a and a.ante) or c.ante or 1)
+	if L.gambelBossAnte == ante and L.gambelTwist then
+		L.gambelBossOpen = true
+		return sendA(c, { action = "gambelTwist", twist = L.gambelTwist, ante = ante })
+	end
+	local n = S:gambel_solo(L) and 1 or #S:alive(L)
+	L.gambelTwist = Core.GAMBEL.twist(L.seed, ante, ante, n)
+	L.gambelBossAnte = ante
+	L.gambelBossOpen = true
+	S:broadcast(L, { action = "gambelTwist", twist = L.gambelTwist, ante = ante, solo = n <= 1 })
+end
+function H.gambelBet(S, c, a)
+	local L = c.lobby
+	if not L or L.gameMode ~= "gambel_time" or not Core.GAMBEL or c.eliminated or c.spectator then return end
+	local ante = math.floor(tonumber(a and a.ante) or c.ante or 1)
+	if c.gambelBetAnte == ante then return sendA(c, { action = "gambelBetResult", ok = false, reason = "once" }) end
+	local kind = a and a.kind == "wheel" and "wheel" or "double"
+	local res = kind == "wheel" and Core.GAMBEL.wheel(L.seed, c.id, ante, a and a.money) or Core.GAMBEL.flip(L.seed, c.id, ante, a and a.money)
+	if res.ok then c.gambelBetAnte = ante end
+	sendA(c, { action = "gambelBetResult", kind = kind, ok = res.ok, reason = res.reason, won = res.won,
+		id = res.id, stake = res.stake, delta = res.delta, amount = res.amount })
+end
 function H.chat(S, c, a)
 	if not c.lobby or not Core.CHAT then return end
 	local text, why = Core.CHAT.accept(a and a.text)
@@ -1547,6 +1652,7 @@ function H.startGame(S, c)
 	L.startPlayers = #S:seated(L)
 	L.lastStats = nil
 	local lives = tonumber(L.options.starting_lives) or Core.STARTING_LIVES[L.gameMode] or 4
+	if L.gameMode == "gambel_time" and Core.GAMBEL then lives = Core.GAMBEL.lives(lives) end
 	local seed = nil
 	if not L.options.different_seeds then seed = rand_str("ABCDEFGHIJKLMNPQRSTUVWXYZ123456789", 8) end
 	L.seed = seed
@@ -1594,8 +1700,22 @@ function H.playHand(S, c, a)
 	c.score.str = tostring(a.score or "0")
 	c.handsLeft = math.floor(tonumber(a.handsLeft) or 0)
 	local hide = L.options.hide_score_until_played and true or false
-	if s_gt(c.score, ZERO()) then c.playedThisBlind = true end
+	if s_gt(c.score, ZERO()) then
+		c.playedThisBlind = true
+		c.handsPlayed = (c.handsPlayed or 0) + 1
+	end
 	if c.handsLeft < 1 then c.pvpDone = true end
+	if a then
+		c.jokerGive = a.give and true or false
+		c.jokerRoom = a.room and true or false
+	end
+	local Lref = c.lobby
+	if Lref and Lref.gameMode == "gambel_time" and Lref.gambelTwist == "sabotage" and not Lref.gambelSabotaged and c.pvpDone then
+		Lref.gambelSabotaged = c.id
+		for _, p in ipairs(S:alive(Lref)) do
+			if p ~= c and not p.pvpDone then sendA(p, { action = "gambelHit", kind = "tax", amount = 4 }) end
+		end
+	end
 	local ranking = {}
 	for _, p in ipairs(S:alive(L)) do ranking[#ranking + 1] = p end
 	table.sort(ranking, function(x, y)
@@ -1651,10 +1771,15 @@ function H.lobbyOptions(S, c, a)
 	local teams_after = tostring(L.options.teams_order or "") .. "|" .. tostring(L.options.teams_size or "") .. "|" .. tostring(L.options.teams_format or "")
 	if L.gameMode == "teams" and not L.isInGame and teams_after ~= teams_before then S:lobby_info(L) end
 end
-function H.failRound(S, c)
+function H.failRound(S, c, a)
 	local L = c.lobby
 	if not L or c.eliminated then return end
-	if L.options.death_on_round_loss then S:lose_life_for(c, "round") end
+	if S:gambel_solo(L) then
+		local cost = (L.gambelBossOpen and L.gambelTwist == "double") and 2 or 1
+		L.gambelBossOpen = false
+		S:lose_life(c, "round", cost)
+		if L.gambelTwist == "house" then sendA(c, { action = "gambelHit", kind = "tax", amount = 5 }) end
+	elseif L.options.death_on_round_loss then S:lose_life_for(c, "round") end
 	if S:check_game_over(L) then return end
 	-- 0.6.8: the others may already be Ready at the PvP blind, waiting only for this player.
 	-- If this failed round eliminated them, start that blind now (it hung forever before).
@@ -1669,7 +1794,17 @@ function H.failTimer(S, c)
 	S:try_start_blind(L)
 	S:try_resolve_pvp(L)
 end
-function H.setAnte(S, c, a) c.ante = tonumber(a.ante) or c.ante end
+function H.setAnte(S, c, a)
+	c.ante = tonumber(a.ante) or c.ante
+	local L = c.lobby
+	if not L or L.gameMode ~= "gambel_time" or not Core.GAMBEL then return end
+	if L.players[1] == c then S:gambel_table(L, c.ante) end
+	if S:gambel_solo(L) and L.isInGame and (c.lives or 0) > 0 and (tonumber(c.ante) or 1) > Core.GAMBEL.ante_target(L.options) then
+		sendA(c, { action = "winGame", reason = "house" })
+		L.winnerId = c.id
+		L.isInGame, L.blindActive = false, false
+	end
+end
 function H.setLocation(S, c, a) S:set_location(c, a.location) end
 function H.newRound(S, c) S:reset_blocker(c) end
 function H.setFurthestBlind(S, c, a) c.furthestBlind = tonumber(a.furthestBlind) or c.furthestBlind end
@@ -1772,6 +1907,10 @@ do
 	if dir and not Core.CHAT then
 		local ok, m = pcall(dofile, dir .. "/chat_rules.lua")
 		if ok and type(m) == "table" and m.accept then Core.CHAT = m end
+	end
+	if dir and not Core.GAMBEL then
+		local ok, m = pcall(dofile, dir .. "/gambel_rules.lua")
+		if ok and type(m) == "table" and m.resolve then Core.GAMBEL = m end
 	end
 end
 

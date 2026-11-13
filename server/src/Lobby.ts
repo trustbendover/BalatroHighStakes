@@ -4,6 +4,7 @@ import GameModes from "./GameMode.js";
 import { type KothEvent, type KothState, kothConfig, kothSnapshot, newKothState, resolveKoth } from "./koth.js";
 import { type Team, TEAM_LETTERS, assignTeams, resolveTeams, teamsPlan } from "./teams.js";
 import { type ChatLine, acceptChat, chatColors, displayName, pushChat } from "./chat.js";
+import { gambelResolve, gambelTwist } from "./gambel.js";
 import { loserCount, pvpLosers } from "./pvpRules.js";
 import type {
 	ActionLobbyInfo,
@@ -29,6 +30,11 @@ export const maxPlayersFor = (mode: GameMode | string): number => (mode === "due
 /** null when a lobby of n players can start this mode, else the reason. */
 // biome-ignore lint/suspicious/noExplicitAny: lobby options are loosely typed
 export const startError = (mode: GameMode | string, n: number, options: { [k: string]: any } = {}): string | null => {
+	if (mode === "gambel_time") {
+		if (n < 1) return "Need at least 1 player to start.";
+		if (n > maxPlayersFor(mode)) return "Too many players for this mode.";
+		return null;
+	}
 	if (n < MIN_PLAYERS) return "Need at least 2 players to start.";
 	if (n > maxPlayersFor(mode)) return "Too many players for this mode.";
 	if (mode === "duel" && n !== 2) return "1v1 Duel needs exactly 2 players.";
@@ -110,6 +116,13 @@ class Lobby {
 	/** Authoritative seed generated for the current game (null until startGame,
 	 *  or for different-seeds games where each client uses its own). */
 	seed: string | null = null;
+	gambelTable: string | null = null;
+	gambelAnte = 0;
+	gambelTwist: string | null = null;
+	gambelBossAnte = 0;
+	gambelBossOpen = false;
+	gambelSabotaged: string | null = null;
+	gambelLives = 1;
 	/** a blind has started and its PvP result hasn't been resolved yet */
 	blindActive = false;
 	/** King of the Hill: crown state (null unless gameMode === "koth" and a game runs) */
@@ -763,6 +776,10 @@ class Lobby {
 	};
 
 	/** Mark players with 0 lives eliminated; end the game if <=1 remains. */
+	/** One seated player in Gambel Time is playing The House, not a Nemesis. */
+	gambelSolo = (): boolean =>
+		this.gameMode === "gambel_time" && this.players.length + this.disconnectedSlots.length <= 1;
+
 	checkGameOver = (): boolean => {
 		if (!this.isInGame) return true;
 		// Deathmatch: a player at 0 lives during a PvP blind dies when that PvP resolves, so players
@@ -779,7 +796,8 @@ class Lobby {
 		const dying = this.players.filter((p) => !p.eliminated && p.lives <= 0);
 		const survivors = this.players.filter((p) => !p.eliminated && p.lives > 0).length + this.awayAlive().length;
 		const spared = new Set<Client>();
-		if (survivors === 0 && dying.length > 0 && !this.teamsActive()) {
+		const house = this.gambelSolo();
+		if (survivors === 0 && dying.length > 0 && !this.teamsActive() && !house) {
 			// nobody left standing: the highest score among those dying now wins (ties: all of them)
 			let best = dying[0].score;
 			for (const p of dying) if (p.score.greaterThan(best)) best = p.score;
@@ -815,7 +833,17 @@ class Lobby {
 			}
 			return false;
 		}
-		// Away players with lives left still count: their seat is held
+		// Away players with lives left still count: their seat is held.
+		// Solo Gambel Time stays up until the lives are gone or the target ante is beaten.
+		if (house) {
+			if (alive.length === 0 && dying.length > 0) {
+				this.isInGame = false;
+				this.blindActive = false;
+				this.disconnectedSlots = [];
+				return true;
+			}
+			return false;
+		}
 		if (alive.length + this.awayAlive().length <= 1) {
 			alive[0]?.sendAction({ action: "winGame" });
 			this.isInGame = false;
@@ -866,6 +894,7 @@ class Lobby {
 	/** If every alive player is ready for the blind, start it. */
 	tryStartBlind = () => {
 		if (!this.isInGame || this.blindActive) return false;
+		if (this.gambelSolo()) return false;
 		const alive = this.alivePlayers();
 		if (alive.length === 0 || !alive.every((p) => p.isReady)) return false;
 		this.blindSeq++;
@@ -877,6 +906,7 @@ class Lobby {
 			p.score = new InsaneInt(0, 0, 0);
 			p.handsLeft = 4;
 			p.playedThisBlind = false;
+			p.handsPlayed = 0;
 			p.pvpDone = false;
 			p.resetBlocker();
 		}
@@ -884,6 +914,13 @@ class Lobby {
 		const firstPlayer = first ? (first.id === this.host?.id ? "host" : "guest") : undefined;
 		this.firstReadyAt = null;
 		this.blindActive = true;
+		if (this.gameMode === "gambel_time") {
+			const ante = alive[0]?.ante ?? 1;
+			this.gambelTwist = gambelTwist(this.seed, ante, this.blindSeq, alive.length);
+			this.gambelBossAnte = ante;
+			this.gambelSabotaged = null;
+			this.broadcastAction({ action: "gambelTwist", twist: this.gambelTwist, ante, blind: this.blindSeq });
+		}
 		this.broadcastAction({ action: "startBlind", firstPlayer, firstPlayerId: first?.id });
 		return true;
 	};
@@ -921,7 +958,12 @@ class Lobby {
 		}
 		const timerLosers = alive.filter((p) => p.pvpTimerFailed);
 		let roundLosers: Client[] = [];
-		if (timerLosers.length === 0) {
+		if (timerLosers.length === 0 && this.gameMode === "gambel_time") {
+			const entries = alive.map((p) => ({ id: p.id, score: p.score, hands: p.handsPlayed, give: p.jokerGive, room: p.jokerRoom }));
+			const res = gambelResolve(entries, this.gambelTwist ?? undefined, (a, b) => a.greaterThan(b));
+			this.gambelLives = res.lives;
+			roundLosers = res.hold ? [] : alive.filter((p) => res.losers.includes(p.id));
+		} else if (timerLosers.length === 0) {
 			// 2-5 players: the single lowest score; 6-8: the bottom two (pvpRules.ts)
 			const ids = new Set(pvpLosers(alive.map((p) => ({ id: p.id, score: p.score })), (a, b) => !a.greaterThan(b)));
 			roundLosers = alive.filter((p) => ids.has(p.id));
@@ -940,7 +982,7 @@ class Lobby {
 		}
 		const kothEv = this.kothResolve(alive, roundLosers);
 		if (kothEv?.shieldedId) roundLosers = roundLosers.filter((p) => p.id !== kothEv.shieldedId);
-		for (const p of roundLosers) p.loseLife("round");
+		for (const p of roundLosers) p.loseLife("round", this.gameMode === "gambel_time" ? this.gambelLives : 1);
 		this.penalizeDeathmatchAbsent(absent);
 
 		for (const p of alive) {

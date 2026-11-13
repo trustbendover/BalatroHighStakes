@@ -15,6 +15,7 @@ M.LIMITS = {
 	teams = { min = 4, max = 8, lives = 4 },
 	deathmatch = { min = 2, max = 8, lives = 4 },
 	survival = { min = 2, max = 8 },
+	gambel_time = { min = 1, max = 8, lives = 3 },
 }
 
 M.TEAMS_RULES = M.TEAMS_RULES or (MP.load_mp_file and MP.load_mp_file("networking/teams_rules.lua")) or nil
@@ -99,7 +100,7 @@ function M.start_problem(n, gamemode, options)
 	local lim = M.limits(key)
 	options = options or (MP.LOBBY and MP.LOBBY.config) or {}
 	if key == "duel" and n ~= 2 then return L("k_mode_need_exactly_2", "1v1 Duel needs exactly 2 players") end
-	if n < M.MIN_PLAYERS then return L("k_mode_need_min", "Need at least #1# players", { M.MIN_PLAYERS }) end
+	if n < lim.min then return L("k_mode_need_min", "Need at least #1# players", { lim.min }) end
 	if n > lim.max then return L("k_mode_too_many", "Too many players for this mode (max #1#)", { lim.max }) end
 	if key == "teams" and M.teams_format(options) then
 		local f = M.teams_format(options)

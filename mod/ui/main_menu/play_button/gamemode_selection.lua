@@ -2,7 +2,7 @@
 -- Free-for-all = everyone against everyone, Challenge = co-op style.
 MP.UI.GAMEMODE_GROUPS = {
 	{ name = "k_versus", entries = { "duel", "teams2", "teams3", "teams4", "teams" } },
-	{ name = "k_ffa", entries = { "attrition", "showdown", "koth", "deathmatch" } },
+	{ name = "k_ffa", entries = { "attrition", "showdown", "koth", "deathmatch", "gambel_time" } },
 	{ name = "k_challenge", entries = { "survival" } },
 }
 --- menu entry -> gamemode key + Versus team format (nil for a plain mode)

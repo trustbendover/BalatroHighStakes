@@ -236,6 +236,7 @@ end
 
 local update_new_round_ref = Game.update_new_round
 function Game:update_new_round(dt)
+	if MP.GAMBEL and MP.GAMBEL.on_new_round then MP.GAMBEL.on_new_round() end
 	if MP.GAME.end_pvp then
 		if G.STATE ~= G.STATES.NEW_ROUND then
 			G.FUNCS.draw_from_hand_to_deck()
@@ -326,6 +327,7 @@ function Game:update_shop(dt)
 		MP.GAME.ready_blind = false
 		MP.GAME.ready_blind_text = localize("b_ready")
 		MP.GAME.end_pvp = false
+		if MP.GAMBEL and MP.GAMBEL.on_shop then MP.GAMBEL.on_shop() end
 	end
 
 	local updated_location = false
