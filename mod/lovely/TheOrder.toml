@@ -199,14 +199,14 @@ end
 '''
 match_indent = true
 
-# STEAMODDED BUG - fix for certificate calling pseudorandom for no reason
+# Certificate (stdseal): 1620a rolls pseudorandom even when a seal is guaranteed, which
+# desyncs seeds. 26.829+ already short-circuits (`guaranteed or pseudorandom(...)`).
+# One regex matches either source and writes the short-circuit form, so a newer
+# Steamodded does not fail the patch and 1620a still gets the fix.
 [[patches]]
-[patches.pattern]
+[patches.regex]
 target = '''=[SMODS _ "src/utils.lua"]'''
-pattern = '''
-local seal_poll = pseudorandom(pseudoseed(key or 'stdseal'..G.GAME.round_resets.ante))
-if seal_poll > 1 - (type_weight*mod / total_weight) or guaranteed then -- is a seal generated
-'''
+pattern = '''(?:local seal_poll = pseudorandom\(pseudoseed\(key or 'stdseal'\.\.G\.GAME\.round_resets\.ante\)\)\r?\n[ \t]*if seal_poll > 1 - \(type_weight\*mod / total_weight\) or guaranteed then -- is a seal generated|if guaranteed or pseudorandom\(pseudoseed\(key or 'stdseal'\.\.G\.GAME\.round_resets\.ante\)\) > 1 - \(type_weight\*mod / total_weight\) then -- is a seal generated)'''
 position = 'at'
 payload = '''
 local seal_poll = guaranteed and 1 or pseudorandom(pseudoseed(key or 'stdseal'..G.GAME.round_resets.ante))

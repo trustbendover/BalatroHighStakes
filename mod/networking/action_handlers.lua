@@ -529,6 +529,7 @@ local function action_start_blind(p)
     MP.GAME.enemy.skips_before_pvp = 0
     MP.GAME.skips_before_pvp = 0
     MP.GAME.skips_difference = 0
+	MP.GAME._last_play = nil
 	MP.GAME.ready_blind = false
 	MP.GAME.pvp_reached = false
     MP.GAME.pvp_timer_order = nil
@@ -565,24 +566,21 @@ local function action_enemy_info(p)
 	local skips = tonumber(p.skips)
 	local lives = tonumber(p.lives)
 
-	-- No-animation timer: If opponent skip, add time immediately
-	if skips and MP.GAME.enemy.skips ~= skips then
-		for i = 1, skips - MP.GAME.enemy.skips do
-			MP.GAME.enemy.spent_in_shop[#MP.GAME.enemy.spent_in_shop + 1] = 0
-            MP.GAME.enemy.skips_before_pvp = (MP.GAME.enemy.skips_before_pvp or 0) + 1
-            MP.UI.update_matching_skip_timer(true)
-
-			if
-				MP.GAME.enemy.skips < skips
-				and MP.LOBBY.config.timer
-				and not MP.GAME.timer_started
-				and not MP.GAME.nemesis_timer_started
-				and not MP.GAME.timer_consumed
-				and MP.is_any_layer_active({ "no_animation_timer", "pressure_timer" })
-				and (MP.LOBBY.config.timer_increment_seconds or 0) > 0
-			then
-				MP.UI.restore_timer(MP.LOBBY.config.timer_increment_seconds)
-			end
+	-- A single new skip adds time. A bigger jump is a rejoin sending the lifetime total.
+	local new_skips = MP.UTILS and MP.UTILS.live_skip_count and MP.UTILS.live_skip_count(MP.GAME.enemy.skips, skips) or 0
+	for _ = 1, new_skips do
+		MP.GAME.enemy.spent_in_shop[#MP.GAME.enemy.spent_in_shop + 1] = 0
+		MP.GAME.enemy.skips_before_pvp = (MP.GAME.enemy.skips_before_pvp or 0) + 1
+		if MP.UI.update_matching_skip_timer then MP.UI.update_matching_skip_timer(true) end
+		if
+			MP.LOBBY.config.timer
+			and not MP.GAME.timer_started
+			and not MP.GAME.nemesis_timer_started
+			and not MP.GAME.timer_consumed
+			and MP.is_any_layer_active({ "no_animation_timer", "pressure_timer" })
+			and (MP.LOBBY.config.timer_increment_seconds or 0) > 0
+		then
+			MP.UI.restore_timer(MP.LOBBY.config.timer_increment_seconds)
 		end
 	end
 
@@ -1129,7 +1127,7 @@ local function action_eat_pizza(p)
 end
 
 local function action_spent_last_shop(p)
-	MP.GAME.enemy.spent_in_shop[#MP.GAME.enemy.spent_in_shop + 1] = tonumber(p.amount)
+	MP.GAME.enemy.spent_in_shop[#MP.GAME.enemy.spent_in_shop + 1] = MP.UTILS.shop_spend(p.amount)
 end
 
 local function action_magnet()
@@ -1360,7 +1358,9 @@ local function action_send_game_stats(p)
 end
 
 function G.FUNCS.load_nemesis_deck()
-	if not MP.nemesis_deck_string or not MP.nemesis_deck or not MP.nemesis_cards or not MP.LOBBY.code then return end
+	-- A removed end-screen area has cards = nil. create_playing_card would already have
+	-- pushed the card onto our own deck before that emplace error, so bail first.
+	if not MP.nemesis_deck_string or not MP.nemesis_deck or not MP.nemesis_deck.cards or not MP.nemesis_cards or not MP.LOBBY.code then return end
 
 	local card_strings = MP.UTILS.string_split(MP.nemesis_deck_string, ";")
 
@@ -1400,16 +1400,19 @@ function G.FUNCS.load_nemesis_deck()
 			seal = "none"
 		end
 
-		-- Create the card
-		local card = create_playing_card({
-			front = G.P_CARDS[front_key],
-			center = enhancement ~= "none" and G.P_CENTERS[enhancement] or nil,
-		}, MP.nemesis_deck, true, true, nil, false)
+		-- A bare Card, not create_playing_card: the nemesis card must never join our own deck.
+		local area = MP.nemesis_deck
+		local card = Card(
+			area.T.x,
+			area.T.y,
+			G.CARD_W,
+			G.CARD_H,
+			G.P_CARDS[front_key],
+			enhancement ~= "none" and G.P_CENTERS[enhancement] or G.P_CENTERS.c_base
+		)
+		area:emplace(card)
 		if edition ~= "none" then card:set_edition({ [edition] = true }, true, true) end
 		if seal ~= "none" then card:set_seal(seal, true, true) end
-
-		-- Remove the card from G.playing_cards and insert into MP.nemesis_cards
-		table.remove(G.playing_cards, #G.playing_cards)
 		table.insert(MP.nemesis_cards, card)
 
 		::continue::
@@ -1641,6 +1644,8 @@ function MP.ACTIONS.play_hand(score, hands_left)
 	end
 	fixed_score = string.gsub(fixed_score, ",", "") -- Remove commas
 
+	if MP.UTILS and MP.UTILS.duplicate_play and MP.UTILS.duplicate_play(MP.GAME._last_play, fixed_score, hands_left) then return end
+	MP.GAME._last_play = { score = fixed_score, hands = hands_left }
 	local insane_int_score = MP.INSANE_INT.from_string(fixed_score)
 	MP.GAME.score = insane_int_score
 	if MP.INSANE_INT.greater_than(insane_int_score, MP.GAME.highest_score) then

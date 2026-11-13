@@ -1325,8 +1325,12 @@ function Core.restore(snap, opts)
 		code = snap.code, gameMode = snap.gameMode or "attrition", options = snap.options or {},
 		isInGame = snap.isInGame and true or false, seed = snap.seed, blindActive = snap.blindActive and true or false,
 		blindSeq = tonumber(snap.blindSeq) or 0, startPlayers = snap.startPlayers, teamSize = snap.teamSize,
-		teamLives = snap.teamLives, koth = snap.koth, elimOrder = snap.elimOrder, winnerId = snap.winnerId,
-		book = snap.book, teamBook = snap.teamBook, lastStats = snap.lastStats,
+		teamLives = snap.teamLives, koth = snap.koth, elimOrder = snap.elimOrder,
+		winnerId = not snap.isInGame and snap.winnerId or nil,
+		book = snap.book, teamBook = snap.teamBook,
+		-- A live match has no final table yet. Keeping an earlier match's result would
+		-- make the new host skip sending the real ending.
+		lastStats = not snap.isInGame and snap.lastStats or nil,
 		firstReadyAt = snap.firstReadyAge and (now - snap.firstReadyAge) or nil,
 		players = {}, slots = {}, emptySince = nil,
 	}

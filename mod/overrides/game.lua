@@ -1,8 +1,13 @@
 local ease_dollars_ref = ease_dollars
-function ease_dollars(mod, instant)
+-- Forward every argument. Steamodded 26.1002 still calls ease_dollars(mod, instant);
+-- a later build can add a context after that without this wrapper dropping it.
+function ease_dollars(mod, ...)
 	if MP and MP.MATCH_STATS and MP.MATCH_STATS.on_dollars then pcall(MP.MATCH_STATS.on_dollars, mod) end
 	sendTraceMessage(string.format("Client sent message: action:moneyMoved,amount:%s", tostring(mod)), "MULTIPLAYER")
-	return ease_dollars_ref(mod, instant)
+	return ease_dollars_ref(mod, ...)
+end
+if SMODS and SMODS.get_probability_vars and MP.UTILS and MP.UTILS.wrap_probability_vars then
+	SMODS.get_probability_vars = MP.UTILS.wrap_probability_vars(SMODS.get_probability_vars)
 end
 
 -- Certain Steamodded builds still call save_run while saving is disabled
