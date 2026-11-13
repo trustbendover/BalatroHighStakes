@@ -96,6 +96,7 @@ function G.UIDEF.create_UIBox_lobby_menu()
 							MP.UI.create_lobby_leave_button(text_scale),
 						},
 					},
+					MP.CHAT and MP.CHAT.lobby_row and MP.CHAT.lobby_row() or nil,
 				},
 			},
 		},

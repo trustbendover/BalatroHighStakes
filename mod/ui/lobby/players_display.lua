@@ -64,13 +64,6 @@ function MP.UI.players_section_rows(text_scale)
 		local row = create_player_info_row(seat, "seat" .. i, text_scale)
 		if row then rows[#rows + 1] = row end
 	end
-	if MP.CHAT and MP.LOBBY and MP.LOBBY.code then
-		local chrome = MP.CHAT.chrome and MP.CHAT.chrome() or {}
-		rows[#rows + 1] = MP.UI.UTILS.create_row({ align = "cm", padding = 0.04 }, {
-			UIBox_button({ id = "mp_chat_lobby", button = "mp_chat_toggle", label = { chrome.open or "Chat" },
-				minw = 1.6, minh = 0.4, scale = 0.3, colour = G.C.BLUE, col = true }),
-		})
-	end
 	-- Held seats are not in the seated list. Show them with the same status words.
 	for i, a in ipairs(MP.LOBBY.away or {}) do
 		if type(a) == "table" and a.username then
