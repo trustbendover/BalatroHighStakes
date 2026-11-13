@@ -23,13 +23,14 @@ M.NAME_MAX = 24
 
 M.MODES = {
 	attrition = true, duel = true, teams = true, showdown = true,
-	koth = true, deathmatch = true, survival = true,
+	koth = true, deathmatch = true, survival = true, gambel_time = true,
 }
 
 -- Cleared (empty value removes the key on Steam) whenever the lobby is not public.
 M.CLEAR_KEYS = {
-	"mp3p_mod", "mp3p_name", "mp3p_mode", "mp3p_fmt",
+	"mp3p_mod", "mp3p_name", "mp3p_mode", "mp3p_fmt", "mp3p_split",
 	"mp3p_players", "mp3p_max", "mp3p_state", "mp3p_watch",
+	"mp3p_boss", "mp3p_lives", "mp3p_pvp", "mp3p_show", "mp3p_timer",
 }
 
 M.FAIL = {
@@ -62,6 +63,7 @@ function M.read_keys()
 	return {
 		"mp3p_discover", "mp3p_mod", "mp3p_version", "mp3p_name", "mp3p_mode",
 		"mp3p_fmt", "mp3p_players", "mp3p_max", "mp3p_state", "mp3p_watch", "mp3p_code",
+		"mp3p_boss", "mp3p_lives", "mp3p_pvp", "mp3p_show", "mp3p_timer", "mp3p_split",
 	}
 end
 
@@ -128,23 +130,43 @@ function M.publish(L, opt)
 	if maxp < 1 or maxp > 16 then maxp = 8 end
 	if seated < 0 then seated = 0 end
 	if seated > 16 then seated = 16 end
-	local fmt = ""
+	local fmt, split = "", ""
 	if mode == "teams" then
 		local f = tonumber(type(L.options) == "table" and L.options.teams_format)
-		if f == 2 or f == 3 or f == 4 then fmt = tostring(math.floor(f)) end
+		if f == 2 or f == 3 or f == 4 then fmt = tostring(math.floor(f))
+		elseif seated == 5 then split = "3v2"
+		elseif seated == 7 then split = "4v3" end
 	end
 	local max_spec = tonumber(opt.max_spectators) or 8
 	local host = type(L.players) == "table" and L.players[1] or nil
+	local optn = type(L.options) == "table" and L.options or {}
+	local function flag(v)
+		if v == true or v == "true" or v == 1 or v == "1" then return "1" end
+		if v == false or v == "false" or v == 0 or v == "0" then return "0" end
+		return ""
+	end
+	local function whole(v, lo, hi)
+		local n = tonumber(v)
+		if not n or n ~= math.floor(n) or n < lo or n > hi then return "" end
+		return tostring(math.floor(n))
+	end
 	out.mp3p_discover = "1"
 	out.mp3p_mod = M.MOD
 	out.mp3p_version = ver
 	out.mp3p_name = M.sanitize_name(host and host.username) or ""
 	out.mp3p_mode = mode
 	out.mp3p_fmt = fmt
+	out.mp3p_split = split
 	out.mp3p_players = tostring(seated)
 	out.mp3p_max = tostring(maxp)
 	out.mp3p_state = L.isInGame and "play" or "wait"
 	out.mp3p_watch = (L.isInGame and specs < max_spec) and "1" or "0"
+	-- Only an explicit host value is published. Nil stays empty so a reader cannot treat it as off.
+	out.mp3p_boss = flag(optn.normal_bosses)
+	out.mp3p_lives = whole(optn.starting_lives, 1, 16)
+	out.mp3p_pvp = whole(optn.pvp_start_round, 1, 20)
+	out.mp3p_show = mode == "showdown" and whole(optn.showdown_starting_antes, 1, 20) or ""
+	out.mp3p_timer = flag(optn.timer)
 	return out
 end
 
@@ -173,10 +195,24 @@ function M.accept(data, opt)
 	if players < 0 or players > 16 or maxp < 1 or maxp > 16 then return nil end
 	local fmt = field(data, "mp3p_fmt")
 	if fmt ~= "" and fmt ~= "2" and fmt ~= "3" and fmt ~= "4" then return nil end
+	-- Only an explicit host split. A missing key, or 2v1/5v3, is not guessed from the player count.
+	local split = field(data, "mp3p_split")
+	if fmt ~= "" or (split ~= "3v2" and split ~= "4v3") then split = "" end
+	if (split == "3v2" and players ~= 5) or (split == "4v3" and players ~= 7) then split = "" end
 	local watch = field(data, "mp3p_watch")
 	if watch ~= "0" and watch ~= "1" then return nil end
 	local mode_key = "k_" .. mode
 	if mode == "teams" and fmt ~= "" then mode_key = "k_teams" .. fmt end
+	local function tri(s)
+		if s == "1" then return true end
+		if s == "0" then return false end
+		return nil
+	end
+	local function bounded(s, lo, hi)
+		local n = tonumber(s)
+		if s == "" or not n or n ~= math.floor(n) or n < lo or n > hi then return nil end
+		return math.floor(n)
+	end
 	return {
 		name = M.sanitize_name(field(data, "mp3p_name")) or "",
 		mode = mode,
@@ -186,6 +222,12 @@ function M.accept(data, opt)
 		state = state,
 		watch = watch == "1",
 		fmt = fmt,
+		split = split ~= "" and split or nil,
+		boss = tri(field(data, "mp3p_boss")),
+		lives = bounded(field(data, "mp3p_lives"), 1, 16),
+		pvp_at = bounded(field(data, "mp3p_pvp"), 1, 20),
+		show_at = bounded(field(data, "mp3p_show"), 1, 20),
+		timer = tri(field(data, "mp3p_timer")),
 	}
 end
 

@@ -66,7 +66,13 @@ const GameModes: {
 		getBlindFromAnte: (ante, options) => {
 			return { };
 		},
-	}
+	},
+	gambel_time: {
+		startingLives: 3,
+		getBlindFromAnte: () => {
+			return { boss: "bl_pvp" };
+		},
+	},
 };
 
 export default GameModes;

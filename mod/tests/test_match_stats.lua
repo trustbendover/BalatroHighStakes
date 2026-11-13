@@ -62,7 +62,7 @@ local all
 local function player(name)
 	local P = { name = name, msgs = {}, alive = true }
 	P.b = backend(name)
-	P.r = P2P.new_router({ log = os.getenv("LOG") and function(s) print("[" .. T .. " " .. name .. "] " .. s) end or nil, backend = P.b, Core = Core, json = json, now = now, version = "0.6.9", Migration = HMmod,
+	P.r = P2P.new_router({ log = os.getenv("LOG") and function(s) print("[" .. T .. " " .. name .. "] " .. s) end or nil, backend = P.b, Core = Core, json = json, now = now, version = "0.7.0", Migration = HMmod,
 		push = function(s) P.msgs[#P.msgs + 1] = json.decode(s) end })
 	P.send = function(t) P.r.send(t) end
 	P.last = function(a) for i = #P.msgs, 1, -1 do if P.msgs[i].action == a then return P.msgs[i] end end end
@@ -80,7 +80,7 @@ local function setup(n, mode, opts)
 	local ps = {}
 	for i = 1, n do ps[i] = player(mode:sub(1, 3) .. n .. "_" .. i) end
 	all = ps
-	for _, p in ipairs(ps) do p.send({ action = "connect" }); p.send({ action = "username", username = p.name, modHash = "t" }); p.send({ action = "version", version = "0.6.9" }) end
+	for _, p in ipairs(ps) do p.send({ action = "connect" }); p.send({ action = "username", username = p.name, modHash = "t" }); p.send({ action = "version", version = "0.7.0" }) end
 	ps[1].send({ action = "createLobby", gameMode = mode }); pump()
 	local code = ps[1].last("joinedLobby").code
 	local o = { starting_lives = "2" }
@@ -135,7 +135,7 @@ local function restart(ps, i, code, token)
 	local p = player(old.name)
 	all[#all + 1] = p
 	ps[i] = p
-	p.send({ action = "connect" }); p.send({ action = "username", username = p.name, modHash = "t" }); p.send({ action = "version", version = "0.6.9" })
+	p.send({ action = "connect" }); p.send({ action = "username", username = p.name, modHash = "t" }); p.send({ action = "version", version = "0.7.0" })
 	p.send({ action = "rejoinLobby", code = code, reconnectToken = token })
 	pump(8); run(2)
 	p.id = old.id
@@ -144,7 +144,7 @@ end
 local function newcomer(name, code, spectate)
 	local p = player(name)
 	all[#all + 1] = p
-	p.send({ action = "connect" }); p.send({ action = "username", username = name, modHash = "t" }); p.send({ action = "version", version = "0.6.9" })
+	p.send({ action = "connect" }); p.send({ action = "username", username = name, modHash = "t" }); p.send({ action = "version", version = "0.7.0" })
 	p.send({ action = "joinLobby", code = code, spectate = spectate }); pump(8); run(1)
 	return p
 end
@@ -336,6 +336,44 @@ do
 	}
 	local v = MS.view(st, "b")
 	ok(v.winner == "Ann wins!" and v.title == "Match stats", "winner line")
+	local solo_view = MS.view({ winnerId = "a", rows = { { id = "a", name = "Ada", place = 1, dealt = 0, best = "100", ante = 6, livesLost = 2 } }, awards = {} }, "a")
+	ok(#solo_view.awards == 0 and #solo_view.rows == 1 and solo_view.winner == "Ada wins!", "one player has a row and no awards")
+	_G.G = { STATES = { GAME_OVER = 1, MENU = 0 }, STATE = 1, GAME = { round_resets = { ante = 6 }, round_scores = {} }, jokers = { cards = {} } }
+	MP.GAME.lives = 0
+	MP.GAME.won = false
+	MP.LOBBY.my_id = "ada"
+	local summary = MS.local_summary()
+	local shown = MS.view(summary, "ada")
+	ok(#summary.rows == 1 and summary.rows[1].ante == 6 and #shown.awards == 0 and #shown.rows == 1, "a finished solo run can build a one-player table locally")
+	MS.last = nil
+	G.STATE = G.STATES.MENU
+	MP.GAME.lives = 3
+	MP.GAME.won = false
+	MP.GAME.match_finished = false
+	local warned
+	_G.attention_text = function(t) warned = t end
+	G.OVERLAY_MENU = { id = "game_end" }
+	MS.open()
+	ok(not MS.last and warned and warned.major == G.OVERLAY_MENU, "mid-match the notice sits on the overlay, not behind it")
+	MS.last = nil
+	G.STATE = G.STATES.GAME_OVER
+	MP.GAME.lives = 0
+	MP.GAME.won = false
+	MP.GAME.match_finished = false
+	MP.LOBBY.player_list = { { id = "ada" }, { id = "bob" } }
+	MP.LOBBY.player_count = 2
+	warned = nil
+	MS.open()
+	ok(not MS.last and warned, "an eliminated player in a live multiplayer match does not see a solo 1st-place table")
+	MP.GAME.match_finished = true
+	MS.last = nil
+	MS.open()
+	ok(MS.last and MS.last.rows[1].place == 1, "once the match is finished the local table can fill in")
+	MP.LOBBY.player_list = nil
+	MP.LOBBY.player_count = nil
+	MP.GAME.match_finished = false
+	MP.GAME.lives = 3
+	G.STATE = G.STATES.MENU
 	ok(#v.awards == 7 and v.awards[1].label == "Most damage" and v.awards[1].name == "Bob" and v.awards[1].value == "100K"
 		and v.awards[1].colour == "red" and v.awards[1].you, "award lines: label, colour, name, value, you")
 	ok(v.awards[2].value == "54K (Flush)" and v.awards[5].value == "4/6" and v.awards[6].value == "$200", "award values")
@@ -347,6 +385,30 @@ do
 	ok(#MS.view({ rows = { st.rows[1] }, awards = st.awards }).awards == 0, "one player: no awards")
 	local tv = MS.view({ rows = st.rows, awards = {}, teams = { { team = "A", place = 1, dealt = 5000, pvpWon = 3, livesLost = 1 } } })
 	ok(tv.winner == "Team A wins!" and tv.teams[1] == "Team A: damage 5K, PvPs won 3, lives lost 1", "teams lines")
+	local function side(n, bigger, lives_a)
+		local rows, members_a, members_b = {}, {}, {}
+		for i = 1, n do
+			local team = i <= bigger and "A" or "B"
+			rows[#rows + 1] = { id = "p" .. i, name = "P" .. i, place = team == "A" and 1 or 2, team = team,
+				lives = team == "A" and lives_a or 0, out = team ~= "A", dealt = 100 * i, best = tostring(100 * i), ante = 4,
+				livesLost = team == "A" and 1 or 4, pvpWon = 1, pvps = 2, money = 0, jokers = 1, seen = 1 }
+			if team == "A" then members_a[#members_a + 1] = "p" .. i else members_b[#members_b + 1] = "p" .. i end
+		end
+		return MS.result_lines({ winnerId = "p1", gameMode = "teams", rows = rows, teams = {
+			{ team = "A", place = 1, dealt = 300, pvpWon = 2, livesLost = 1, lives = lives_a, members = members_a },
+			{ team = "B", place = 2, dealt = 200, pvpWon = 0, livesLost = 4, lives = 0, members = members_b },
+		}, code = "ABCDE" })
+	end
+	for _, spec in ipairs({ { 5, 3, "3v2" }, { 7, 4, "4v3" }, { 4, 2, "2v2" } }) do
+		local lines = side(spec[1], spec[2], 2)
+		local blob = table.concat(lines, "\n")
+		ok(lines[1] == "Team A wins!", spec[3] .. " names the winning team")
+		ok(blob:find("2 lives", 1, true) and blob:find("Out", 1, true) and blob:find("ante 4", 1, true), spec[3] .. " shows lives, outs and ante")
+		ok(blob:find("P1 %[A%]") and blob:find("P" .. spec[1] .. " %[B%]"), spec[3] .. " lists every player on a team")
+		ok(not blob:find("ABCDE", 1, true), spec[3] .. " does not print a lobby code")
+	end
+	local endsrc = io.open("ui/game/game_end.lua"):read("*a")
+	ok(endsrc:find("rematch_button", 1, true) and endsrc:find("end_block", 1, true), "the end screen still offers Rematch and shows the results")
 	-- report from a stubbed game: best hand, lineup, jokers used, money earned, ante
 	_G.G = { STAGES = { RUN = 2 }, STAGE = 2, GAME = { round_scores = { hand = { amt = 1234 } }, last_hand_played = "Two Pair", round_resets = { ante = 3 } } }
 	MS.on_start()
@@ -383,6 +445,20 @@ do
 	_G.create_UIBox_generic_options = function(a) generic = a; return { n = 0, nodes = a.contents } end
 	_G.UIBox_button = function(a) return { n = 1, button = a.button } end
 	_G.localize = function(k) if k == "b_back" then return "Back" end return "ERROR" end
+	MS.last = nil
+	G.STATES = G.STATES or {}
+	G.STATES.GAME_OVER = 1
+	G.STATE = 1
+	G.GAME = { round_resets = { ante = 4 }, round_scores = {} }
+	G.jokers = { cards = {} }
+	G.FUNCS = G.FUNCS or {}
+	local opened
+	G.FUNCS.overlay_menu = function(args) opened = args end
+	MP.GAME.lives = 0
+	MP.GAME.won = true
+	MP.LOBBY.my_id = "ada"
+	MS.open()
+	ok(opened and opened.definition and MS.last and MS.last.winnerId == "ada" and #MS.last.rows == 1, "Match stats opens a one-player screen when the host table has not arrived")
 	local function find_all(node, pred, out)
 		out = out or {}
 		if type(node) ~= "table" then return out end

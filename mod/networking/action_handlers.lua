@@ -354,8 +354,12 @@ local function action_lobbyInfo(p)
 		if MP.LOBBY.seats[i] then
 			MP.LOBBY.seats[i].team = pl.team
 			MP.LOBBY.seats[i].id = pl.id
+			MP.LOBBY.seats[i].spectator = pl.spectator and true or nil
+			MP.LOBBY.seats[i].rejoining = pl.rejoining and true or nil
+			MP.LOBBY.seats[i].eliminated = pl.eliminated and true or nil
 		end
 	end
+	MP.LOBBY.away = p.away or {}
 	MP.LOBBY.max_players = p.maxPlayers or MP.LOBBY.max_players
 	-- Map player ids -> display names (for the HUD)
 	MP.LOBBY.names_by_id = {}
@@ -365,7 +369,9 @@ local function action_lobbyInfo(p)
 
 	-- Ready when the player count fits the mode (MP.MODES.start_problem) and every non-host is ready
 	if p.players then
-		local all_ready = #p.players >= 2
+	local minp = 2
+	if is_host and MP.MODES and MP.MODES.limits then minp = MP.MODES.limits().min or 2 end
+	local all_ready = #p.players >= minp
 		if is_host and MP.MODES and MP.MODES.start_problem(#p.players) then all_ready = false end
 		local unready = 0
 		for i = 2, #p.players do
@@ -454,6 +460,7 @@ local function action_start_game(p)
 	MP.SP.practice = false
 	MP.GHOST.clear()
 
+	if MP.GAMBEL and MP.GAMBEL.reset then MP.GAMBEL.reset() end
 	MP.reset_game_states()
 	if MP.REJOIN then MP.REJOIN.on_start(p) end
 	if MP.SPECTATE then MP.SPECTATE.on_match_start() end
@@ -525,6 +532,7 @@ local function action_start_blind(p)
     MP.GAME.enemy.skips_before_pvp = 0
     MP.GAME.skips_before_pvp = 0
     MP.GAME.skips_difference = 0
+	MP.GAME._last_play = nil
 	MP.GAME.ready_blind = false
 	MP.GAME.pvp_reached = false
     MP.GAME.pvp_timer_order = nil
@@ -561,24 +569,21 @@ local function action_enemy_info(p)
 	local skips = tonumber(p.skips)
 	local lives = tonumber(p.lives)
 
-	-- No-animation timer: If opponent skip, add time immediately
-	if skips and MP.GAME.enemy.skips ~= skips then
-		for i = 1, skips - MP.GAME.enemy.skips do
-			MP.GAME.enemy.spent_in_shop[#MP.GAME.enemy.spent_in_shop + 1] = 0
-            MP.GAME.enemy.skips_before_pvp = (MP.GAME.enemy.skips_before_pvp or 0) + 1
-            MP.UI.update_matching_skip_timer(true)
-
-			if
-				MP.GAME.enemy.skips < skips
-				and MP.LOBBY.config.timer
-				and not MP.GAME.timer_started
-				and not MP.GAME.nemesis_timer_started
-				and not MP.GAME.timer_consumed
-				and MP.is_any_layer_active({ "no_animation_timer", "pressure_timer" })
-				and (MP.LOBBY.config.timer_increment_seconds or 0) > 0
-			then
-				MP.UI.restore_timer(MP.LOBBY.config.timer_increment_seconds)
-			end
+	-- A single new skip adds time. A bigger jump is a rejoin sending the lifetime total.
+	local new_skips = MP.UTILS and MP.UTILS.live_skip_count and MP.UTILS.live_skip_count(MP.GAME.enemy.skips, skips) or 0
+	for _ = 1, new_skips do
+		MP.GAME.enemy.spent_in_shop[#MP.GAME.enemy.spent_in_shop + 1] = 0
+		MP.GAME.enemy.skips_before_pvp = (MP.GAME.enemy.skips_before_pvp or 0) + 1
+		if MP.UI.update_matching_skip_timer then MP.UI.update_matching_skip_timer(true) end
+		if
+			MP.LOBBY.config.timer
+			and not MP.GAME.timer_started
+			and not MP.GAME.nemesis_timer_started
+			and not MP.GAME.timer_consumed
+			and MP.is_any_layer_active({ "no_animation_timer", "pressure_timer" })
+			and (MP.LOBBY.config.timer_increment_seconds or 0) > 0
+		then
+			MP.UI.restore_timer(MP.LOBBY.config.timer_increment_seconds)
 		end
 	end
 
@@ -693,6 +698,8 @@ action_enemy_info = function(p)
 	e.eliminated = p.eliminated and true or false
 	e.ante = tonumber(p.ante) or e.ante
 	e.away = p.away and true or nil
+	e.rejoining = p.rejoining and true or nil
+	e.spectator = p.spectator and true or nil
 	if not p.noScore and p.score ~= nil then
 		e.raw_score = tostring(p.score)
 		e.real_score = MP.INSANE_INT.from_string(e.raw_score)
@@ -853,6 +860,7 @@ local function action_rematch(p)
 	-- Same Steam lobby and reconnect token. The old run checkpoint must not come back.
 	if type(p.config) == "table" then adopt_match_settings(p.config) end
 	MP.GAME.match_finished = false
+	if MP.GAMBEL and MP.GAMBEL.reset then MP.GAMBEL.reset() end
 	if MP.REJOIN then MP.REJOIN.clear(); MP.REJOIN.reset() end
 	if MP.SPECTATE then MP.SPECTATE.on_match_end() end
 	MP.enemy_disconnect_countdown = nil
@@ -870,6 +878,7 @@ end
 
 local function action_stop_game()
 	clear_reconnect_info()
+	if MP.GAMBEL and MP.GAMBEL.reset then MP.GAMBEL.reset() end
 	if MP.REJOIN then MP.REJOIN.clear(); MP.REJOIN.reset() end
 	if MP.SPECTATE then MP.SPECTATE.on_match_end() end
 	MP.enemy_disconnect_countdown = nil
@@ -939,7 +948,11 @@ local function action_player_info(p)
 	MP.GAME.lives = lives
 end
 
-local function action_win_game()
+local function action_win_game(p)
+	if p and p.reason == "house" and MP.GAMBEL and MP.GAMBEL.toast then
+		local s = localize("k_gambel_house_win")
+		MP.GAMBEL.toast(type(s) == "string" and s ~= "ERROR" and s or "You beat The House!")
+	end
 	MP.end_game_jokers_payload = ""
 	MP.nemesis_deck_string = ""
 	MP.end_game_jokers_received = false
@@ -1123,7 +1136,7 @@ local function action_eat_pizza(p)
 end
 
 local function action_spent_last_shop(p)
-	MP.GAME.enemy.spent_in_shop[#MP.GAME.enemy.spent_in_shop + 1] = tonumber(p.amount)
+	MP.GAME.enemy.spent_in_shop[#MP.GAME.enemy.spent_in_shop + 1] = MP.UTILS.shop_spend(p.amount)
 end
 
 local function action_magnet()
@@ -1354,7 +1367,9 @@ local function action_send_game_stats(p)
 end
 
 function G.FUNCS.load_nemesis_deck()
-	if not MP.nemesis_deck_string or not MP.nemesis_deck or not MP.nemesis_cards or not MP.LOBBY.code then return end
+	-- A removed end-screen area has cards = nil. create_playing_card would already have
+	-- pushed the card onto our own deck before that emplace error, so bail first.
+	if not MP.nemesis_deck_string or not MP.nemesis_deck or not MP.nemesis_deck.cards or not MP.nemesis_cards or not MP.LOBBY.code then return end
 
 	local card_strings = MP.UTILS.string_split(MP.nemesis_deck_string, ";")
 
@@ -1394,16 +1409,19 @@ function G.FUNCS.load_nemesis_deck()
 			seal = "none"
 		end
 
-		-- Create the card
-		local card = create_playing_card({
-			front = G.P_CARDS[front_key],
-			center = enhancement ~= "none" and G.P_CENTERS[enhancement] or nil,
-		}, MP.nemesis_deck, true, true, nil, false)
+		-- A bare Card, not create_playing_card: the nemesis card must never join our own deck.
+		local area = MP.nemesis_deck
+		local card = Card(
+			area.T.x,
+			area.T.y,
+			G.CARD_W,
+			G.CARD_H,
+			G.P_CARDS[front_key],
+			enhancement ~= "none" and G.P_CENTERS[enhancement] or G.P_CENTERS.c_base
+		)
+		area:emplace(card)
 		if edition ~= "none" then card:set_edition({ [edition] = true }, true, true) end
 		if seal ~= "none" then card:set_seal(seal, true, true) end
-
-		-- Remove the card from G.playing_cards and insert into MP.nemesis_cards
-		table.remove(G.playing_cards, #G.playing_cards)
 		table.insert(MP.nemesis_cards, card)
 
 		::continue::
@@ -1577,6 +1595,13 @@ function MP.ACTIONS.rematch()
 	Client.send({ action = "rematch" })
 end
 
+function MP.ACTIONS.gambel_boss()
+	Client.send({
+		action = "gambelBoss",
+		ante = G and G.GAME and G.GAME.round_resets and G.GAME.round_resets.ante or 1,
+	})
+end
+
 function MP.ACTIONS.fail_round(hands_used)
 	if MP.LOBBY.config.no_gold_on_round_loss then G.GAME.blind.dollars = 0 end
 	if hands_used == 0 then return end
@@ -1635,16 +1660,22 @@ function MP.ACTIONS.play_hand(score, hands_left)
 	end
 	fixed_score = string.gsub(fixed_score, ",", "") -- Remove commas
 
+	if MP.UTILS and MP.UTILS.duplicate_play and MP.UTILS.duplicate_play(MP.GAME._last_play, fixed_score, hands_left) then return end
+	MP.GAME._last_play = { score = fixed_score, hands = hands_left }
 	local insane_int_score = MP.INSANE_INT.from_string(fixed_score)
 	MP.GAME.score = insane_int_score
 	if MP.INSANE_INT.greater_than(insane_int_score, MP.GAME.highest_score) then
 		MP.GAME.highest_score = insane_int_score
 	end
 
+	local give, room = false, false
+	if MP.GAMBEL and MP.GAMBEL.joker_flags then give, room = MP.GAMBEL.joker_flags() end
 	Client.send({
 		action = "playHand",
 		score = fixed_score,
 		handsLeft = hands_left,
+		give = give and true or false,
+		room = room and true or false,
 	})
 end
 
@@ -1927,6 +1958,14 @@ local HANDLERS = {
 	endPvP = action_end_pvp,
 	playerInfo = action_player_info,
 	winGame = action_win_game,
+	gambelTable = function(p) if MP.GAMBEL and MP.GAMBEL.apply_table then MP.GAMBEL.apply_table(p.spin, p.ante) end end,
+	gambelTwist = function(p)
+		if not MP.GAMBEL then return end
+		MP.GAME.gambel_twist = p.twist
+		if MP.GAMBEL.toast and MP.GAMBEL.twist_name then MP.GAMBEL.toast(MP.GAMBEL.twist_name(p.twist)) end
+	end,
+	gambelBetResult = function(p) if MP.GAMBEL and MP.GAMBEL.apply_bet then MP.GAMBEL.apply_bet(p) end end,
+	gambelHit = function(p) if MP.GAMBEL and MP.GAMBEL.apply_hit then MP.GAMBEL.apply_hit(p) end end,
 	loseGame = action_lose_game,
 	lobbyOptions = action_lobby_options,
 	enemyLocation = enemyLocation,

@@ -87,8 +87,8 @@ end
 
 -- Hoarder joker: gain sell value each time we earn money
 local original_ease_dollars = ease_dollars
-function ease_dollars(mod, x)
-	original_ease_dollars(mod, x)
+function ease_dollars(mod, ...)
+	original_ease_dollars(mod, ...)
 
 	if MP.is_layer_active("sandbox") and to_big(mod) > to_big(0) and G.jokers and G.jokers.cards then
 		for i = 1, #G.jokers.cards do

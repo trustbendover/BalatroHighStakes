@@ -43,6 +43,12 @@ class Client {
 	/** Whether this player has played a hand in the current blind. Used to
 	 *  withhold the opponent's score until the player has committed a hand. */
 	playedThisBlind = false
+	handsPlayed = 0
+	jokerGive = false
+	jokerRoom = false
+	gambelBetAnte = -1
+	/** Watching a match. Not a seated player: ignored by Gambel Time solo checks and bets. */
+	spectator = false
 	ante = 1
 	skips = 0
 	furthestBlind = 0
@@ -121,11 +127,11 @@ class Client {
 	 * timer expiry. Each cause has its own once-per-round guard, so a timer
 	 * expiry and a round loss can both cost a life in the same round.
 	 */
-	loseLife = (cause: 'round' | 'timer' = 'round') => {
+	loseLife = (cause: 'round' | 'timer' = 'round', lives = 1) => {
 		const alreadyLost = cause === 'timer' ? this.timerLivesBlocker : this.roundLivesBlocker
 		if (alreadyLost) return
-
-		this.lives -= 1
+		const n = Math.max(1, Math.floor(Number(lives) || 1))
+		this.lives = Math.max(0, this.lives - n)
 		if (cause === 'timer') {
 			this.timerLivesBlocker = true
 		} else {

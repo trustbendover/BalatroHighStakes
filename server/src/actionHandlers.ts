@@ -1,5 +1,6 @@
 import type Client from "./Client.js";
 import GameModes from "./GameMode.js";
+import { gambelAnte, gambelFlip, gambelLives, gambelTable, gambelTwist, gambelWheel } from "./gambel.js";
 import { InsaneInt } from "./InsaneInt.js";
 import Lobby, { baseName, getEnemy, getOpponents, sendToOpponents, startError } from "./Lobby.js";
 import type {
@@ -136,6 +137,10 @@ const unreadyLobbyAction = (client: Client) => {
 	client.lobby?.broadcastLobbyInfo();
 };
 
+const chatAction = ({ text }: ActionHandlerArgs<{ action: "chat"; text?: string }>, client: Client) => {
+	client.lobby?.sayChat(client, text);
+};
+
 const keepAliveAction = (client: Client) => {
 	// Send an ack back to the received keepAlive
 	client.sendAction({ action: "keepAliveAck" });
@@ -160,15 +165,18 @@ const startGameAction = (client: Client) => {
 	}
 	lobby.startPlayers = lobby.players.length;
 
-	const lives = lobby.options.starting_lives
+	let lives = lobby.options.starting_lives
 		? Number.parseInt(lobby.options.starting_lives)
 		: GameModes[lobby.gameMode].startingLives;
+	if (lobby.gameMode === "gambel_time") lives = gambelLives(lives);
 
 	const seed = lobby.options.different_seeds ? undefined : generateSeed();
 	lobby.seed = seed ?? null;
 	lobby.resetPlayers();
 
 	lobby.isInGame = true;
+	lobby.chatMatch = [];
+	lobby.broadcastAction({ action: "chatState", view: "match", clear: true });
 	lobby.broadcastAction({
 		action: "startGame",
 		deck: "c_multiplayer_1",
@@ -209,7 +217,7 @@ const unreadyBlindAction = (client: Client) => {
 };
 
 const playHandAction = (
-	{ handsLeft, score }: ActionHandlerArgs<ActionPlayHand>,
+	{ handsLeft, score, give, room }: ActionHandlerArgs<ActionPlayHand> & { give?: boolean; room?: boolean },
 	client: Client,
 ) => {
 	const lobby = client.lobby;
@@ -221,8 +229,19 @@ const playHandAction = (
 	client.handsLeft = Math.floor(typeof handsLeft === "number" ? handsLeft : Number(handsLeft));
 
 	const hideScore = Boolean(lobby.options.hide_score_until_played);
-	if (client.score.greaterThan(new InsaneInt(0, 0, 0))) client.playedThisBlind = true;
+	if (client.score.greaterThan(new InsaneInt(0, 0, 0))) {
+		client.playedThisBlind = true;
+		client.handsPlayed = (client.handsPlayed || 0) + 1;
+	}
 	if (client.handsLeft < 1) client.pvpDone = true;
+	client.jokerGive = Boolean(give);
+	client.jokerRoom = Boolean(room);
+	if (lobby.gameMode === "gambel_time" && lobby.gambelTwist === "sabotage" && !lobby.gambelSabotaged && client.pvpDone) {
+		lobby.gambelSabotaged = client.id;
+		for (const p of lobby.alivePlayers()) {
+			if (p.id !== client.id && !p.pvpDone) p.sendAction({ action: "gambelHit", kind: "tax", amount: 4 });
+		}
+	}
 
 	// Timer order: highest current score goes first (ties -> whoever readied first)
 	const ranking = lobby.alivePlayers().slice().sort((a, b) =>
@@ -262,6 +281,7 @@ const rematchAction = (client: Client) => {
 		return;
 	}
 	lobby.prepareRematch();
+	lobby.broadcastAction({ action: "chatState", view: "lobby", clear: false });
 	lobby.broadcastAction({ action: "rematch", config: { ...lobby.options, gamemode: lobby.gameMode } });
 	lobby.broadcastLobbyInfo();
 };
@@ -294,9 +314,13 @@ const lobbyOptionsAction = (
 const failRoundAction = (client: Client) => {
 	const lobby = client.lobby;
 	if (!lobby) return;
-	if (lobby.options.death_on_round_loss) lobby.loseLifeFor(client, 'round');
-	// 3P fork: survival-specific furthest-blind logic is not supported; any mode
-	// uses last-one-standing.
+	if (lobby.gambelSolo()) {
+		const open = lobby.gambelBossOpen;
+		const cost = open && lobby.gambelTwist === "double" ? 2 : 1;
+		lobby.gambelBossOpen = false;
+		client.loseLife("round", cost);
+		if (open && lobby.gambelTwist === "house") client.sendAction({ action: "gambelHit", kind: "tax", amount: 5 });
+	} else if (lobby.options.death_on_round_loss) lobby.loseLifeFor(client, "round");
 	lobby.checkGameOver();
 };
 
@@ -305,10 +329,84 @@ const setAnteAction = (
 	client: Client,
 ) => {
 	client.ante = ante;
+	const lobby = client.lobby;
+	if (!lobby || lobby.gameMode !== "gambel_time") return;
+	if (lobby.isInGame) {
+		const matchAnte = lobby.matchAnte();
+		if (lobby.gambelAnte !== matchAnte || !lobby.gambelTable) {
+			lobby.gambelAnte = matchAnte;
+			lobby.gambelTable = gambelTable(lobby.seed, matchAnte);
+			lobby.broadcastAction({ action: "gambelTable", ante: matchAnte, spin: lobby.gambelTable });
+		}
+	}
+	if (lobby.gambelBossOpen) {
+		const boss = Number(lobby.gambelBossAnte) || 0;
+		const at = Number(client.ante) || 1;
+		const still = !lobby.gambelSolo() && lobby.alivePlayers().some((p) => !p.spectator && (Number(p.ante) || 1) <= boss);
+		if (boss > 0 && at > boss && !still) {
+			if (lobby.gambelSolo() && lobby.gambelTwist === "allin" && client.lives > 0) {
+				client.sendAction({ action: "gambelHit", kind: "allin", payout: 2, role: "take" });
+			}
+			lobby.gambelBossOpen = false;
+			lobby.gambelTwist = null;
+			lobby.gambelSabotaged = null;
+		}
+	}
+	if (lobby.gambelSolo() && lobby.isInGame && client.lives > 0 && ante > gambelAnte(lobby.options)) {
+		client.sendAction({ action: "winGame", reason: "house" });
+		lobby.winnerId = client.id;
+		lobby.isInGame = false;
+		lobby.blindActive = false;
+	}
+};
+
+const gambelBossAction = ({ ante }: { ante?: number }, client: Client) => {
+	const lobby = client.lobby;
+	if (!lobby || lobby.gameMode !== "gambel_time" || client.eliminated) return;
+	const at = Math.floor(Number(ante) || client.ante || 1);
+	if (lobby.gambelBossAnte === at && lobby.gambelTwist) {
+		lobby.gambelBossOpen = true;
+		client.sendAction({ action: "gambelTwist", twist: lobby.gambelTwist, ante: at });
+		return;
+	}
+	const n = lobby.gambelSolo() ? 1 : lobby.alivePlayers().filter((p) => !p.spectator).length;
+	lobby.gambelTwist = gambelTwist(lobby.seed, at, at, n);
+	lobby.gambelBossAnte = at;
+	lobby.gambelBossOpen = true;
+	lobby.broadcastAction({ action: "gambelTwist", twist: lobby.gambelTwist, ante: at, solo: n <= 1 });
+};
+
+const gambelBetAction = (
+	{ kind, money, ante, choice }: { kind?: string; money?: number; ante?: number; choice?: string },
+	client: Client,
+) => {
+	const lobby = client.lobby;
+	if (!lobby || lobby.gameMode !== "gambel_time" || client.eliminated || client.spectator) return;
+	const at = Math.floor(Number(ante) || client.ante || 1);
+	if (client.gambelBetAnte === at) {
+		client.sendAction({ action: "gambelBetResult", ok: false, reason: "once" });
+		return;
+	}
+	const res = kind === "wheel" ? gambelWheel(lobby.seed, client.id, at, money) : gambelFlip(lobby.seed, client.id, at, money, choice);
+	if (res.ok) client.gambelBetAnte = at;
+	client.sendAction({
+		action: "gambelBetResult",
+		kind: kind === "wheel" ? "wheel" : "double",
+		ok: res.ok,
+		reason: "reason" in res ? res.reason : undefined,
+		won: "won" in res ? res.won : undefined,
+		id: "id" in res ? res.id : undefined,
+		stake: "stake" in res ? res.stake : undefined,
+		delta: res.delta,
+		amount: "amount" in res ? res.amount : undefined,
+		drawn: "drawn" in res ? res.drawn : undefined,
+		suit: "suit" in res ? res.suit : undefined,
+		choice: "choice" in res ? res.choice : undefined,
+	});
 };
 
 // TODO: Fix this
-const serverVersion = "0.6.9.1";
+const serverVersion = "0.7.0";
 /** Verifies the client version and allows connection if it matches the server's */
 const versionAction = (
 	{ version }: ActionHandlerArgs<ActionVersion>,
@@ -812,6 +910,7 @@ export const actionHandlers = {
 	readyLobby: readyLobbyAction,
 	unreadyLobby: unreadyLobbyAction,
 	keepAlive: keepAliveAction,
+	chat: chatAction,
 	startGame: startGameAction,
 	readyBlind: readyBlindAction,
 	unreadyBlind: unreadyBlindAction,
@@ -822,6 +921,8 @@ export const actionHandlers = {
 	lobbyOptions: lobbyOptionsAction,
 	failRound: failRoundAction,
 	setAnte: setAnteAction,
+	gambelBoss: gambelBossAction,
+	gambelBet: gambelBetAction,
 	version: versionAction,
 	setLocation: setLocationAction,
 	newRound: newRoundAction,

@@ -25,11 +25,11 @@ local function get_warnings()
 		table.insert(warnings, { localize({ type = "variable", key = n == 1 and "k_wait_ready_one" or "k_wait_ready", vars = { n } }), G.C.UI.TEXT_LIGHT, 0.3 })
 	end
 	-- 0.6.8: alone in the lobby (the mode's own player-count message covers 2+ players)
-	if MP.LOBBY.is_host and not MP.LOBBY.ready_to_start and MP.LOBBY.player_list and #MP.LOBBY.player_list < 2 then
+	if MP.LOBBY.is_host and not MP.LOBBY.ready_to_start and MP.LOBBY.player_list and #MP.LOBBY.player_list < ((MP.MODES and MP.MODES.limits and MP.MODES.limits().min) or 2) then
 		table.insert(warnings, { localize("k_wait_join"), G.C.UI.TEXT_LIGHT, 0.3 })
 	end
 
-	-- Player count vs. mode (1v1 Duel: exactly 2, Teams: 4/6/8, others 2-8)
+	-- Player count vs. mode (1v1 Duel: exactly 2, Teams: 4-8 including 3v2 and 4v3, others 2-8)
 	local count = MP.LOBBY.player_list and #MP.LOBBY.player_list or 0
 	local problem = count >= 2 and MP.MODES and MP.MODES.start_problem(count)
 	if problem then table.insert(warnings, { problem, SMODS.Gradients.warning_text, 0.35 }) end

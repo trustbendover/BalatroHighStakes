@@ -29,7 +29,7 @@ ok(type(nasty) == "string" and not nasty:find("\n", 1, true) and not nasty:find(
 ok(#Browser.sanitize_name(("W"):rep(80)) == Browser.NAME_MAX, "host name is capped")
 ok(Browser.sanitize_name("") == nil and Browser.sanitize_name(nil) == nil, "empty name is not a string we invent here")
 
-local ver = "0.6.9"
+local ver = "0.7.0"
 local filters = Browser.filters(ver)
 ok(filters[1].key == "mp3p_discover" and filters[1].value == "1" and filters[2].value == "hs" and filters[3].value == ver, "Steam filters are discover + this mod + this version")
 ok(Browser.version("0.6.8.2~3P") == "0.6.8.2~3P" and Browser.version("bad version") == "", "version filter is a single token")
@@ -63,6 +63,11 @@ do
 end
 local teams = Browser.accept(sample({ mp3p_mode = "teams", mp3p_fmt = "2", mp3p_max = "4" }), { version = ver })
 ok(teams and teams.mode_key == "k_teams2", "2v2 uses the teams format name")
+local gpub = Browser.publish({ gameMode = "gambel_time", isInGame = false, players = { { username = "Ada" } }, options = {} },
+	{ public = true, version = ver, max_players = function() return 8 end })
+ok(gpub.mp3p_discover == "1" and gpub.mp3p_mode == "gambel_time", "a public Gambel Time lobby is discoverable")
+local grow = Browser.accept(sample({ mp3p_mode = "gambel_time" }), { version = ver })
+ok(grow and grow.mode == "gambel_time" and grow.mode_key == "k_gambel_time", "the browser keeps a Gambel Time row")
 local wait = Browser.accept(sample(), { version = ver })
 ok(Browser.action(wait) == "join", "a waiting lobby with room can be joined")
 local full = Browser.accept(sample({ mp3p_players = "8" }), { version = ver })
@@ -243,6 +248,7 @@ A.send({ action = "lobbyOptions", match_settings = 1, lobby_public = true, norma
 lob = NET.lobbies[A.r.lobby]
 ok(lob.typ == P2P.STEAM_LOBBY_PUBLIC and lob.data.mp3p_discover == "1" and lob.data.mp3p_mod == "hs", "public sets the Steam type and the discover flag")
 ok(lob.data.mp3p_name == "Ann" and lob.data.mp3p_mode == "attrition" and lob.data.mp3p_players == "2" and lob.data.mp3p_state == "wait", "the listing shows the host, the mode and the current seats")
+ok(lob.data.mp3p_boss == "1" and lob.data.mp3p_code ~= nil, "a host who turned boss effects on publishes that, and the code stays off the card later")
 local guest_on = { normal_bosses = false, death_on_round_loss = true, weekly = "keep-me" }
 Match.apply(guest_on, B.last("lobbyOptions"))
 ok(guest_on.normal_bosses == true and guest_on.death_on_round_loss == false and guest_on.weekly == "keep-me", "join applies the host's modifiers both ways and leaves a personal setting")
@@ -266,7 +272,7 @@ ok(ids_of(own)[A.r.lobby] == nil, "the host's own lobby is not offered back to t
 -- public -> private before the click: do not join
 local saved = A.r.lobby
 A.send({ action = "lobbyOptions", match_settings = 1, lobby_public = false }); pump()
-ok(NET.lobbies[saved].data.mp3p_discover == "0" and NET.lobbies[saved].data.mp3p_mod == "" and NET.lobbies[saved].typ == P2P.STEAM_LOBBY_PRIVATE, "switching to private clears the listing and the Steam type")
+ok(NET.lobbies[saved].data.mp3p_discover == "0" and NET.lobbies[saved].data.mp3p_mod == "" and NET.lobbies[saved].data.mp3p_boss == "" and NET.lobbies[saved].typ == P2P.STEAM_LOBBY_PRIVATE, "switching to private clears the listing, including boss effects")
 local gone = browse(C)
 ok(ids_of(gone)[saved] == nil, "a lobby that went private disappears on refresh")
 local joins = NET.joins

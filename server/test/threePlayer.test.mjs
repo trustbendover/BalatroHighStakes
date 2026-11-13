@@ -46,7 +46,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 async function main() {
   for (let i = 0; i < 50; i++) { try { await new Promise((r, j) => { const s = net.connect(PORT, '127.0.0.1', () => { s.destroy(); r() }); s.on('error', j) }); break } catch { await sleep(100) } }
   const [A, B, C, D] = ['Alice', 'Bob', 'Carol', 'Dave'].map((n) => new Fake(n))
-  for (const c of [A, B, C, D]) { await c.connect(); await c.waitAction('connected'); c.send({ action: 'username', username: c.name, modHash: 'test' }); c.send({ action: 'version', version: '0.6.9' }) }
+  for (const c of [A, B, C, D]) { await c.connect(); await c.waitAction('connected'); c.send({ action: 'username', username: c.name, modHash: 'test' }); c.send({ action: 'version', version: '0.7.0' }) }
 
   A.send({ action: 'createLobby', gameMode: 'attrition' })
   const { code } = await A.waitAction('joinedLobby')

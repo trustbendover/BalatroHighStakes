@@ -50,6 +50,11 @@ G.FUNCS.change_starting_lives = function(args)
 	send_lobby_options()
 end
 
+G.FUNCS.change_gambel_ante = function(args)
+	MP.LOBBY.config.gambel_ante = args.to_val
+	send_lobby_options()
+end
+
 -- This needs to have a parameter because its a callback for inputs
 local function send_lobby_options(value)
 	MP.ACTIONS.lobby_options()
@@ -146,6 +151,19 @@ function MP.UI.create_lobby_options_tab()
 				MP.LOBBY.config.starting_lives,
 				"change_starting_lives"
 			),
+			(function()
+				if MP.LOBBY.config.gamemode ~= "gamemode_mp_gambel_time" then
+					return { n = G.UIT.R, config = { minh = 0.01 }, nodes = {} }
+				end
+				return create_lobby_option_cycle(
+					"gambel_ante_option",
+					"k_gambel_time",
+					0.85,
+					{ 4, 5, 6, 7, 8, 9, 10, 11, 12 },
+					tonumber(MP.LOBBY.config.gambel_ante) or 6,
+					"change_gambel_ante"
+				)
+			end)(),
 			create_lobby_option_toggle("multiplayer_jokers_toggle", "b_opts_multiplayer_jokers", "multiplayer_jokers"),
 			create_lobby_option_toggle("different_decks_toggle", "b_opts_player_diff_deck", "different_decks", function()
 				send_lobby_options()

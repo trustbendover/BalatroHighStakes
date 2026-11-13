@@ -39,4 +39,12 @@ for _, c in ipairs(V.ffa) do
 	for i, v in ipairs(c.losers) do assert(got[i] == v, c.name) end
 	print("ok: ffa " .. c.name); n = n + 1
 end
+Core.TEAMS = T
+assert(Core.start_error("teams", 5, {}) == nil, "server allows 5")
+assert(Core.start_error("teams", 7, {}) == nil, "server allows 7")
+assert(Core.start_error("teams", 3, {}) ~= nil, "server rejects 3")
+assert(Core.start_error("teams", 4, {}) == nil and Core.start_error("teams", 6, { teams_size = 3 }) == nil and Core.start_error("teams", 8, { teams_size = 4 }) == nil, "server still allows 4/6/8")
+assert(Core.start_error("teams", 5, { teams_format = 2 }) ~= nil and Core.start_error("teams", 4, { teams_format = 2 }) == nil, "locked 2v2")
+assert(Core.start_error("teams", 4, { teams_format = 3 }) ~= nil and Core.start_error("teams", 6, { teams_format = 3 }) == nil, "locked 3v3")
+assert(Core.start_error("teams", 7, { teams_format = 4 }) ~= nil and Core.start_error("teams", 8, { teams_format = 4 }) == nil, "locked 4v4")
 print("PASS test_teams (" .. n .. " vectors)")

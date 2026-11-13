@@ -358,6 +358,8 @@ MP.load_mp_dir("objects/challenges")
 if MP.SPECTATE and MP.SPECTATE.register then MP.SPECTATE.register() end
 if MP.REJOIN and MP.REJOIN.register then MP.REJOIN.register() end
 if MP.MATCH_STATS and MP.MATCH_STATS.register then MP.MATCH_STATS.register() end
+if MP.CHAT and MP.CHAT.register then MP.CHAT.register() end
+if MP.GAMBEL and MP.GAMBEL.register_ui then MP.GAMBEL.register_ui() end
 
 -- 0.6.8: Balatro High Stakes is Steam peer-to-peer ONLY. The host's Balatro runs the game server
 -- (networking/p2p_server.lua) and friends join with the lobby code over Steam. The old TCP client
@@ -396,6 +398,9 @@ do
 		Core.KOTH = MP.load_mp_file("networking/koth_rules.lua") -- King of the Hill gamemode rules
 		Core.TEAMS = MP.load_mp_file("networking/teams_rules.lua") -- Teams gamemode rules
 		Core.PVP = MP.load_mp_file("networking/pvp_rules.lua") -- free-for-all life loss (2-8 players)
+		Core.GAMBEL = MP.load_mp_file("networking/gambel_rules.lua") -- Gambel Time table, bets, and boss twists
+		-- Steamodded's file source is not a real path, so p2p_server's sibling dofile never finds this.
+		Core.CHAT = MP.load_mp_file("networking/chat_rules.lua")
 		local backend, berr
 		if MP.DEV and MP.DEV.new_backend then backend, berr = MP.DEV.new_backend() else backend, berr = P2P.new_ffi_backend() end
 		if not backend then error(berr) end

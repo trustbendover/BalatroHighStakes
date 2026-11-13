@@ -96,6 +96,7 @@ function G.UIDEF.create_UIBox_lobby_menu()
 							MP.UI.create_lobby_leave_button(text_scale),
 						},
 					},
+					MP.CHAT and MP.CHAT.lobby_row and MP.CHAT.lobby_row() or nil,
 				},
 			},
 		},
@@ -468,23 +469,21 @@ function G.FUNCS.view_code(e)
 	e.UIBox:recalculate()
 end
 
+local function leave_lobby_now()
+	MP.LOBBY.code = nil
+	if MP.SPECTATE and MP.SPECTATE.on_match_end then MP.SPECTATE.on_match_end() end
+	MP.ACTIONS.leave_lobby()
+	MP.UI.update_connection_status()
+	MP.MODIFIERS = {}
+	MP._version_mismatch_shown = false
+	G.STATE = G.STATES.MENU
+end
+
 function G.FUNCS.lobby_leave(e)
 	if G.STAGE ~= G.STAGES.MAIN_MENU then
-		G.FUNCS.confirm_selection(function()
-			MP.LOBBY.code = nil
-			MP.ACTIONS.leave_lobby()
-			MP.UI.update_connection_status()
-			MP.MODIFIERS = {}
-			MP._version_mismatch_shown = false
-			G.STATE = G.STATES.MENU
-		end)
+		G.FUNCS.confirm_selection(leave_lobby_now)
 	else
-		MP.LOBBY.code = nil
-		MP.ACTIONS.leave_lobby()
-		MP.UI.update_connection_status()
-		MP.MODIFIERS = {}
-		MP._version_mismatch_shown = false
-		G.STATE = G.STATES.MENU
+		leave_lobby_now()
 	end
 end
 

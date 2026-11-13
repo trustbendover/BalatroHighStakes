@@ -167,16 +167,25 @@ end
 
 function MP.UI.create_UIBox_player_row(type)
 	local seat = MP.THREEP.lobby_player(type)
-	local player_name = (MP.TEAMS and MP.TEAMS.seat_label and seat.username) and MP.TEAMS.seat_label(seat) or seat.username or "?"
 	local lives = MP.GAME.enemy.lives
 	local highest_score = MP.GAME.enemy.highest_score
 	local skips = MP.GAME.enemy.skips or 0
-	-- 3P fork: look up this row's opponent by server id
+	-- 3P fork: look up this row's opponent by server id before any label that reads them.
 	local idx = MP.THREEP.seat_index(type)
 	local pl = MP.LOBBY.player_list and MP.LOBBY.player_list[idx]
 	local is_me = (pl and MP.LOBBY.my_id and pl.id == MP.LOBBY.my_id)
 		or (not pl and ((idx == 1 and MP.LOBBY.is_host) or (idx == 2 and not MP.LOBBY.is_host)))
 	local e = pl and MP.GAME.enemies and MP.GAME.enemies[pl.id]
+	local player_name = (MP.TEAMS and MP.TEAMS.seat_label and seat.username) and MP.TEAMS.seat_label(seat) or seat.username or "?"
+	if MP.PRESENCE then
+		local kind = MP.PRESENCE.kind({
+			spectator = (pl and pl.spectator) or seat.spectator,
+			rejoining = (e and e.rejoining) or (pl and pl.rejoining) or seat.rejoining,
+			away = e and e.away, eliminated = e and e.eliminated and e.away, connected = true,
+		})
+		local word = MP.PRESENCE.label(kind, localize)
+		if word ~= "" then player_name = player_name .. " · " .. word end
+	end
 	if e and not is_me then
 		lives = e.lives or lives
 		highest_score = e.real_score or highest_score
@@ -246,7 +255,8 @@ function MP.UI.create_UIBox_player_row(type)
 								n = G.UIT.T,
 								config = {
 									text = "" .. player_name,
-									scale = 0.45,
+									scale = 0.4,
+									maxw = 4.4,
 									colour = G.C.UI.TEXT_LIGHT,
 									shadow = true,
 								},

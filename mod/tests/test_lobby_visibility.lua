@@ -115,7 +115,7 @@ local all
 local function player(name, types)
 	local P = { name = name, msgs = {}, alive = true }
 	P.b = backend(name, { types = types })
-	P.r = P2P.new_router({ backend = P.b, Core = Core, json = json, now = now, version = "0.6.9", Migration = HMmod,
+	P.r = P2P.new_router({ backend = P.b, Core = Core, json = json, now = now, version = "0.7.0", Migration = HMmod,
 		push = function(s) P.msgs[#P.msgs + 1] = json.decode(s) end })
 	P.send = function(t) P.r.send(t) end
 	P.last = function(a) for i = #P.msgs, 1, -1 do if P.msgs[i].action == a then return P.msgs[i] end end end
@@ -130,7 +130,7 @@ local function boot(types)
 	all = { A, B }
 	for _, p in ipairs(all) do
 		p.send({ action = "connect" }); p.send({ action = "username", username = p.name, modHash = "t" })
-		p.send({ action = "version", version = "0.6.9" })
+		p.send({ action = "version", version = "0.7.0" })
 	end
 	A.send({ action = "createLobby", gameMode = "attrition" }); pump()
 	return A, B

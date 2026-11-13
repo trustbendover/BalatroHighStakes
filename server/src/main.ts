@@ -339,6 +339,12 @@ const server = createServer((socket) => {
 					case 'rematch':
 						actionHandlers.rematch(client)
 						break
+					case 'chat':
+						actionHandlers.chat(
+							actionArgs as ActionHandlerArgs<{ action: 'chat'; text?: string }>,
+							client,
+						)
+						break
 					// Deprecated
 					case 'gameInfo':
 						actionHandlers.gameInfo(client)
@@ -354,6 +360,12 @@ const server = createServer((socket) => {
 						break
 					case 'failRound':
 						actionHandlers.failRound(client)
+						break
+					case 'gambelBoss':
+						actionHandlers.gambelBoss(actionArgs as { ante?: number }, client)
+						break
+					case 'gambelBet':
+						actionHandlers.gambelBet(actionArgs as { kind?: string; money?: number; ante?: number; choice?: string }, client)
 						break
 					case 'setAnte':
 						actionHandlers.setAnte(

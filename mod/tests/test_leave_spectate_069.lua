@@ -60,7 +60,7 @@ local all
 local function player(name)
 	local P = { name = name, msgs = {}, alive = true }
 	P.b = backend(name)
-	P.r = P2P.new_router({ log = os.getenv("LOG") and function(s) print("[" .. T .. " " .. name .. "] " .. s) end or nil, backend = P.b, Core = Core, json = json, now = now, version = "0.6.9", Migration = HMmod,
+	P.r = P2P.new_router({ log = os.getenv("LOG") and function(s) print("[" .. T .. " " .. name .. "] " .. s) end or nil, backend = P.b, Core = Core, json = json, now = now, version = "0.7.0", Migration = HMmod,
 		push = function(s) P.msgs[#P.msgs + 1] = json.decode(s) end })
 	P.send = function(t) P.r.send(t) end
 	P.last = function(a) for i = #P.msgs, 1, -1 do if P.msgs[i].action == a then return P.msgs[i] end end end
@@ -78,7 +78,7 @@ local function setup(n, mode, opts)
 	local ps = {}
 	for i = 1, n do ps[i] = player(mode:sub(1, 3) .. n .. "_" .. i) end
 	all = ps
-	for _, p in ipairs(ps) do p.send({ action = "connect" }); p.send({ action = "username", username = p.name, modHash = "t" }); p.send({ action = "version", version = "0.6.9" }) end
+	for _, p in ipairs(ps) do p.send({ action = "connect" }); p.send({ action = "username", username = p.name, modHash = "t" }); p.send({ action = "version", version = "0.7.0" }) end
 	ps[1].send({ action = "createLobby", gameMode = mode }); pump()
 	local code = ps[1].last("joinedLobby").code
 	local o = { starting_lives = "2" }
@@ -134,7 +134,7 @@ local function restart(ps, i, code, token)
 	local p = player(old.name)
 	all[#all + 1] = p
 	ps[i] = p
-	p.send({ action = "connect" }); p.send({ action = "username", username = p.name, modHash = "t" }); p.send({ action = "version", version = "0.6.9" })
+	p.send({ action = "connect" }); p.send({ action = "username", username = p.name, modHash = "t" }); p.send({ action = "version", version = "0.7.0" })
 	p.send({ action = "rejoinLobby", code = code, reconnectToken = token })
 	pump(8); run(2)
 	p.id = old.id
@@ -143,7 +143,7 @@ end
 local function newcomer(name, code, spectate)
 	local p = player(name)
 	all[#all + 1] = p
-	p.send({ action = "connect" }); p.send({ action = "username", username = name, modHash = "t" }); p.send({ action = "version", version = "0.6.9" })
+	p.send({ action = "connect" }); p.send({ action = "username", username = name, modHash = "t" }); p.send({ action = "version", version = "0.7.0" })
 	p.send({ action = "joinLobby", code = code, spectate = spectate }); pump(8); run(1)
 	return p
 end

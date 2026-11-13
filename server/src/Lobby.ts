@@ -3,6 +3,8 @@ import { InsaneInt } from "./InsaneInt.js";
 import GameModes from "./GameMode.js";
 import { type KothEvent, type KothState, kothConfig, kothSnapshot, newKothState, resolveKoth } from "./koth.js";
 import { type Team, TEAM_LETTERS, assignTeams, resolveTeams, teamsPlan } from "./teams.js";
+import { type ChatLine, acceptChat, chatColors, displayName, pushChat } from "./chat.js";
+import { gambelPayout, gambelResolve, gambelTwist } from "./gambel.js";
 import { loserCount, pvpLosers } from "./pvpRules.js";
 import type {
 	ActionLobbyInfo,
@@ -21,13 +23,18 @@ const generateUniqueLobbyCode = (): string => {
 	return Lobbies.get(result) ? generateUniqueLobbyCode() : result;
 };
 
-/** Balatro High Stakes: 2 to 8 players. 1v1 Duel is exactly 2; Teams needs 4-8 (even split). */
+/** Balatro High Stakes: 2 to 8 players. 1v1 Duel is exactly 2; Teams is 4-8, including 3v2 and 4v3. */
 export const MAX_PLAYERS = 8;
 export const MIN_PLAYERS = 2;
 export const maxPlayersFor = (mode: GameMode | string): number => (mode === "duel" ? 2 : MAX_PLAYERS);
 /** null when a lobby of n players can start this mode, else the reason. */
 // biome-ignore lint/suspicious/noExplicitAny: lobby options are loosely typed
 export const startError = (mode: GameMode | string, n: number, options: { [k: string]: any } = {}): string | null => {
+	if (mode === "gambel_time") {
+		if (n < 1) return "Need at least 1 player to start.";
+		if (n > maxPlayersFor(mode)) return "Too many players for this mode.";
+		return null;
+	}
 	if (n < MIN_PLAYERS) return "Need at least 2 players to start.";
 	if (n > maxPlayersFor(mode)) return "Too many players for this mode.";
 	if (mode === "duel" && n !== 2) return "1v1 Duel needs exactly 2 players.";
@@ -35,7 +42,7 @@ export const startError = (mode: GameMode | string, n: number, options: { [k: st
 		const [size, why] = teamsPlan(n, options);
 		const fmt = Number(options?.teams_format ?? 0);
 		if (size === null && fmt >= 2 && fmt <= 4) return `${fmt}v${fmt} ${why}.`;
-		if (size === null) return `Teams ${why} (4, 6 or 8 players).`;
+		if (size === null) return `Teams ${why} (4 to 8 players).`;
 	}
 	return null;
 };
@@ -109,6 +116,13 @@ class Lobby {
 	/** Authoritative seed generated for the current game (null until startGame,
 	 *  or for different-seeds games where each client uses its own). */
 	seed: string | null = null;
+	gambelTable: string | null = null;
+	gambelAnte = 0;
+	gambelTwist: string | null = null;
+	gambelBossAnte = 0;
+	gambelBossOpen = false;
+	gambelSabotaged: string | null = null;
+	gambelLives = 1;
 	/** a blind has started and its PvP result hasn't been resolved yet */
 	blindActive = false;
 	/** King of the Hill: crown state (null unless gameMode === "koth" and a game runs) */
@@ -123,6 +137,9 @@ class Lobby {
 	elimOrder: string[] = [];
 	winnerId: string | null = null;
 	graceTimers = new Map<string, ReturnType<typeof setTimeout>>();
+	chatLobby: ChatLine[] = [];
+	chatMatch: ChatLine[] = [];
+	chatSeq = 0;
 	/** increments for every started PvP blind */
 	blindSeq = 0;
 	/** deletes the lobby if nobody reconnects while it's empty mid-game */
@@ -297,6 +314,39 @@ class Lobby {
 		}
 		console.log(`Player ${newClient.username} rejoined lobby ${this.code} (lives=${newClient.lives}, ante=${newClient.ante})`);
 		this.broadcastLobbyInfo();
+		this.chatSync(newClient);
+	};
+
+	chatSync = (client: Client) => {
+		const view = this.isInGame ? "match" as const : "lobby" as const;
+		const src = view === "match" ? this.chatMatch : this.chatLobby;
+		client.sendAction({
+			action: "chatLog",
+			view,
+			lines: src.map((m) => ({ id: m.id, scope: m.scope, name: m.name, watch: m.watch, text: m.text, col: m.col })),
+		});
+	};
+
+	sayChat = (client: Client, text: unknown) => {
+		const accepted = acceptChat(text);
+		if (!accepted.ok) {
+			client.sendAction({ action: "chatReject", reason: accepted.reason });
+			return;
+		}
+		const cols = chatColors(this.players.map((p) => ({ id: p.id, username: p.username })));
+		const scope = this.isInGame ? "match" as const : "lobby" as const;
+		this.chatSeq += 1;
+		const line: ChatLine = {
+			id: this.chatSeq,
+			scope,
+			name: displayName(client.username),
+			watch: false,
+			text: accepted.text,
+			col: cols.get(client.id) ?? 1,
+		};
+		if (scope === "match") this.chatMatch = pushChat(this.chatMatch, line);
+		else this.chatLobby = pushChat(this.chatLobby, line);
+		this.broadcastAction({ action: "chat", ...line });
 	};
 
 	/** Tell a (re)joining client how to continue: seed, ante, lives, opponents. */
@@ -373,6 +423,7 @@ class Lobby {
 		client.sendAction({ action: "joinedLobby", code: this.code, type: this.gameMode, reconnectToken: client.reconnectToken });
 		client.sendAction({ action: "lobbyOptions", gamemode: this.gameMode, ...this.options });
 		this.broadcastLobbyInfo();
+		this.chatSync(client);
 	};
 
 	/**
@@ -412,6 +463,7 @@ class Lobby {
 		}
 		console.log(`Late join: ${client.username} joined ${this.code} at ante ${client.ante} with ${client.lives} lives`);
 		this.broadcastLobbyInfo();
+		this.chatSync(client);
 	};
 
 	broadcastAction = (action: ActionServerToClient) => {
@@ -540,6 +592,18 @@ class Lobby {
 		this.teamLives = null;
 		this.elimOrder = [];
 		this.winnerId = null;
+		this.gambelTable = null;
+		this.gambelAnte = 0;
+		this.gambelTwist = null;
+		this.gambelBossAnte = 0;
+		this.gambelBossOpen = false;
+		this.gambelSabotaged = null;
+		this.gambelLives = 1;
+		for (const p of this.players) {
+			p.gambelBetAnte = -1;
+			p.jokerGive = false;
+			p.jokerRoom = false;
+		}
 		for (const t of this.graceTimers.values()) clearTimeout(t);
 		this.graceTimers.clear();
 		this.tcgBets.clear();
@@ -601,7 +665,7 @@ class Lobby {
 	// ---------------- Teams (2v2 ... 4v4, 2v2v2, 2v2v2v2) ----------------
 	teamsActive = () => this.gameMode === "teams" && this.teamLives !== null;
 
-	/** Fix the teams at game start (exactly 4 players). */
+	/** Fix the teams at game start (4-8 seated players; 5 is 3v2 and 7 is 4v3). */
 	teamsStart = (lives: number) => {
 		if (this.gameMode !== "teams") return;
 		const teams = assignTeams(this.players.map((p) => p.id), this.options);
@@ -724,6 +788,23 @@ class Lobby {
 	};
 
 	/** Mark players with 0 lives eliminated; end the game if <=1 remains. */
+	/** Highest ante among living seated players. Spectators and eliminated players do not move the table. */
+	matchAnte = (): number => {
+		let a = 1;
+		for (const p of this.players) {
+			if (!p.eliminated && !p.spectator) a = Math.max(a, Number(p.ante) || 1);
+		}
+		return a;
+	};
+
+	/** One seated player in Gambel Time is playing The House, not a Nemesis. Spectators do not count. */
+	gambelSolo = (): boolean => {
+		if (this.gameMode !== "gambel_time") return false;
+		const seated = this.players.filter((p) => !p.spectator).length
+			+ this.disconnectedSlots.filter((s) => !s.old.spectator).length;
+		return seated <= 1;
+	};
+
 	checkGameOver = (): boolean => {
 		if (!this.isInGame) return true;
 		// Deathmatch: a player at 0 lives during a PvP blind dies when that PvP resolves, so players
@@ -740,15 +821,17 @@ class Lobby {
 		const dying = this.players.filter((p) => !p.eliminated && p.lives <= 0);
 		const survivors = this.players.filter((p) => !p.eliminated && p.lives > 0).length + this.awayAlive().length;
 		const spared = new Set<Client>();
-		if (survivors === 0 && dying.length > 0 && !this.teamsActive()) {
+		const house = this.gambelSolo();
+		if (survivors === 0 && dying.length > 0 && !this.teamsActive() && !house) {
 			// nobody left standing: the highest score among those dying now wins (ties: all of them)
 			let best = dying[0].score;
 			for (const p of dying) if (p.score.greaterThan(best)) best = p.score;
 			for (const p of dying) if (!best.greaterThan(p.score) && !p.score.greaterThan(best)) spared.add(p);
 		}
+		const soloOver = house && this.players.filter((p) => !p.eliminated && p.lives > 0).length === 0;
 		for (const p of dying) {
 			p.eliminated = true;
-			if (!spared.has(p)) p.sendAction({ action: "loseGame" });
+			if (!spared.has(p)) p.sendAction({ action: "loseGame", ...(soloOver ? { finished: true } : {}) });
 			for (const o of this.players) {
 				if (o.id !== p.id) o.sendAction({ action: "playerEliminated", playerId: p.id, username: p.username });
 			}
@@ -776,7 +859,17 @@ class Lobby {
 			}
 			return false;
 		}
-		// Away players with lives left still count: their seat is held
+		// Away players with lives left still count: their seat is held.
+		// Solo Gambel Time stays up until the lives are gone or the target ante is beaten.
+		if (house) {
+			if (alive.length === 0 && dying.length > 0) {
+				this.isInGame = false;
+				this.blindActive = false;
+				this.disconnectedSlots = [];
+				return true;
+			}
+			return false;
+		}
 		if (alive.length + this.awayAlive().length <= 1) {
 			alive[0]?.sendAction({ action: "winGame" });
 			this.isInGame = false;
@@ -827,6 +920,7 @@ class Lobby {
 	/** If every alive player is ready for the blind, start it. */
 	tryStartBlind = () => {
 		if (!this.isInGame || this.blindActive) return false;
+		if (this.gambelSolo()) return false;
 		const alive = this.alivePlayers();
 		if (alive.length === 0 || !alive.every((p) => p.isReady)) return false;
 		this.blindSeq++;
@@ -838,6 +932,7 @@ class Lobby {
 			p.score = new InsaneInt(0, 0, 0);
 			p.handsLeft = 4;
 			p.playedThisBlind = false;
+			p.handsPlayed = 0;
 			p.pvpDone = false;
 			p.resetBlocker();
 		}
@@ -845,6 +940,13 @@ class Lobby {
 		const firstPlayer = first ? (first.id === this.host?.id ? "host" : "guest") : undefined;
 		this.firstReadyAt = null;
 		this.blindActive = true;
+		if (this.gameMode === "gambel_time") {
+			const ante = alive[0]?.ante ?? 1;
+			this.gambelTwist = gambelTwist(this.seed, ante, this.blindSeq, alive.length);
+			this.gambelBossAnte = ante;
+			this.gambelSabotaged = null;
+			this.broadcastAction({ action: "gambelTwist", twist: this.gambelTwist, ante, blind: this.blindSeq });
+		}
 		this.broadcastAction({ action: "startBlind", firstPlayer, firstPlayerId: first?.id });
 		return true;
 	};
@@ -882,7 +984,14 @@ class Lobby {
 		}
 		const timerLosers = alive.filter((p) => p.pvpTimerFailed);
 		let roundLosers: Client[] = [];
-		if (timerLosers.length === 0) {
+		let gambelPay: ReturnType<typeof gambelPayout<InsaneInt>> = null;
+		if (timerLosers.length === 0 && this.gameMode === "gambel_time") {
+			const entries = alive.map((p) => ({ id: p.id, score: p.score, hands: p.handsPlayed, give: p.jokerGive, room: p.jokerRoom }));
+			const res = gambelResolve(entries, this.gambelTwist ?? undefined, (a, b) => a.greaterThan(b));
+			this.gambelLives = res.lives;
+			gambelPay = gambelPayout(entries, this.gambelTwist ?? undefined, res.losers, (a, b) => a.greaterThan(b));
+			roundLosers = res.hold ? [] : alive.filter((p) => res.losers.includes(p.id));
+		} else if (timerLosers.length === 0) {
 			// 2-5 players: the single lowest score; 6-8: the bottom two (pvpRules.ts)
 			const ids = new Set(pvpLosers(alive.map((p) => ({ id: p.id, score: p.score })), (a, b) => !a.greaterThan(b)));
 			roundLosers = alive.filter((p) => ids.has(p.id));
@@ -901,7 +1010,24 @@ class Lobby {
 		}
 		const kothEv = this.kothResolve(alive, roundLosers);
 		if (kothEv?.shieldedId) roundLosers = roundLosers.filter((p) => p.id !== kothEv.shieldedId);
-		for (const p of roundLosers) p.loseLife("round");
+		for (const p of roundLosers) p.loseLife("round", this.gameMode === "gambel_time" ? this.gambelLives : 1);
+		if (gambelPay) {
+			const pay = gambelPay;
+			for (const p of alive) {
+				let role: "take" | "give" | null = pay.to === p.id ? "take" : null;
+				if (pay.from.includes(p.id)) role = "give";
+				if (role) {
+					p.sendAction({
+						action: "gambelHit",
+						kind: pay.kind,
+						amount: pay.cash,
+						...(pay.payout != null ? { payout: pay.payout } : {}),
+						joker: pay.joker,
+						role,
+					});
+				}
+			}
+		}
 		this.penalizeDeathmatchAbsent(absent);
 
 		for (const p of alive) {

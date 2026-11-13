@@ -30,6 +30,41 @@ function MP.UTILS.mode_desc(key, scale, max_lines)
 	return MP.UTILS.wrapText(text, width), scale * 70 / width
 end
 
+--- Lines that fit a card width. A newline inside one text node has no extra height, so the
+--- next row (the orange win line) is drawn on top of the last word of the line above it.
+function MP.UTILS.fit_lines(text, scale, maxw, max_lines)
+	scale = scale or 0.45
+	maxw = maxw or 10.2
+	max_lines = max_lines or 12
+	local function width(s, sc)
+		if MP.FIT and MP.FIT.width then return MP.FIT.width(s, sc) end
+		return #tostring(s) * 0.4375 * sc
+	end
+	local function wrap(sc)
+		local lines, cur = {}, ""
+		for word in tostring(text or ""):gmatch("%S+") do
+			local trial = cur == "" and word or (cur .. " " .. word)
+			if cur ~= "" and width(trial, sc) > maxw then
+				lines[#lines + 1] = cur
+				cur = word
+			else
+				cur = trial
+			end
+		end
+		if cur ~= "" then lines[#lines + 1] = cur end
+		if #lines == 0 then lines[1] = "" end
+		return lines
+	end
+	local lines = wrap(scale)
+	local guard = 0
+	while #lines > max_lines and scale > 0.26 and guard < 6 do
+		scale = math.max(0.26, scale * max_lines / #lines)
+		lines = wrap(scale)
+		guard = guard + 1
+	end
+	return lines, scale
+end
+
 function MP.UTILS.string_split(inputstr, sep)
 	if sep == nil then sep = "%s" end
 	local t = {}

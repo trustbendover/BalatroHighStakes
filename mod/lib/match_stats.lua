@@ -149,8 +149,11 @@ function MS.view(st, me)
 					award_colour = award_colour, winner = (st.awards and st.awards[c[4]] == r.id and #rows > 1) or false }
 			end
 		end
+		local lives_text = ""
+		if r.out or r.eliminated then lives_text = L("k_ms_out", "Out")
+		elseif r.lives ~= nil then lives_text = L("k_ms_lives_left", "#1# lives", { r.lives }) end
 		v.players[i] = { place = r.place or i, name = clean(r.name), team = r.team, you = (me ~= nil and r.id == me),
-			out = r.out and true or false, stats = stats }
+			out = r.out and true or false, lives_text = lives_text, ante = tonumber(r.ante), best = r.best, stats = stats }
 	end
 	v.lineup_keys = (w or rows[1]) and (w or rows[1]).lineup or nil
 	v.lineup_owner = (w or rows[1]) and clean((w or rows[1]).name) or nil
@@ -162,7 +165,8 @@ function MS.view(st, me)
 	for i, t in ipairs(st.teams or {}) do
 		local members = {}
 		for k, id in ipairs(t.members or {}) do members[k] = by_id[id] and clean(by_id[id].name) or "?" end
-		v.team_panels[i] = { team = t.team, place = t.place, winner = (t.place == 1), members = table.concat(members, ", "),
+		v.team_panels[i] = { team = t.team, place = t.place, winner = (t.place == 1), lives = t.lives,
+			members = table.concat(members, ", "),
 			stats = {
 				{ key = "dealt", label = L("k_ms_col_damage", "Damage"), value = MS.short(t.dealt or 0), colour = "red" },
 				{ key = "pvpWon", label = L("k_ms_col_pvp", "PvP won"), value = tostring(t.pvpWon or 0), colour = "planet" },
@@ -176,6 +180,28 @@ function MS.view(st, me)
 		v.lineup = L("k_ms_lineup", "#1#'s final jokers: #2#", { clean(lw.name), table.concat(names, ", ") })
 	end
 	return v
+end
+
+--- Compact lines for the game-over screen: winner, each team, then every player the host tracked.
+function MS.result_lines(st)
+	local v = MS.view(st)
+	local lines = {}
+	if v.winner ~= "" then lines[#lines + 1] = v.winner end
+	for i, t in ipairs(v.team_panels or {}) do
+		local line = v.teams[i] or L("k_ms_team", "Team #1#", { t.team })
+		if t.lives ~= nil then line = line .. " | " .. L("k_ms_lives_left", "#1# lives", { t.lives }) end
+		lines[#lines + 1] = line
+		if t.members and t.members ~= "" then lines[#lines + 1] = t.members end
+	end
+	for _, p in ipairs(v.players or {}) do
+		local s = tostring(p.place) .. ". " .. p.name
+		if p.team then s = s .. " [" .. p.team .. "]" end
+		if p.lives_text and p.lives_text ~= "" then s = s .. "  " .. p.lives_text end
+		if p.ante then s = s .. "  " .. L("k_ms_ante_short", "ante #1#", { p.ante }) end
+		if p.best and tostring(p.best) ~= "0" then s = s .. "  " .. MS.short(p.best) end
+		lines[#lines + 1] = s
+	end
+	return lines
 end
 
 ---------------------------------------------------------------------------------------------
@@ -376,7 +402,12 @@ local function player_panel(p)
 			T(tostring(p.place), 0.6, p.place == 1 and G.C.GOLD or G.C.WHITE) } },
 		{ n = G.UIT.C, config = { align = "cl", padding = 0.06, minw = 2.3, maxw = 2.3 }, nodes = {
 			{ n = G.UIT.R, config = { align = "cl" }, nodes = { T(p.name, 0.42, p.you and G.C.GOLD or G.C.WHITE, 2.2) } },
-			{ n = G.UIT.R, config = { align = "cl" }, nodes = { T(p.team and L("k_ms_team", "Team #1#", { p.team }) or (p.out and L("k_sp_out", "out")) or "", 0.3, G.C.UI.TEXT_INACTIVE) } },
+			{ n = G.UIT.R, config = { align = "cl" }, nodes = { T((function()
+				local sub = p.team and L("k_ms_team", "Team #1#", { p.team }) or ""
+				if p.lives_text and p.lives_text ~= "" then sub = (sub ~= "" and (sub .. " · ") or "") .. p.lives_text end
+				if sub == "" and p.out then sub = L("k_sp_out", "out") end
+				return sub
+			end)(), 0.3, G.C.UI.TEXT_INACTIVE, 2.2) } },
 		} },
 		{ n = G.UIT.C, config = { align = "cm" }, nodes = boxes },
 	} }
@@ -408,7 +439,7 @@ function MS.teams_tab(v)
 				T(t.team, 0.6, G.C.WHITE) } },
 			{ n = G.UIT.C, config = { align = "cl", padding = 0.06, minw = 3.6, maxw = 3.6 }, nodes = {
 				{ n = G.UIT.R, config = { align = "cl" }, nodes = { T(L("k_ms_team", "Team #1#", { t.team }), 0.42, t.winner and G.C.GOLD or G.C.WHITE, 3.4) } },
-				{ n = G.UIT.R, config = { align = "cl" }, nodes = { T(t.members, 0.3, G.C.UI.TEXT_INACTIVE, 3.4) } },
+				{ n = G.UIT.R, config = { align = "cl" }, nodes = { T(t.members .. ((t.lives ~= nil) and (" · " .. L("k_ms_lives_left", "#1# lives", { t.lives })) or ""), 0.3, G.C.UI.TEXT_INACTIVE, 3.4) } },
 			} },
 			{ n = G.UIT.C, config = { align = "cm" }, nodes = boxes },
 		} }
@@ -441,14 +472,64 @@ function MS.ui(st)
 	return create_UIBox_generic_options({ back_func = "mp_ms_close", back_label = back, contents = contents })
 end
 
+function MS.match_over()
+	if not (G and MP and MP.GAME) then return false end
+	return G.STATES and G.STATE == G.STATES.GAME_OVER or MP.GAME.won or MP.GAME.match_finished or (MP.GAME.lives or 0) <= 0
+end
+
+--- One row from this machine when the host table has not arrived yet.
+function MS.local_summary()
+	local g = G and G.GAME or {}
+	local rep = {}
+	pcall(function() rep = MS.collect(g, G and G.jokers and G.jokers.cards) or {} end)
+	local me = (MP.LOBBY and MP.LOBBY.my_id) or "you"
+	local name = (MP.LOBBY and (MP.LOBBY.username or MP.LOBBY.name)) or "You"
+	local lives = MP.GAME and MP.GAME.lives
+	local won = MP.GAME and MP.GAME.won and true or false
+	return {
+		action = "matchStats",
+		gameMode = MP.LOBBY and MP.LOBBY.config and MP.LOBBY.config.gamemode,
+		winnerId = won and me or nil,
+		rows = { {
+			id = me, name = name, place = 1, out = not won and (lives or 0) <= 0,
+			dealt = 0, pvps = 0, pvpWon = 0, livesLost = 0,
+			best = rep.best or "0", bestHand = rep.bestHand,
+			jokers = rep.jokers or 0, seen = rep.seen or 0, money = rep.money or 0,
+			ante = rep.ante or (g.round_resets and g.round_resets.ante) or 1,
+			lives = lives, lineup = rep.lineup,
+		} },
+		awards = {},
+	}
+end
+
+--- A one-player table is only honest for a real solo match, or after the host has finished the match.
+function MS.solo_match()
+	local list = MP.LOBBY and MP.LOBBY.player_list
+	if type(list) == "table" and #list > 0 then
+		local n = 0
+		for _, pl in ipairs(list) do
+			if type(pl) ~= "table" or not pl.spectator then n = n + 1 end
+		end
+		return n <= 1
+	end
+	local pc = tonumber(MP.LOBBY and MP.LOBBY.player_count)
+	if pc then return pc <= 1 end
+	return true
+end
+
 function MS.open()
 	if not MS.last then
-		pcall(sendWarnMessage, L("k_ms_later", "Match stats appear when the match is over"), "MULTIPLAYER")
-		pcall(function()
-			attention_text({ scale = 0.6, text = L("k_ms_later", "Match stats appear when the match is over"), hold = 3,
-				align = "cm", offset = { x = 0, y = -2.5 }, major = G.ROOM_ATTACH })
-		end)
-		return
+		local finished = MP.GAME and MP.GAME.match_finished
+		if MS.match_over() and (MS.solo_match() or finished) then
+			MS.last = MS.local_summary()
+		else
+			pcall(sendWarnMessage, L("k_ms_later", "Match stats appear when the match is over"), "MULTIPLAYER")
+			pcall(function()
+				attention_text({ scale = 0.6, text = L("k_ms_later", "Match stats appear when the match is over"), hold = 3,
+					align = "cm", offset = { x = 0, y = -2.5 }, major = (G and (G.OVERLAY_MENU or G.ROOM_ATTACH)) })
+			end)
+			return
+		end
 	end
 	MS.show_at, MS.tab, MS.page = nil, "awards", 1
 	if MP.SPECTATE and MP.SPECTATE.state.active then MP.SPECTATE.state.active = false end
@@ -464,6 +545,25 @@ function MS.close()
 		if ok then return end
 	end
 	pcall(G.FUNCS.exit_overlay_menu)
+end
+
+--- Winner, teams and per-player lines on the game-over screen once the host has sent them.
+function MS.end_block()
+	if not MS.last then return { n = G.UIT.R, config = { align = "cm" }, nodes = {} } end
+	local lines = MS.result_lines(MS.last)
+	local nodes = {}
+	local cap = 8
+	for i = 1, math.min(#lines, cap) do
+		nodes[#nodes + 1] = { n = G.UIT.R, config = { align = "cm" }, nodes = {
+			{ n = G.UIT.T, config = { text = lines[i], scale = 0.28, colour = G.C.UI.TEXT_LIGHT, maxw = 3.9, shadow = true } },
+		} }
+	end
+	if #lines > cap then
+		nodes[#nodes + 1] = { n = G.UIT.R, config = { align = "cm" }, nodes = {
+			{ n = G.UIT.T, config = { text = "+" .. tostring(#lines - cap), scale = 0.28, colour = G.C.UI.TEXT_INACTIVE or G.C.UI.TEXT_LIGHT, maxw = 3.9 } },
+		} }
+	end
+	return { n = G.UIT.R, config = { align = "cm", padding = 0.04 }, nodes = nodes }
 end
 
 --- Game-over / win screen button

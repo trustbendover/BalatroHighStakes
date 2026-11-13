@@ -1,9 +1,11 @@
 // Balatro High Stakes: "Teams" rules. Same rules as mod/networking/teams_rules.lua (in-game
 // Steam P2P host); both are checked against mod/tests/teams_vectors.json. GPL-3.0.
-//  * 4-8 players split evenly into teams of teams_size (2/3/4): 2v2, 2v2v2, 3v3, 2v2v2v2, 4v4.
-//  * Seats in lobby order (or the host's shuffled teams_order) are cut into teams A, B, C, D.
+//  * 4-8 players. Even counts split into teams of teams_size (2/3/4). 5 is 3v2 and 7 is 4v3:
+//    the first seats in lobby order (or teams_order) are the larger side. Not 2v1 and not 5v3.
+//  * A locked 2v2/3v3/4v4 still needs that exact count.
 //  * PvP: team score = sum of the teammates' scores; the single lowest team loses a shared team
-//    life (tie for lowest: nobody). Missing (away/left) members: sum scaled to a full team.
+//    life (tie for lowest: nobody). A short side is scaled to the larger side (sum * larger / present),
+//    the same average fill used when a teammate is away.
 //  * Shared team lives (default 4); a team at 0 lives is out, the last team left wins.
 import { InsaneInt } from "./InsaneInt.js";
 
@@ -31,6 +33,9 @@ export const teamsPlan = (n: number, options: Opts = {}): [number, number] | [nu
 		if (n !== 2 * fmt) return [null, `needs exactly ${2 * fmt} players`];
 		return [fmt, 2];
 	}
+	// Odd versus: two teams. First seats in host order are the larger side (3v2, 4v3).
+	if (n === 5) return [3, 2];
+	if (n === 7) return [4, 2];
 	let size = Math.floor(Number(options.teams_size ?? TEAMS_DEFAULTS.size));
 	if (!Number.isFinite(size) || size < 2 || size > 4) size = TEAMS_DEFAULTS.size;
 	if (n % size !== 0 || n / size < 2) {

@@ -15,11 +15,11 @@ local PEERS = { "dev1", "dev2", "dev3", "dev4" }
 local function inst(name, session)
 	local P = { name = name, msgs = {}, alive = true }
 	P.b = FB.new({ dir = DIR, me = name, peers = PEERS, now = now, clock = function() return CLK end, session = session })
-	P.r = P2P.new_router({ backend = P.b, Core = Core, json = json, now = now, version = "0.6.9", ready = function() return true end,
+	P.r = P2P.new_router({ backend = P.b, Core = Core, json = json, now = now, version = "0.7.0", ready = function() return true end,
 		Migration = dofile("networking/host_migration.lua"), push = function(s) P.msgs[#P.msgs + 1] = json.decode(s) end })
 	P.send = function(t) P.r.send(t) end
 	P.last = function(a) for i = #P.msgs, 1, -1 do if P.msgs[i].action == a then return P.msgs[i] end end end
-	P.send({ action = "connect" }); P.send({ action = "username", username = name, modHash = "t" }); P.send({ action = "version", version = "0.6.9" })
+	P.send({ action = "connect" }); P.send({ action = "username", username = name, modHash = "t" }); P.send({ action = "version", version = "0.7.0" })
 	return P
 end
 local ps = { inst("dev1"), inst("dev2"), inst("dev3"), inst("dev4") }

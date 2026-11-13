@@ -37,7 +37,11 @@ function D.standings_text(st)
 	local parts = {}
 	for _, a in ipairs(st.alive or {}) do
 		local s = (a.id == st.you and L("k_koth_you", "You") or name_of(a.id, a.username)) .. " " .. tostring(a.lives or 0)
-		if a.away then s = s .. " " .. L("k_dm_away", "(away)") end
+		if a.away or a.rejoining then
+			local word = (MP.PRESENCE and MP.PRESENCE.label(MP.PRESENCE.kind({ away = a.away, rejoining = a.rejoining, eliminated = a.eliminated }), localize))
+				or L("k_dm_away", "(away)")
+			s = s .. " " .. word
+		end
 		parts[#parts + 1] = s
 	end
 	return L("k_dm_left", "Deathmatch: #1# left", { #(st.alive or {}) }) .. "  |  " .. table.concat(parts, "  ")

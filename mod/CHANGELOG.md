@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.7.0 - Gambel Time, chat, uneven teams
+
+- **Gambel Time.** A party mode for 1 to 8 players. Alone, you play The House: fail a blind, lose a life, and clear the target ante to win. With 2 to 8, every boss is a Nemesis. Each ante the host rolls one shared table rule. In the shop, once per ante, Double or Nothing or the Gambel Wheel. Each boss the host rolls a Chaos Spin (Reverse Stakes, Double Trouble, Joker Pot, Hot Potato, or All-In; solo bosses are House twists). The original track "GAMBEL TIME" by Bass Gas M plays during the run, used with permission.
+- **In-game and lobby chat.** A top-right dropdown. Names use each player's blind colour. Messages are capped at 550 characters, and the history scrolls. Unread lines light a count on the closed pill.
+- **Uneven team duels.** 5 players are 3v2 and 7 are 4v3. The first seats in the host's order are the larger side. The smaller side's score is scaled up to the larger side.
+- **Connection status and match results.** Player rows show connected, waiting to rejoin, rejoining, watching, or gone. When the match ends, everyone gets a results screen with places, damage, and awards.
+- **High Stakes Multiplayer label.** The ruleset menu says High Stakes Multiplayer. Each mode has a short win description. A public lobby shows the host's match settings on the card.
+- **Steamodded.** The pinned installer version stays 1.0.0~BETA-1620a. The mod also loads on Steamodded 26.829 and 26.1002.0. Lovely stays 0.10.0.
+- **Shop and bets.** In Gambel Time the shop row sits above the cards and the shop is shifted up by that row, so a Standard Pack's OPEN button stays on screen at 1440p. Double or Nothing uses the classic red and black card faces even when High Contrast cards are on. The shop buttons follow your cash.
+- **Verified.** Automated Lua tests, the TypeScript reference server, and the same scenarios against the in-game Lua host. Live Windows Balatro testing covered Gambel Time, chat, Double or Nothing, the Gambel Wheel, and the 1440p shop layout.
+
 ## 0.6.9.1 - host settings, rematch, public lobbies
 
 - **Host settings apply to everyone.** On join, at start, and on rejoin, every player uses the host's match settings. If the host does not send a key, it is off, not the guest's leftover value. Personal display and audio settings stay local. A guest cannot overwrite the host.

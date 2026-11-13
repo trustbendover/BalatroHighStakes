@@ -236,6 +236,7 @@ end
 
 local update_new_round_ref = Game.update_new_round
 function Game:update_new_round(dt)
+	if MP.GAMBEL and MP.GAMBEL.on_new_round then MP.GAMBEL.on_new_round() end
 	if MP.GAME.end_pvp then
 		if G.STATE ~= G.STATES.NEW_ROUND then
 			G.FUNCS.draw_from_hand_to_deck()
@@ -326,6 +327,7 @@ function Game:update_shop(dt)
 		MP.GAME.ready_blind = false
 		MP.GAME.ready_blind_text = localize("b_ready")
 		MP.GAME.end_pvp = false
+		if MP.GAMBEL and MP.GAMBEL.on_shop then MP.GAMBEL.on_shop() end
 	end
 
 	local updated_location = false
@@ -337,6 +339,9 @@ function Game:update_shop(dt)
 	end
 	if G.STATE_COMPLETE and updated_location then updated_location = false end
 	update_shop_ref(self, dt)
+	-- Vanilla queues offset.y = -5.3 in an event. Lift after that event, including
+	-- when a closed booster copies the saved y back.
+	if MP.GAMBEL and MP.GAMBEL.queue_shop_place then MP.GAMBEL.queue_shop_place() end
 end
 
 local update_blind_select_ref = Game.update_blind_select

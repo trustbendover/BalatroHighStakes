@@ -63,7 +63,7 @@ local all
 local function player(name)
 	local P = { name = name, msgs = {}, alive = true }
 	P.b = backend(name)
-	P.r = P2P.new_router({ log = os.getenv("LOG") and function(s) print("[" .. T .. " " .. name .. "] " .. s) end or nil, backend = P.b, Core = Core, json = json, now = now, version = "0.6.9", Migration = HMmod,
+	P.r = P2P.new_router({ log = os.getenv("LOG") and function(s) print("[" .. T .. " " .. name .. "] " .. s) end or nil, backend = P.b, Core = Core, json = json, now = now, version = "0.7.0", Migration = HMmod,
 		push = function(s) P.msgs[#P.msgs + 1] = json.decode(s) end })
 	P.send = function(t) P.r.send(t) end
 	P.last = function(a) for i = #P.msgs, 1, -1 do if P.msgs[i].action == a then return P.msgs[i] end end end
@@ -81,7 +81,7 @@ local function setup(n, mode, opts)
 	local ps = {}
 	for i = 1, n do ps[i] = player(mode:sub(1, 3) .. n .. "_" .. i) end
 	all = ps
-	for _, p in ipairs(ps) do p.send({ action = "connect" }); p.send({ action = "username", username = p.name, modHash = "t" }); p.send({ action = "version", version = "0.6.9" }) end
+	for _, p in ipairs(ps) do p.send({ action = "connect" }); p.send({ action = "username", username = p.name, modHash = "t" }); p.send({ action = "version", version = "0.7.0" }) end
 	ps[1].send({ action = "createLobby", gameMode = mode }); pump()
 	local code = ps[1].last("joinedLobby").code
 	local o = { starting_lives = "2" }
@@ -137,7 +137,7 @@ local function restart(ps, i, code, token)
 	local p = player(old.name)
 	all[#all + 1] = p
 	ps[i] = p
-	p.send({ action = "connect" }); p.send({ action = "username", username = p.name, modHash = "t" }); p.send({ action = "version", version = "0.6.9" })
+	p.send({ action = "connect" }); p.send({ action = "username", username = p.name, modHash = "t" }); p.send({ action = "version", version = "0.7.0" })
 	p.send({ action = "rejoinLobby", code = code, reconnectToken = token })
 	pump(8); run(2)
 	p.id = old.id
@@ -146,7 +146,7 @@ end
 local function newcomer(name, code, spectate)
 	local p = player(name)
 	all[#all + 1] = p
-	p.send({ action = "connect" }); p.send({ action = "username", username = name, modHash = "t" }); p.send({ action = "version", version = "0.6.9" })
+	p.send({ action = "connect" }); p.send({ action = "username", username = name, modHash = "t" }); p.send({ action = "version", version = "0.7.0" })
 	p.send({ action = "joinLobby", code = code, spectate = spectate }); pump(8); run(1)
 	return p
 end
@@ -370,11 +370,12 @@ do
 	ok(SP.leader(rows).id == "b", "leader = first alive")
 	ok(SP.step(rows, "b", 1) == "d" and SP.step(rows, "a", 1) == "b" and SP.step(rows, "b", -1) == "a", "follow next/prev wraps and skips players who are out")
 	ok(SP.step(rows, "zzz", 1) == "b", "unknown follow -> leader")
+	dofile("lib/presence.lua")
 	local v = SP.lines(rows, "a")
 	ok(v.follow == "Following: Ann" and v.detail:find("Lives: 2") and v.detail:find("Hands left: 1") and v.detail:find("Ante 3")
 		and v.where == "Now: Shop", "panel shows lives, score, hands, ante and location")
-	ok(v.rows[1]:find("ahead") and v.rows[2]:find("disconnected") and v.rows[4]:find("out") and v.rows[3]:sub(1, 2) == "> ",
-		"list marks who is ahead, away, out and who you follow")
+	ok(v.rows[1]:find("ahead") and v.rows[2]:find("Waiting to rejoin") and v.rows[4]:find("out") and v.rows[3]:sub(1, 2) == "> ",
+		"list marks who is ahead, waiting to rejoin, out and who you follow")
 	ok(#v.rows == SP.MAX_ROWS and v.rows[8] == "", "always " .. SP.MAX_ROWS .. " rows")
 	ok(SP.step({}, nil, 1) == nil and SP.lines({}, nil).follow == "Nobody left to watch", "nobody left")
 	_G.localize = function(a) if type(a) == "table" and a.key == "k_sp_following" then return "Je volgt: " .. a.vars[1] end return "ERROR" end

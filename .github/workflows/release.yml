@@ -51,34 +51,10 @@ jobs:
         working-directory: mod
         run: |
           find . -name '*.lua' -not -path './tests/*' -print0 | xargs -0 -n1 luajit -bl > /dev/null
-          luajit tests/test_three_player.lua
-          luajit tests/test_steam_p2p.lua
-          luajit tests/test_updater.lua
-          luajit tests/test_koth.lua
-          luajit tests/test_koth_client.lua
-          luajit tests/test_jokers_3p.lua
-          luajit tests/test_teams.lua
-          luajit tests/test_multi_client.lua
-          luajit tests/test_deathmatch_client.lua
-          luajit tests/test_host_migration.lua
-          luajit tests/test_spectator_rejoin.lua
-          luajit tests/test_match_stats.lua
-          luajit tests/test_host_migration_ui.lua
-          luajit tests/test_patch_notes.lua
-          luajit tests/test_credits.lua
-          luajit tests/test_compat_guard.lua
-          luajit tests/test_brand.lua
-          luajit tests/test_version_string.lua
-          luajit tests/test_lobby_presets.lua
-          luajit tests/test_start_ready.lua
-          luajit tests/test_dev_file_backend.lua
-          luajit tests/test_dev_autoplay.lua
-          luajit tests/test_match_end_lives.lua
-          luajit tests/test_rejoin_start_run.lua
-          luajit tests/test_blind_sentinel.lua
-          luajit tests/test_teams_match_end.lua
-          luajit tests/test_ui_fit.lua
-          luajit tests/test_steam_only.lua
+          for f in tests/test_*.lua; do
+            echo "RUN $f"
+            luajit "$f"
+          done
 
       - name: Check repo name (0.6.8 rename, see docs/REPO_RENAME_NL.md)
         run: |
