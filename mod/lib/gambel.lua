@@ -702,9 +702,7 @@ local function wheel_legend()
 			{ n = G.UIT.T, config = { text = text, scale = 0.28, colour = G.C.WHITE } },
 		} }
 	end
-	return { n = G.UIT.C, config = { align = "cm", padding = 0.06, r = 0.1, minw = 3.05, colour = GOLD_INK, emboss = 0.05 }, nodes = {
-		{ n = G.UIT.C, config = { align = "tm", padding = 0.1, r = 0.08, minw = 2.85, colour = { 0.06, 0.04, 0.03, 1 } }, nodes = rows },
-	} }
+	return { n = G.UIT.C, config = { align = "tm", padding = 0.1, r = 0.08, minw = 2.7, colour = { 0.03, 0.08, 0.06, 0.45 }, emboss = 0.05 }, nodes = rows }
 end
 
 function R.can_wheel()

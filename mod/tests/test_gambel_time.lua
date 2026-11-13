@@ -249,6 +249,7 @@ ok(shop:find("gambel_bet_for", 1, true) and shop:find("sync_bet_ante", 1, true) 
 ok(shop:find("set_sprites", 1, true) and shop:find('sprite_facing = "front"', 1, true) and shop:find("R.ace_name", 1, true), "the drawn Ace is turned face up and named")
 ok(shop:find("R.WHEEL_BOX = 5.0", 1, true) and shop:find("wheel_slices", 1, true)
 	and shop:find("minw = R.WHEEL_BOX", 1, true) and shop:find("minw = 0.7", 1, true)
+	and shop:find("colour = { 0.03, 0.08, 0.06, 0.45 }", 1, true)
 	and shop:find("g.scale(0.26, 0.26)", 1, true) and shop:find("half - 0.72", 1, true),
 	"the wheel rim stays inside its box, the marks do not wrap, and the prize list is beside it")
 ok(shop:find("STEAM_P2P", 1, true) and shop:find("R.flip", 1, true), "a lobby bet goes to the host, and a solo run with no Steam still rolls")
