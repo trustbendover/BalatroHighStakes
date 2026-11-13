@@ -250,10 +250,11 @@ ok(shop:find("function R.make_double_card", 1, true) and shop:find('sprite_facin
 ok(shop:find("no_ui = true", 1, true) and shop:find("states.hover.can = false", 1, true) and shop:find("card.hover = function() end", 1, true), "hovering the Ace does not open the card tooltip")
 ok(shop:find("card:flip()", 1, true) and shop:find("set_sprites", 1, true) and shop:find('sprite_facing = "front"', 1, true) and shop:find("R.ace_name", 1, true), "Red or Black flips the drawn Ace face up and names it")
 ok(shop:find("R.WHEEL_BOX = 5.0", 1, true) and shop:find("wheel_slices", 1, true)
-	and shop:find("minw = R.WHEEL_BOX", 1, true) and shop:find("minw = 0.7", 1, true)
+	and shop:find("minw = R.WHEEL_BOX", 1, true) and shop:find("minw = 1.25", 1, true)
 	and shop:find("colour = { 0.03, 0.08, 0.06, 0.45 }", 1, true)
-	and shop:find("g.scale(0.26, 0.26)", 1, true) and shop:find("half - 0.72", 1, true),
-	"the wheel rim stays inside its box, the marks do not wrap, and the prize list is beside it")
+	and shop:find("g.scale(0.26, 0.26)", 1, true) and shop:find("half - 0.88", 1, true)
+	and shop:find("0, tip + 0.04 * ts", 1, true),
+	"the pointer aims down at the rim, and the prize list sits clear of the wheel")
 ok(shop:find("STEAM_P2P", 1, true) and shop:find("R.flip", 1, true), "a lobby bet goes to the host, and a solo run with no Steam still rolls")
 local credits = io.open("CREDITS.md"):read("*a")
 ok(credits:find("Bass Gas M", 1, true), "the song credits Bass Gas M")

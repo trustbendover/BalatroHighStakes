@@ -641,7 +641,7 @@ function R.make_wheel()
 			local labels = R.wheel_slices()
 			-- Rim, pegs, and the pointer all stay inside this box. The legend is a later column.
 			local half = math.min(T.w, T.h) / 2
-			local radius = (half - 0.72) * ts
+			local radius = (half - 0.88) * ts
 			local rim = radius + 0.11 * ts
 			g.push()
 			if self.translate_container then self:translate_container() end
@@ -718,13 +718,15 @@ function R.make_wheel()
 				star[#star + 1] = math.sin(a) * rr
 			end
 			g.polygon("fill", star)
+			-- Love2D y grows downward. The sharp tip sits on the rim; the wide base is above it.
 			local tip = -(rim + 0.02 * ts)
+			local base = tip - 0.28 * ts
 			g.setColor(0.75, 0.62, 0.2, 1)
-			g.polygon("fill", 0, tip - 0.28 * ts, -0.16 * ts, tip + 0.02 * ts, 0.16 * ts, tip + 0.02 * ts)
+			g.polygon("fill", 0, tip, -0.16 * ts, base, 0.16 * ts, base)
 			g.setColor(CRIMSON[1], CRIMSON[2], CRIMSON[3], 1)
-			g.polygon("fill", 0, tip - 0.24 * ts, -0.11 * ts, tip, 0.11 * ts, tip)
+			g.polygon("fill", 0, tip + 0.04 * ts, -0.11 * ts, base + 0.04 * ts, 0.11 * ts, base + 0.04 * ts)
 			g.setColor(1, 0.85, 0.85, 1)
-			g.polygon("fill", 0, tip - 0.2 * ts, -0.035 * ts, tip - 0.04 * ts, 0.035 * ts, tip - 0.04 * ts)
+			g.polygon("fill", 0, tip + 0.02 * ts, -0.035 * ts, tip - 0.08 * ts, 0.035 * ts, tip - 0.08 * ts)
 			g.setColor(1, 1, 1, 1)
 			g.pop()
 		end)
@@ -865,13 +867,13 @@ end
 
 function R.wheel_definition()
 	local view = R.wheel_view or { prompt = "", result = "" }
-	return R.casino_frame(L("b_gambel_wheel", "Gambel Wheel"), 12.4, {
+	return R.casino_frame(L("b_gambel_wheel", "Gambel Wheel"), 13.0, {
 		{ n = G.UIT.R, config = { align = "cm", padding = 0.02 }, nodes = {
 			{ n = G.UIT.T, config = { ref_table = view, ref_value = "prompt", scale = 0.32, colour = G.C.WHITE } },
 		} },
 		{ n = G.UIT.R, config = { align = "cm", padding = 0.08 }, nodes = {
 			wheel_face(),
-			{ n = G.UIT.C, config = { align = "cm", minw = 0.7 } },
+			{ n = G.UIT.C, config = { align = "cm", minw = 1.25 } },
 			wheel_legend(),
 		} },
 		{ n = G.UIT.R, config = { align = "cm", padding = 0.04, minh = 0.4 }, nodes = {
