@@ -235,28 +235,38 @@ function MP.UI.gamemode_card_nodes(gamemode, tab_type)
 	local _, fmt = MP.UI.gamemode_entry(entry or key)
 	if MP.UI.gamemode_entry(entry or key) ~= key then entry, fmt = key, nil end
 	entry = entry or key
+	local CARD_W = 10.2
 	local function text_row(text, scale, colour)
 		return { n = G.UIT.R, config = { align = "cm", padding = 0.03 }, nodes = {
 			{ n = G.UIT.T, config = { text = text, scale = scale, colour = colour or G.C.UI.TEXT_LIGHT } } } }
 	end
+	local function add_lines(nodes, text, scale, colour, max_lines)
+		if type(text) ~= "string" or text == "" then return end
+		local lines, sc = MP.UTILS.fit_lines(text, scale, CARD_W, max_lines)
+		for _, line in ipairs(lines) do nodes[#nodes + 1] = text_row(line, sc, colour) end
+	end
 	if tab_type == "rules" then
 		local rk = "k_" .. key .. "_rules"
 		local ok, v = pcall(localize, rk)
-		if not ok or type(v) ~= "string" or v == "ERROR" or v == rk then rk = "k_" .. key .. "_description" end
-		local text, scale = MP.UTILS.mode_desc(rk, 0.45, 11)
-		return { text_row(text, scale) }
+		if not ok or type(v) ~= "string" or v == "ERROR" or v == rk then
+			rk = "k_" .. key .. "_description"
+			ok, v = pcall(localize, rk)
+		end
+		local nodes = {}
+		if ok and type(v) == "string" then add_lines(nodes, v, 0.4, G.C.UI.TEXT_LIGHT, 10) end
+		return nodes
 	end
 	local nodes = {
 		text_row(MP.UI.gamemode_entry_label(entry), 0.75, G.C.WHITE),
 		{ n = G.UIT.R, config = { align = "cm", padding = 0.05 }, nodes = {
 			{ n = G.UIT.C, config = { align = "cm", colour = G.C.BLUE, r = 0.1, padding = 0.08 }, nodes = {
 				{ n = G.UIT.T, config = { text = MP.MODES.players_label(key, fmt), scale = 0.4, colour = G.C.WHITE } } } } } },
-		text_row(select(1, MP.UTILS.mode_desc("k_" .. entry .. "_short", 0.45, 2)), select(2, MP.UTILS.mode_desc("k_" .. entry .. "_short", 0.45, 2))),
 	}
+	add_lines(nodes, localize("k_" .. entry .. "_short"), 0.45, G.C.UI.TEXT_LIGHT, 3)
 	local win_key = "k_" .. entry .. "_win"
-	local win_text, win_scale = MP.UTILS.mode_desc(win_key, 0.38, 2)
-	if type(win_text) == "string" and win_text ~= "" and win_text ~= "ERROR" and not win_text:find(win_key, 1, true) then
-		nodes[#nodes + 1] = text_row(win_text, win_scale, G.C.GOLD or G.C.UI.TEXT_LIGHT)
+	local win_ok, win_text = pcall(localize, win_key)
+	if win_ok and type(win_text) == "string" and win_text ~= "" and win_text ~= "ERROR" and win_text ~= win_key then
+		add_lines(nodes, win_text, 0.38, G.C.GOLD or G.C.UI.TEXT_LIGHT, 3)
 	end
 	local info = gamemode:create_info_menu()
 	for i = 3, #info do nodes[#nodes + 1] = info[i] end
