@@ -1,6 +1,6 @@
 -- In-lobby text chat. The host repeats each line, in order, to everyone in that lobby.
--- In the lobby the panel is part of the lobby menu, under the start row: 8.6 wide, text at 0.42.
--- In a match it is a bottom-left drawer, inset 0.45 by 0.6, 7.6 wide, and it can be closed.
+-- Lobby: a compact panel under the start row, 5.6 wide, text at 0.32.
+-- Match: a bottom-left drawer inside the screen ("bli"), pulled up from the bottom edge.
 -- It never shows a lobby code. Names are that player's blind color, then a colon, then light text.
 MP.CHAT = MP.CHAT or {}
 local CH = MP.CHAT
@@ -9,11 +9,10 @@ CH.RULES = CH.RULES or (MP.load_mp_file and MP.load_mp_file("networking/chat_rul
 CH.state = CH.state or { view = "lobby", lobby = {}, match = {} }
 CH.open = CH.open or false
 CH.draft = CH.draft or { text = "" }
--- Lobby panel sits in the lobby menu, under the start row: 8.6 wide, text at 0.42.
--- The match drawer is a toggle at the bottom-left, inset from the corner, 7.6 wide.
--- A container maxw shrinks Balatro text permanently, so these panels use minw only.
-CH.LOBBY_W = 8.2
-CH.MATCH_W = 7.2
+CH.seen = CH.seen or 0
+-- Compact sizes. A container maxw shrinks Balatro text, so these panels use minw only.
+CH.LOBBY_W = 5.6
+CH.MATCH_W = 5.4
 CH.SHOW = 4
 
 local function rules()
@@ -68,76 +67,72 @@ function CH.rows(scale, wide)
 	local R = rules()
 	local all = CH.current()
 	local out, ui = {}, CH.chrome()
-	scale = scale or 0.42
+	scale = scale or 0.32
 	wide = wide or CH.LOBBY_W
 	local from = math.max(1, #all - CH.SHOW + 1)
 	for i = from, #all do
 		local m = all[i]
 		local body = R and R.body(m, ui.watching) or tostring(m.text or "")
 		local name = R and R.display_name(m.name) or tostring(m.name or "?")
-		if MP.FIT and MP.FIT.ellipsize then name = MP.FIT.ellipsize(name, scale, wide - 0.4) end
+		if MP.FIT and MP.FIT.ellipsize then
+			name = MP.FIT.ellipsize(name, scale, 1.7)
+			body = MP.FIT.ellipsize(body, scale, math.max(1.5, wide - 1.9))
+		end
 		out[#out + 1] = { name = name, body = body, col = tonumber(m.col) or 1, watch = m.watch and true or false }
 	end
 	return out
 end
 
-function CH.wrap(text, scale, wide)
-	if MP.UTILS and MP.UTILS.fit_lines then return MP.UTILS.fit_lines(text, scale, wide, 2) end
-	return { tostring(text or "") }, scale
-end
-
-local function message_rows(row, scale, wide)
-	local nodes = {}
+local function message_row(row, scale, wide)
 	local name = row.name ~= "" and (row.name .. ":") or ""
-	if name ~= "" then
-		nodes[#nodes + 1] = { n = G.UIT.R, config = { align = "cl", padding = 0.02, minw = wide }, nodes = {
+	return { n = G.UIT.R, config = { align = "cl", padding = 0.03, minw = wide }, nodes = {
+		{ n = G.UIT.C, config = { align = "cl", minw = 1.6 }, nodes = {
 			{ n = G.UIT.T, config = { text = name, scale = scale, colour = CH.name_colour(row.col), shadow = true } },
-		} }
-	end
-	local lines = CH.wrap(row.body or "", scale * 0.95, wide)
-	if (row.body or "") == "" then lines = {} end
-	for _, line in ipairs(lines) do
-		nodes[#nodes + 1] = { n = G.UIT.R, config = { align = "cl", padding = 0.01, minw = wide }, nodes = {
-			{ n = G.UIT.T, config = { text = line, scale = scale * 0.95, colour = CH.body_ink(), shadow = true } },
-		} }
-	end
-	return nodes
+		} },
+		{ n = G.UIT.C, config = { align = "cl", minw = 0.08 } },
+		{ n = G.UIT.C, config = { align = "cl" }, nodes = {
+			{ n = G.UIT.T, config = { text = row.body or "", scale = scale, colour = CH.body_ink(), shadow = true } },
+		} },
+	} }
 end
 
---- The readable panel: title, messages, a text field, and Send. No maxw, so the text keeps its scale.
-function CH.panel_nodes(wide, scale, input_w)
+--- Title-free log plus one row: the message field and Send (and Close, in a match).
+function CH.panel_nodes(wide, scale, input_w, with_close)
 	local ui = CH.chrome()
-	local nodes = {
-		{ n = G.UIT.R, config = { align = "cm", padding = 0.04, minw = wide }, nodes = {
-			{ n = G.UIT.T, config = { text = ui.title, scale = scale + 0.06, colour = G.C.GOLD or G.C.WHITE, shadow = true } },
-		} },
-	}
+	local nodes = {}
 	local shown = CH.rows(scale, wide)
 	if #shown == 0 then
-		nodes[#nodes + 1] = { n = G.UIT.R, config = { align = "cl", padding = 0.08, minw = wide, minh = 0.45 }, nodes = {
+		nodes[#nodes + 1] = { n = G.UIT.R, config = { align = "cl", padding = 0.04, minw = wide, minh = 0.32 }, nodes = {
 			{ n = G.UIT.T, config = { text = ui.prompt, scale = scale, colour = G.C.UI.TEXT_INACTIVE or CH.body_ink() } },
 		} }
 	end
-	for _, row in ipairs(shown) do
-		for _, line in ipairs(message_rows(row, scale, wide)) do nodes[#nodes + 1] = line end
+	for _, row in ipairs(shown) do nodes[#nodes + 1] = message_row(row, scale, wide) end
+	local controls = {
+		{ n = G.UIT.C, config = { align = "cm", padding = 0.02 }, nodes = {
+			create_text_input({ w = input_w, h = 0.48, max_length = 80, prompt_text = ui.prompt,
+				ref_table = CH.draft, ref_value = "text", extended_corpus = true, keyboard_offset = 1 }),
+		} },
+		{ n = G.UIT.C, config = { align = "cm", padding = 0.02 }, nodes = {
+			UIBox_button({ id = "mp_chat_send", button = "mp_chat_send", label = { ui.send },
+				minw = 1.3, minh = 0.48, scale = scale, colour = G.C.GREEN, col = true }),
+		} },
+	}
+	if with_close then
+		controls[#controls + 1] = { n = G.UIT.C, config = { align = "cm", padding = 0.02 }, nodes = {
+			UIBox_button({ id = "mp_chat_close", button = "mp_chat_close", label = { ui.close },
+				minw = 1.15, minh = 0.48, scale = scale, colour = G.C.RED, col = true }),
+		} }
 	end
-	nodes[#nodes + 1] = { n = G.UIT.R, config = { align = "cm", padding = 0.06, minw = wide }, nodes = {
-		create_text_input({ w = input_w, h = 0.7, max_length = 80, prompt_text = ui.prompt,
-			ref_table = CH.draft, ref_value = "text", extended_corpus = true, keyboard_offset = 1 }),
-	} }
-	nodes[#nodes + 1] = { n = G.UIT.R, config = { align = "cm", padding = 0.04, minw = wide }, nodes = {
-		UIBox_button({ id = "mp_chat_send", button = "mp_chat_send", label = { ui.send },
-			minw = 2.6, minh = 0.6, scale = scale, colour = G.C.GREEN, col = true }),
-	} }
+	nodes[#nodes + 1] = { n = G.UIT.R, config = { align = "cm", padding = 0.04, minw = wide }, nodes = controls }
 	return nodes
 end
 
---- Lobby: a full panel under the start row, centered with the lobby. Not a screen-corner box.
+--- Lobby: compact panel under the start row. Input and Send share one row.
 function CH.lobby_row()
 	local wide = CH.LOBBY_W
-	return { n = G.UIT.R, config = { align = "cm", padding = 0.15 }, nodes = {
-		{ n = G.UIT.C, config = { id = "mp_chat_lobby", align = "cm", minw = wide + 0.4, padding = 0.14, r = 0.1,
-			colour = G.C.BLACK, emboss = 0.05 }, nodes = CH.panel_nodes(wide, 0.42, 6.6) },
+	return { n = G.UIT.R, config = { align = "cm", padding = 0.06 }, nodes = {
+		{ n = G.UIT.C, config = { id = "mp_chat_lobby", align = "cm", minw = wide + 0.24, padding = 0.06, r = 0.1,
+			colour = G.C.BLACK, emboss = 0.05 }, nodes = CH.panel_nodes(wide, 0.32, 4.2, false) },
 	} }
 end
 
@@ -156,6 +151,7 @@ end
 
 function CH.toggle()
 	CH.open = not CH.open
+	if CH.open then CH.seen = #CH.current() end
 	CH.refresh(true)
 end
 
@@ -164,23 +160,27 @@ function CH.close()
 	CH.refresh(true)
 end
 
---- In a match the panel is a drawer. Closed, it is one button. Open, it is wide enough to read and type.
+function CH.unread()
+	if CH.open then return 0 end
+	return math.max(0, #CH.current() - (CH.seen or 0))
+end
+
+--- In a match the panel is a drawer inside the screen. "bl" without "i" sits below the room.
 function CH.definition()
 	local ui = CH.chrome()
 	local wide = CH.MATCH_W
 	local nodes
 	if not CH.open then
-		nodes = { UIBox_button({ id = "mp_chat_open", button = "mp_chat_toggle", label = { ui.open },
-			minw = 3.0, minh = 0.62, scale = 0.42, colour = G.C.BLUE, col = true }) }
+		local n = CH.unread()
+		local label = n > 0 and (ui.open .. " " .. n) or ui.open
+		nodes = { UIBox_button({ id = "mp_chat_open", button = "mp_chat_toggle", label = { label },
+			minw = 1.8, minh = 0.42, scale = 0.32, colour = G.C.BLUE, col = true }) }
 	else
-		nodes = CH.panel_nodes(wide, 0.38, 5.8)
-		nodes[#nodes + 1] = { n = G.UIT.R, config = { align = "cm", padding = 0.02, minw = wide }, nodes = {
-			UIBox_button({ id = "mp_chat_close", button = "mp_chat_close", label = { ui.close },
-				minw = 2.6, minh = 0.55, scale = 0.38, colour = G.C.RED, col = true }),
-		} }
+		CH.seen = #CH.current()
+		nodes = CH.panel_nodes(wide, 0.32, 2.9, true)
 	end
-	return { n = G.UIT.ROOT, config = { align = "cm", colour = G.C.CLEAR, padding = 0.05, minw = wide + 0.5 }, nodes = {
-		{ n = G.UIT.C, config = { align = "cm", padding = 0.12, r = 0.1, colour = G.C.BLACK, emboss = 0.05, minw = wide + 0.4 }, nodes = nodes },
+	return { n = G.UIT.ROOT, config = { align = "cm", colour = G.C.CLEAR, padding = 0.04, minw = wide }, nodes = {
+		{ n = G.UIT.C, config = { align = "cm", padding = 0.05, r = 0.1, colour = G.C.BLACK, emboss = 0.05, minw = wide + 0.16 }, nodes = nodes },
 	} }
 end
 
@@ -216,9 +216,10 @@ function CH.refresh(force)
 			return
 		end
 		if not (MP.LOBBY and MP.LOBBY.code and G and G.ROOM_ATTACH and UIBox) then return end
+		-- "bli" keeps the box inside the room. A negative y lifts it off the bottom edge.
 		CH.box = UIBox({
 			definition = CH.definition(),
-			config = { align = "bl", offset = { x = 0.45, y = 0.6 }, major = G.ROOM_ATTACH, bond = "Weak" },
+			config = { align = "bli", offset = { x = 0.25, y = -0.4 }, major = G.ROOM_ATTACH, bond = "Weak" },
 		})
 		CH.box_stage = G.STAGE
 	end)

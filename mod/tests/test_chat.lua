@@ -25,11 +25,14 @@ local en, nl = dict("localization/en-us.lua"), dict("localization/nl.lua")
 ok(en.b_chat_send == "Send" and en.k_chat_prompt == "Message" and en.b_chat_close == "Close", "English chat chrome")
 ok(nl.b_chat_send == "Stuur" and nl.k_chat_prompt == "Bericht" and nl.k_chat_watching == "(kijkt mee)", "Dutch chat chrome")
 local ui = io.open("lib/chat.lua"):read("*a")
-ok(ui:find('align = "bl"', 1, true) and ui:find("name_colour", 1, true) and ui:find('row.name .. ":"', 1, true)
+ok(ui:find('align = "bli"', 1, true) and ui:find("y = -0.4", 1, true)
+	and ui:find("name_colour", 1, true) and ui:find('row.name .. ":"', 1, true)
 	and not ui:find("chip_fill", 1, true) and not ui:find("r = 0.2", 1, true)
-	and ui:find("panel_nodes(wide, 0.42, 6.6)", 1, true) and ui:find("minh = 0.6", 1, true)
+	and ui:find("CH.LOBBY_W = 5.6", 1, true) and ui:find("CH.MATCH_W = 5.4", 1, true)
+	and ui:find("h = 0.48", 1, true) and ui:find("minw = 1.3", 1, true)
+	and ui:find("panel_nodes(wide, 0.32, 4.2, false)", 1, true)
 	and not ui:find("maxw = 3.2", 1, true) and ui:find("lobby_row", 1, true),
-	"the lobby panel is wide enough to read, the match drawer is bottom-left, and names stay colored text")
+	"lobby chat is compact with input and Send on one row, and the match drawer stays inside the screen")
 
 local function client(S, name)
 	local msgs = {}
