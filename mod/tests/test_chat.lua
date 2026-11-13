@@ -30,7 +30,9 @@ ok(ui:find('align = "bli"', 1, true) and ui:find("y = -0.4", 1, true)
 	and not ui:find("chip_fill", 1, true) and not ui:find("r = 0.2", 1, true)
 	and ui:find("CH.LOBBY_W = 5.6", 1, true) and ui:find("CH.MATCH_W = 5.4", 1, true)
 	and ui:find("h = 0.48", 1, true) and ui:find("minw = 1.3", 1, true)
+	and ui:find("minw = 1.8, minh = 0.42", 1, true)
 	and ui:find("panel_nodes(wide, 0.32, 4.2, false)", 1, true)
+	and ui:find("panel_nodes(wide, 0.32, 2.9, true)", 1, true)
 	and not ui:find("maxw = 3.2", 1, true) and ui:find("lobby_row", 1, true),
 	"lobby chat is compact with input and Send on one row, and the match drawer stays inside the screen")
 

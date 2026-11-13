@@ -166,21 +166,21 @@ function CH.unread()
 end
 
 --- In a match the panel is a drawer inside the screen. "bl" without "i" sits below the room.
+--- Closed: only the Chat button. Open: the log, with the field, Send, and Close on one row.
 function CH.definition()
 	local ui = CH.chrome()
 	local wide = CH.MATCH_W
-	local nodes
 	if not CH.open then
 		local n = CH.unread()
 		local label = n > 0 and (ui.open .. " " .. n) or ui.open
-		nodes = { UIBox_button({ id = "mp_chat_open", button = "mp_chat_toggle", label = { label },
-			minw = 1.8, minh = 0.42, scale = 0.32, colour = G.C.BLUE, col = true }) }
-	else
-		CH.seen = #CH.current()
-		nodes = CH.panel_nodes(wide, 0.32, 2.9, true)
+		return { n = G.UIT.ROOT, config = { align = "cm", colour = G.C.CLEAR, padding = 0 }, nodes = {
+			UIBox_button({ id = "mp_chat_open", button = "mp_chat_toggle", label = { label },
+				minw = 1.8, minh = 0.42, scale = 0.32, colour = G.C.BLUE, col = true }),
+		} }
 	end
+	CH.seen = #CH.current()
 	return { n = G.UIT.ROOT, config = { align = "cm", colour = G.C.CLEAR, padding = 0.04, minw = wide }, nodes = {
-		{ n = G.UIT.C, config = { align = "cm", padding = 0.05, r = 0.1, colour = G.C.BLACK, emboss = 0.05, minw = wide + 0.16 }, nodes = nodes },
+		{ n = G.UIT.C, config = { align = "cm", padding = 0.05, r = 0.1, colour = G.C.BLACK, emboss = 0.05, minw = wide + 0.16 }, nodes = CH.panel_nodes(wide, 0.32, 2.9, true) },
 	} }
 end
 
