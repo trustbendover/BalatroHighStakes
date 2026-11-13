@@ -2,8 +2,8 @@
 -- The panel sits at the bottom left: a Chat button when closed, a short log when open.
 -- It does not sit on the score or lives HUD, and it never shows a lobby code.
 --
--- Each name is white text on a chip of that player's blind color (the ~N they already
--- use in the lobby). The message itself stays ordinary Balatro text.
+-- Each name is drawn in that player's blind color (the ~N they already use in the
+-- lobby), then a colon, then ordinary Balatro text. There is no chip behind the name.
 MP.CHAT = MP.CHAT or {}
 local CH = MP.CHAT
 
@@ -38,8 +38,8 @@ function CH.chrome()
 	}
 end
 
---- White name on the player's blind color. Falls back to that blind's boss colour in-game.
-function CH.chip_fill(col)
+--- The player's blind color, used for the name text. Falls back to that blind's boss colour.
+function CH.name_colour(col)
 	col = tonumber(col) or 1
 	if MP.UTILS and MP.UTILS.blind_col_numtokey and G and G.P_BLINDS then
 		local blind = G.P_BLINDS[MP.UTILS.blind_col_numtokey(col)]
@@ -51,9 +51,9 @@ function CH.chip_fill(col)
 	return key
 end
 
-function CH.name_ink()
+function CH.body_ink()
 	if G and G.C and G.C.UI and G.C.UI.TEXT_LIGHT then return G.C.UI.TEXT_LIGHT end
-	return "white"
+	return "plain"
 end
 
 function CH.current()
@@ -101,10 +101,9 @@ function CH.close()
 	CH.refresh(true)
 end
 
-local function chip(row)
-	return { n = G.UIT.C, config = { align = "cm", padding = 0.04, r = 0.2, colour = CH.chip_fill(row.col), minw = 0.8, maxw = 1.7 }, nodes = {
-		{ n = G.UIT.T, config = { text = row.name, scale = 0.28, colour = CH.name_ink(), shadow = true } },
-	} }
+local function name_text(row)
+	local label = row.name ~= "" and (row.name .. ":") or ""
+	return { n = G.UIT.T, config = { text = label, scale = 0.28, colour = CH.name_colour(row.col), shadow = true } }
 end
 
 --- Bottom-left panel. A closed button stays out of the score and lives row.
@@ -122,10 +121,10 @@ function CH.definition()
 		if #shown == 0 then shown[1] = { name = "", body = "", col = 1 } end
 		for _, row in ipairs(shown) do
 			nodes[#nodes + 1] = { n = G.UIT.R, config = { align = "cl", padding = 0.02, minw = CH.BOX_W, maxw = CH.BOX_W }, nodes = {
-				chip(row),
+				{ n = G.UIT.C, config = { align = "cl", padding = 0.02 }, nodes = { name_text(row) } },
 				{ n = G.UIT.C, config = { minw = 0.08 } },
 				{ n = G.UIT.C, config = { align = "cl", maxw = 3.2 }, nodes = {
-					{ n = G.UIT.T, config = { text = row.body, scale = 0.28, colour = G.C.UI.TEXT_LIGHT, shadow = true } },
+					{ n = G.UIT.T, config = { text = row.body, scale = 0.28, colour = CH.body_ink(), shadow = true } },
 				} },
 			} }
 		end

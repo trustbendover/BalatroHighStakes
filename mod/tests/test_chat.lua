@@ -1,4 +1,4 @@
--- Lobby and match chat, including name chips. run from mod/: luajit tests/test_chat.lua
+-- Lobby and match chat. Names are colored text, not chips. run from mod/: luajit tests/test_chat.lua
 local function ok(c, m) assert(c, m); print("ok: " .. m) end
 MP = {}
 local C = dofile("networking/chat_rules.lua")
@@ -12,11 +12,10 @@ ok(not C.body({ text = "hi" }, "(watching)"):find("ABCDE", 1, true), "a line has
 local picked = C.colors({ { id = "a", username = "Ann~1" }, { id = "b", username = "Bob~2" } })
 ok(picked.a == 1 and picked.b == 2, "chosen blind colors are kept")
 local same = C.colors({ { id = "a", username = "Ann~4" }, { id = "b", username = "Bob~4" } })
-ok(same.a ~= same.b, "two players who picked the same blind still get different chips")
+ok(same.a ~= same.b, "two players who picked the same blind still get different name colors")
 local plain = C.colors({ { id = "b", username = "Bob" }, { id = "a", username = "Ann" } })
 ok(plain.a ~= plain.b and plain.a >= 1 and plain.b <= 25, "players without a color get distinct palette colors")
-ok(C.chip(picked.a).text == "white" and C.chip(picked.b).text == "white" and C.chip(1).fill ~= C.chip(2).fill,
-	"the name is white on a colored chip, and different colors stay different")
+ok(C.name_color(picked.a) ~= C.name_color(picked.b) and C.name_color(1) == 1, "name text uses the blind color, with no chip")
 
 local function dict(file)
 	local t = dofile(file)
@@ -26,8 +25,9 @@ local en, nl = dict("localization/en-us.lua"), dict("localization/nl.lua")
 ok(en.b_chat_send == "Send" and en.k_chat_prompt == "Message" and en.b_chat_close == "Close", "English chat chrome")
 ok(nl.b_chat_send == "Stuur" and nl.k_chat_prompt == "Bericht" and nl.k_chat_watching == "(kijkt mee)", "Dutch chat chrome")
 local ui = io.open("lib/chat.lua"):read("*a")
-ok(ui:find('align = "bl"', 1, true) and ui:find("TEXT_LIGHT", 1, true) and ui:find("chip_fill", 1, true),
-	"the panel is bottom-left and the name chip uses light text")
+ok(ui:find('align = "bl"', 1, true) and ui:find("name_colour", 1, true) and ui:find('row.name .. ":"', 1, true)
+	and not ui:find("chip_fill", 1, true) and not ui:find("r = 0.2", 1, true),
+	"the panel is bottom-left, the name is colored text with a colon, and there is no chip")
 
 local function client(S, name)
 	local msgs = {}
@@ -66,7 +66,7 @@ local host_line = ann.last("chat", function(m) return m.text == "hello from the 
 local guest_line = ann.last("chat", function(m) return m.text == "hello from the guest" end)
 ok(host_line.col == 1 and guest_line.col == 2 and host_line.name == "Ann" and guest_line.name == "Bob",
 	"the host sends each player's own blind color and plain name")
-ok(C.chip(host_line.col).text == "white" and C.chip(guest_line.col).fill ~= C.chip(host_line.col).fill, "those chips contrast")
+ok(C.name_color(host_line.col) ~= C.name_color(guest_line.col), "those names use different colors")
 ok(bob.lives == lives, "chat does not change lives")
 local before = ann.count("chat")
 S:receive(bob, { action = "chat", text = "   " })

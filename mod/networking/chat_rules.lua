@@ -4,9 +4,10 @@
 -- the watching flag, and the name color come from the host.
 --
 -- Name color is the player's existing blind color (the ~N on their username,
--- the same color shown beside them in the lobby). The name is drawn as white
--- text on that color. If they have no color, or it is already taken, they get
--- the next free color in that same 1..25 blind palette, stable by player id.
+-- the same color shown beside them in the lobby). The name itself is that color,
+-- then a colon, then ordinary text. There is no chip behind the name.
+-- If they have no color, or it is already taken, they get the next free color
+-- in that same 1..25 blind palette, stable by player id.
 local C = {}
 
 C.MAX = 80
@@ -57,11 +58,11 @@ function C.colors(people)
 	return out
 end
 
---- Chip: colored fill, white name text. The message body is not part of the chip.
-function C.chip(col)
+--- The name text uses this blind color. The message body stays plain.
+function C.name_color(col)
 	col = tonumber(col) or 1
 	if col < 1 or col > C.PALETTE or col ~= math.floor(col) then col = 1 end
-	return { fill = col, text = "white" }
+	return col
 end
 
 --- Cleaned text, or nil, "empty" | "long".
@@ -115,7 +116,7 @@ function C.current(state)
 	return state.lobby
 end
 
---- Body after the name chip. Watching stays in this normal text. No lobby code.
+--- Body after the colored name and colon. Watching stays in this normal text. No lobby code.
 function C.body(m, watch_word)
 	m = m or {}
 	local tag = m.watch and ((watch_word or "(watching)") .. " ") or ""
