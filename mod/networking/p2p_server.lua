@@ -1904,20 +1904,33 @@ function Server:tick()
 end
 
 do
-	local src = debug.getinfo(1, "S").source or ""
-	if src:sub(1, 1) == "@" then src = src:sub(2) end
-	local dir = src:match("^(.*)[/\\]")
-	if dir and not Core.MATCH then
-		local ok, m = pcall(dofile, dir .. "/match_settings.lua")
-		if ok and type(m) == "table" and m.store then Core.MATCH = m end
+	local function take(name, pred)
+		local src = debug.getinfo(1, "S").source or ""
+		if src:sub(1, 1) == "@" then src = src:sub(2) end
+		local dir = src:match("^(.*)[/\\]")
+		local mod
+		if dir then
+			local ok, m = pcall(dofile, dir .. "/" .. name)
+			if ok and pred(m) then mod = m end
+		end
+		-- Inside Balatro the source is "@[SMODS ...]", so the sibling dofile misses. Load the mod file.
+		if not mod and type(MP) == "table" and MP.load_mp_file then
+			local m = MP.load_mp_file("networking/" .. name)
+			if pred(m) then mod = m end
+		end
+		return mod
 	end
-	if dir and not Core.CHAT then
-		local ok, m = pcall(dofile, dir .. "/chat_rules.lua")
-		if ok and type(m) == "table" and m.accept then Core.CHAT = m end
+	if not Core.MATCH then
+		local m = take("match_settings.lua", function(m) return type(m) == "table" and m.store end)
+		if m then Core.MATCH = m end
 	end
-	if dir and not Core.GAMBEL then
-		local ok, m = pcall(dofile, dir .. "/gambel_rules.lua")
-		if ok and type(m) == "table" and m.resolve then Core.GAMBEL = m end
+	if not Core.CHAT then
+		local m = take("chat_rules.lua", function(m) return type(m) == "table" and m.accept end)
+		if m then Core.CHAT = m end
+	end
+	if not Core.GAMBEL then
+		local m = take("gambel_rules.lua", function(m) return type(m) == "table" and m.resolve end)
+		if m then Core.GAMBEL = m end
 	end
 end
 

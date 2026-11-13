@@ -110,7 +110,8 @@ function CH.panel_nodes(wide, scale, input_w, with_close)
 	local controls = {
 		{ n = G.UIT.C, config = { align = "cm", padding = 0.02 }, nodes = {
 			create_text_input({ w = input_w, h = 0.48, max_length = 80, prompt_text = ui.prompt,
-				ref_table = CH.draft, ref_value = "text", extended_corpus = true, keyboard_offset = 1 }),
+				ref_table = CH.draft, ref_value = "text", extended_corpus = true, keyboard_offset = 1,
+				callback = function() CH.send() end }),
 		} },
 		{ n = G.UIT.C, config = { align = "cm", padding = 0.02 }, nodes = {
 			UIBox_button({ id = "mp_chat_send", button = "mp_chat_send", label = { ui.send },
@@ -142,11 +143,45 @@ function CH.apply(msg)
 	CH.refresh()
 end
 
+--- The hooked field's config is the create_text_input args, which point at CH.draft.
+function CH.input_args(hook)
+	hook = hook or (G and G.CONTROLLER and G.CONTROLLER.text_input_hook)
+	local args = hook and hook.config and hook.config.ref_table
+	if type(args) ~= "table" then return nil end
+	if args == CH.draft or args.ref_table == CH.draft then return args end
+	return nil
+end
+
+function CH.typing()
+	return CH.input_args() ~= nil
+end
+
+function CH.release_input()
+	if CH.typing() then G.CONTROLLER.text_input_hook = nil end
+end
+
+--- Letter nodes keep their own copies. Clearing CH.draft.text alone leaves "test" on screen.
+function CH.blank_letters()
+	local args = CH.input_args()
+	if not args or not args.text or not args.text.letters then return end
+	for i = 1, #args.text.letters do args.text.letters[i] = "" end
+	args.text.current_position = 0
+	args.current_prompt_text = args.prompt_text or ""
+end
+
 function CH.send()
 	local text = tostring(CH.draft.text or "")
 	CH.draft.text = ""
-	if not (MP.LOBBY and MP.LOBBY.code and Client and Client.send) then return end
-	Client.send({ action = "chat", text = text })
+	CH.blank_letters()
+	CH.release_input()
+	-- A host echo can arrive inside Client.send. Rebuilding the box in that call
+	-- frees the text field while Enter is still using it, so the redraw waits a frame.
+	CH._sending = true
+	if MP.LOBBY and MP.LOBBY.code and Client and Client.send then
+		Client.send({ action = "chat", text = text })
+	end
+	CH._sending = false
+	CH._pending = true
 end
 
 function CH.toggle()
@@ -188,15 +223,6 @@ function CH.in_lobby_menu()
 	return G and G.STAGES and G.STAGE == G.STAGES.MAIN_MENU and MP.LOBBY and MP.LOBBY.code
 end
 
-function CH.typing()
-	local hook = G and G.CONTROLLER and G.CONTROLLER.text_input_hook
-	return hook and hook.config and hook.config.ref_table == CH.draft
-end
-
-function CH.release_input()
-	if CH.typing() then G.CONTROLLER.text_input_hook = nil end
-end
-
 function CH.relayout_lobby()
 	if CH._rebuilding then return end
 	if (G and G.OVERLAY_MENU) or CH.typing() then
@@ -217,7 +243,7 @@ end
 
 function CH.refresh(force)
 	local stage = G and G.STAGE
-	if CH.typing() then
+	if CH._sending or CH.typing() then
 		CH._pending = true
 		return
 	end
@@ -234,12 +260,12 @@ function CH.refresh(force)
 			return
 		end
 		if not (MP.LOBBY and MP.LOBBY.code and G and G.ROOM_ATTACH and UIBox) then return end
-		-- "tri": top and right, inside the room. y > 0 drops it below the top edge,
-		-- x < 0 pulls it in from the right. Bottom-left ("bli") sits on the deck.
+		-- Top and right, inside the room, with the top below the consumables row.
+		-- y = 0.35 put the open drawer on the 0/2 slot. The deck is the bottom-right.
 		CH.release_input()
 		CH.box = UIBox({
 			definition = CH.definition(),
-			config = { align = "tri", offset = { x = -0.15, y = 0.35 }, major = G.ROOM_ATTACH, bond = "Weak" },
+			config = { align = "tri", offset = { x = -0.2, y = 2.7 }, major = G.ROOM_ATTACH, bond = "Weak" },
 		})
 		CH.box_stage = G.STAGE
 	end)
