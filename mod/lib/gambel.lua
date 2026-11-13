@@ -406,10 +406,21 @@ function R.reveal_double(msg, line)
 		pcall(function()
 			if card.set_base then card:set_base(def) end
 			if card.set_sprites then card:set_sprites(nil, def) end
+			-- The shop overlay can pause Card:update, which is what finishes flip().
+			-- Turn it, then leave the face fully open so the Ace is the card you see.
+			if card.flip then card:flip() end
 			card.facing = "front"
 			card.sprite_facing = "front"
 			card.flipping = nil
 			if card.pinch then card.pinch.x = false; card.pinch.y = false end
+			if card.T and card.VT then card.VT.w, card.VT.h = card.T.w, card.T.h end
+			if card.children then
+				for _, part in pairs(card.children) do
+					if type(part) == "table" and part.VT and card.T then
+						part.VT.w, part.VT.h = card.T.w, card.T.h
+					end
+				end
+			end
 			if card.states then card.states.visible = true end
 		end)
 	end
@@ -443,6 +454,43 @@ local function ace_fallback(view)
 	} }
 end
 
+--- Face down until reveal_double. emplace flips a face-down card up unless stay_flipped is set.
+function R.make_double_card(view)
+	if not (view and Card and CardArea and G and G.P_CARDS and G.P_CENTERS and G.P_CENTERS.c_base and G.CARD_W and G.CARD_H) then
+		return nil
+	end
+	local card, area
+	local ok = pcall(function()
+		area = CardArea(0, 0, G.CARD_W * 1.5, G.CARD_H * 1.35, {
+			card_limit = 1, type = "title_2", highlight_limit = 0, card_w = G.CARD_W * 0.95,
+		})
+		local hidden = G.P_CARDS.H_A or G.P_CARDS["H_A"]
+		card = Card(0, 0, G.CARD_W * 0.95, G.CARD_H * 0.95, hidden, G.P_CENTERS.c_base)
+		card.facing = "back"
+		card.sprite_facing = "back"
+		card.flipping = nil
+		if card.pinch then card.pinch.x = false end
+		if card.states then card.states.visible = true end
+		area:emplace(card, nil, true)
+		card.facing = "back"
+		card.sprite_facing = "back"
+		card.flipping = nil
+		if card.pinch then card.pinch.x = false end
+		if card.T and card.children and card.children.back and card.children.back.VT then
+			card.children.back.VT.w = card.T.w
+			card.children.back.VT.h = card.T.h
+		end
+	end)
+	if not ok or not area or not card then
+		if area and area.remove then pcall(function() area:remove() end) end
+		if card and card.remove and not card.REMOVED then pcall(function() card:remove() end) end
+		return nil
+	end
+	view.area, view.card = area, card
+	view.face = "back"
+	return card
+end
+
 local function ace_node()
 	local view = R.double_view
 	view.face = view.face or "back"
@@ -454,29 +502,10 @@ local function ace_node()
 	local function shown(card_row)
 		return { n = G.UIT.C, config = { align = "cm" }, nodes = { card_row, caption } }
 	end
-	if not (Card and CardArea and G and G.P_CARDS and G.P_CENTERS and G.P_CENTERS.c_base and G.CARD_W and G.CARD_H) then
-		return shown(ace_fallback(view))
-	end
-	local card, area
-	local ok = pcall(function()
-		area = CardArea(0, 0, G.CARD_W * 1.5, G.CARD_H * 1.35, {
-			card_limit = 1, type = "title_2", highlight_limit = 0, card_w = G.CARD_W * 0.95,
-		})
-		local def = G.P_CARDS.H_A or G.P_CARDS["H_A"]
-		card = Card(0, 0, G.CARD_W * 0.95, G.CARD_H * 0.95, def, G.P_CENTERS.c_base)
-		card.facing = "back"
-		card.sprite_facing = "back"
-		if card.states then card.states.visible = true end
-		area:emplace(card)
-	end)
-	if not ok or not area then
-		if area and area.remove then pcall(function() area:remove() end) end
-		if card and card.remove and not card.REMOVED then pcall(function() card:remove() end) end
-		return shown(ace_fallback(view))
-	end
-	view.area, view.card = area, card
+	local card = R.make_double_card(view)
+	if not card or not view.area then return shown(ace_fallback(view)) end
 	return shown({ n = G.UIT.R, config = { align = "cm", minw = G.CARD_W * 1.6, minh = G.CARD_H * 1.45 }, nodes = {
-		{ n = G.UIT.O, config = { object = area } },
+		{ n = G.UIT.O, config = { object = view.area } },
 	} })
 end
 
