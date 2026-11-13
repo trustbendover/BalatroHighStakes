@@ -188,8 +188,21 @@ function CH.in_lobby_menu()
 	return G and G.STAGES and G.STAGE == G.STAGES.MAIN_MENU and MP.LOBBY and MP.LOBBY.code
 end
 
+function CH.typing()
+	local hook = G and G.CONTROLLER and G.CONTROLLER.text_input_hook
+	return hook and hook.config and hook.config.ref_table == CH.draft
+end
+
+function CH.release_input()
+	if CH.typing() then G.CONTROLLER.text_input_hook = nil end
+end
+
 function CH.relayout_lobby()
-	if CH._rebuilding or G.OVERLAY_MENU then return end
+	if CH._rebuilding then return end
+	if (G and G.OVERLAY_MENU) or CH.typing() then
+		CH._pending = true
+		return
+	end
 	if not (G.MAIN_MENU_UI and G.MAIN_MENU_UI.get_UIE_by_ID and G.MAIN_MENU_UI:get_UIE_by_ID("lobby_menu_start")) then return end
 	if not (G.FUNCS and G.FUNCS.get_lobby_main_menu_UI) then return end
 	CH._rebuilding = true
@@ -204,7 +217,12 @@ end
 
 function CH.refresh(force)
 	local stage = G and G.STAGE
-	if not force and CH._sig == CH.sig() and CH._stage == stage then return end
+	if CH.typing() then
+		CH._pending = true
+		return
+	end
+	if not force and not CH._pending and CH._sig == CH.sig() and CH._stage == stage then return end
+	CH._pending = nil
 	CH._sig = CH.sig()
 	CH._stage = stage
 	pcall(function()
@@ -216,10 +234,12 @@ function CH.refresh(force)
 			return
 		end
 		if not (MP.LOBBY and MP.LOBBY.code and G and G.ROOM_ATTACH and UIBox) then return end
-		-- "bli" keeps the box inside the room. A negative y lifts it off the bottom edge.
+		-- "tri": top and right, inside the room. y > 0 drops it below the top edge,
+		-- x < 0 pulls it in from the right. Bottom-left ("bli") sits on the deck.
+		CH.release_input()
 		CH.box = UIBox({
 			definition = CH.definition(),
-			config = { align = "bli", offset = { x = 0.25, y = -0.4 }, major = G.ROOM_ATTACH, bond = "Weak" },
+			config = { align = "tri", offset = { x = -0.15, y = 0.35 }, major = G.ROOM_ATTACH, bond = "Weak" },
 		})
 		CH.box_stage = G.STAGE
 	end)

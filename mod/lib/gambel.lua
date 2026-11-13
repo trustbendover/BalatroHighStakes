@@ -65,6 +65,7 @@ function R.apply_table(spin)
 	MP.GAME.gambel_wild = spin == "wild_odds"
 	MP.GAME.gambel_gold_paid = false
 	MP.GAME.gambel_bet_sent = false
+	MP.GAME.gambel_bet_for = nil
 	if spin == "double_interest" then
 		if type(G.GAME.interest_amount) == "number" then G.GAME.interest_amount = G.GAME.interest_amount * 2 end
 		if type(G.GAME.interest_cap) == "number" then G.GAME.interest_cap = G.GAME.interest_cap * 2 end
@@ -140,6 +141,7 @@ function R.bet(kind, choice)
 	local online = MP.STEAM_P2P and MP.LOBBY and MP.LOBBY.code and Client and Client.send
 	if online then
 		MP.GAME.gambel_bet_sent = true
+		MP.GAME.gambel_bet_for = ante
 		local msg = { action = "gambelBet", kind = kind, money = money, ante = ante, give = give, room = room }
 		if kind == "double" then msg.choice = choice end
 		Client.send(msg)
@@ -242,13 +244,17 @@ end
 function R.apply_bet(msg)
 	MP.GAME.gambel_bet_sent = false
 	if not msg or msg.ok == false then
-		if msg and msg.reason == "once" then MP.GAME.gambel_bet_sent = true end
+		if msg and msg.reason == "once" then
+			MP.GAME.gambel_bet_sent = true
+			MP.GAME.gambel_bet_for = G and G.GAME and G.GAME.round_resets and tonumber(G.GAME.round_resets.ante) or MP.GAME.gambel_bet_for
+		end
 		if R.double_view and R.double_view.picked then R.finish_double(nil) end
 		if R.wheel_view and R.wheel_view.spinning then R.finish_wheel(nil) end
 		R.clear_shop()
 		return
 	end
 	MP.GAME.gambel_bet_sent = true
+	MP.GAME.gambel_bet_for = G and G.GAME and G.GAME.round_resets and tonumber(G.GAME.round_resets.ante) or MP.GAME.gambel_bet_for
 	R.mute_shop_buttons()
 	if msg.kind == "double" or msg.id == "cash" or msg.id == "tax" or msg.won ~= nil then
 		R.apply_delta(msg.delta)
@@ -336,7 +342,16 @@ function R.open_double()
 	G.FUNCS.overlay_menu({ definition = R.double_definition() })
 end
 
+function R.drop_cards(view)
+	if not view then return end
+	local area, card = view.area, view.card
+	view.area, view.card = nil, nil
+	if area and area.remove then pcall(function() area:remove() end) end
+	if card and card.remove and not card.REMOVED then pcall(function() card:remove() end) end
+end
+
 function R.close_double()
+	R.drop_cards(R.double_view)
 	R.double_view = nil
 	if G and G.FUNCS and G.FUNCS.exit_overlay_menu and G.OVERLAY_MENU then
 		pcall(function() G.FUNCS.exit_overlay_menu() end)
@@ -413,20 +428,23 @@ local function ace_node()
 	if not (Card and CardArea and G and G.P_CARDS and G.P_CENTERS and G.P_CENTERS.c_base and G.CARD_W and G.CARD_H) then
 		return fallback()
 	end
-	local ok, area = pcall(function()
-		local ar = CardArea(0, 0, G.CARD_W * 1.35, G.CARD_H * 1.15, {
+	local card, area
+	local ok = pcall(function()
+		area = CardArea(0, 0, G.CARD_W * 1.35, G.CARD_H * 1.15, {
 			card_limit = 1, type = "title", highlight_limit = 0, card_w = G.CARD_W,
 		})
 		local def = G.P_CARDS.H_A or G.P_CARDS["H_A"]
-		local card = Card(0, 0, G.CARD_W, G.CARD_H, def, G.P_CENTERS.c_base)
+		card = Card(0, 0, G.CARD_W, G.CARD_H, def, G.P_CENTERS.c_base)
 		card.facing = "back"
 		card.sprite_facing = "back"
-		ar:emplace(card)
-		view.area = ar
-		view.card = card
-		return ar
+		area:emplace(card)
 	end)
-	if not ok or not area then return fallback() end
+	if not ok or not area then
+		if area and area.remove then pcall(function() area:remove() end) end
+		if card and card.remove and not card.REMOVED then pcall(function() card:remove() end) end
+		return fallback()
+	end
+	view.area, view.card = area, card
 	return { n = G.UIT.C, config = { align = "cm" }, nodes = {
 		{ n = G.UIT.R, config = { align = "cm", padding = 0.04 }, nodes = {
 			{ n = G.UIT.O, config = { object = area } },
@@ -519,66 +537,75 @@ function R.make_wheel()
 	if not (Moveable and love and love.graphics and love.graphics.polygon) then return nil end
 	local size = 3.6
 	local obj = Moveable(0, 0, size, size)
+	obj.config = obj.config or {}
+	if obj.states then
+		obj.states.drag.can = false
+		obj.states.click.can = false
+		obj.states.collide.can = false
+	end
 	function obj:draw()
-		if not (love and love.graphics and love.graphics.polygon) then return end
+		if not (love and love.graphics and love.graphics.polygon and G and G.TILESIZE) then return end
 		pcall(function()
 			local g = love.graphics
 			local T = self.VT or self.T
 			if not T then return end
-			local cx, cy = T.x + T.w / 2, T.y + T.h / 2
-			local radius = math.min(T.w, T.h) / 2 - 0.16
+			local ts = G.TILESIZE
+			local sc = G.TILESCALE or 1
 			local view = R.wheel_view
 			local rot = view and view.angle or 0
 			local n = (R.WHEEL and #R.WHEEL) or 7
 			local slice = (2 * math.pi) / n
 			local colours = R.wheel_colours()
 			local labels = R.wheel_labels()
+			local radius = (math.min(T.w, T.h) / 2 - 0.16) * ts
+			g.push()
+			if self.translate_container then self:translate_container() end
+			g.scale(sc, sc)
+			g.translate((T.x + T.w / 2) * ts, (T.y + T.h / 2) * ts)
 			g.setColor(0.03, 0.10, 0.07, 1)
-			g.circle("fill", cx, cy, radius + 0.14)
+			g.circle("fill", 0, 0, radius + 0.14 * ts)
 			g.setColor(GOLD_INK[1], GOLD_INK[2], GOLD_INK[3], 1)
-			g.setLineWidth(0.045)
-			g.circle("line", cx, cy, radius + 0.14)
+			g.setLineWidth(1.5)
+			g.circle("line", 0, 0, radius + 0.14 * ts)
 			for i = 1, n do
 				local a0 = -math.pi / 2 + (i - 1) * slice + rot
 				local a1 = a0 + slice
 				local col = colours[i] or GOLD_INK
 				g.setColor(col[1], col[2], col[3], 1)
-				local poly = { cx, cy }
+				local poly = { 0, 0 }
 				for s = 0, 10 do
 					local a = a0 + (a1 - a0) * (s / 10)
-					poly[#poly + 1] = cx + math.cos(a) * radius
-					poly[#poly + 1] = cy + math.sin(a) * radius
+					poly[#poly + 1] = math.cos(a) * radius
+					poly[#poly + 1] = math.sin(a) * radius
 				end
 				g.polygon("fill", poly)
-				g.setColor(0.05, 0.03, 0.02, 1)
-				g.setLineWidth(view and view.landed and view.index == i and 0.06 or 0.02)
-				if view and view.landed and view.index == i then g.setColor(GOLD_INK[1], GOLD_INK[2], GOLD_INK[3], 1) end
+				local landed = view and view.landed and view.index == i
+				g.setColor(landed and GOLD_INK[1] or 0.05, landed and GOLD_INK[2] or 0.03, landed and GOLD_INK[3] or 0.02, 1)
+				g.setLineWidth(landed and 3 or 1)
 				g.polygon("line", poly)
 				local font = g.getFont and g.getFont()
 				if font and labels[i] then
 					local mid = (a0 + a1) / 2
-					local lx = cx + math.cos(mid) * radius * 0.62
-					local ly = cy + math.sin(mid) * radius * 0.62
 					local fh = font:getHeight()
-					local sc = fh > 0 and (0.22 / fh) or 0.02
 					g.push()
-					g.translate(lx, ly)
+					g.translate(math.cos(mid) * radius * 0.62, math.sin(mid) * radius * 0.62)
 					g.rotate(mid + math.pi / 2)
-					g.scale(sc, sc)
+					g.scale(0.45, 0.45)
 					g.setColor(1, 1, 1, 1)
-					g.printf(labels[i], -70, -fh / 2, 140, "center")
+					g.printf(labels[i], -46, -fh / 2, 92, "center")
 					g.pop()
 				end
 			end
 			g.setColor(0.10, 0.06, 0.04, 1)
-			g.circle("fill", cx, cy, radius * 0.16)
+			g.circle("fill", 0, 0, radius * 0.16)
 			g.setColor(GOLD_INK[1], GOLD_INK[2], GOLD_INK[3], 1)
-			g.setLineWidth(0.03)
-			g.circle("line", cx, cy, radius * 0.16)
-			local tip = cy - radius + 0.04
+			g.setLineWidth(2)
+			g.circle("line", 0, 0, radius * 0.16)
+			local tip = -radius + 0.04 * ts
 			g.setColor(CRIMSON[1], CRIMSON[2], CRIMSON[3], 1)
-			g.polygon("fill", cx, tip + 0.18, cx - 0.14, tip - 0.10, cx + 0.14, tip - 0.10)
+			g.polygon("fill", 0, tip + 0.18 * ts, -0.14 * ts, tip - 0.10 * ts, 0.14 * ts, tip - 0.10 * ts)
 			g.setColor(1, 1, 1, 1)
+			g.pop()
 		end)
 		pcall(function() love.graphics.setColor(1, 1, 1, 1) end)
 	end
@@ -775,7 +802,15 @@ local function shop_button(id, func, label, colour, enabled)
 end
 
 --- One row inside the shop UI itself: Double or Nothing, then Gambel Wheel, then the last result.
+function R.sync_bet_ante()
+	if not (MP.GAME and R.keep_bet) then return end
+	local ante = G and G.GAME and G.GAME.round_resets and tonumber(G.GAME.round_resets.ante)
+	MP.GAME.gambel_bet_sent = R.keep_bet(MP.GAME.gambel_bet_for, ante, MP.GAME.gambel_bet_sent)
+	if not MP.GAME.gambel_bet_sent then MP.GAME.gambel_bet_for = nil end
+end
+
 function R.shop_row()
+	R.sync_bet_ante()
 	MP.GAME.gambel_shop_note = MP.GAME.gambel_shop_note or ""
 	local used = MP.GAME.gambel_bet_sent and true or false
 	local cash = dollars()
@@ -890,7 +925,10 @@ function R.register_ui()
 			MP.GAMBEL.hook_shop()
 			if G.STATE ~= G.STATES.SHOP then MP.GAMBEL.clear_shop() end
 			local view = MP.GAMBEL.double_view
-			if view and not view.picked and not G.OVERLAY_MENU then MP.GAMBEL.double_view = nil end
+			if view and not G.OVERLAY_MENU then
+				MP.GAMBEL.drop_cards(view)
+				if not view.picked then MP.GAMBEL.double_view = nil end
+			end
 			MP.GAMBEL.tick_wheel(dt)
 			local wheel = MP.GAMBEL.wheel_view
 			if wheel and not G.OVERLAY_MENU then

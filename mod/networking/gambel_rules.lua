@@ -307,6 +307,13 @@ function G.wheel_under(rotation)
 	return idx
 end
 
+--- A shop bet stays used until the ante changes. Reopening the shop, a booster, or a reroll does not clear it.
+function G.keep_bet(bet_ante, ante, sent)
+	bet_ante, ante = tonumber(bet_ante), tonumber(ante)
+	if bet_ante and ante and bet_ante ~= ante then return false end
+	return sent and true or false
+end
+
 --- Ease-out. 0 at the start, 1 at the landing, fast then slow.
 function G.wheel_ease(t)
 	t = tonumber(t) or 0

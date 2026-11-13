@@ -118,6 +118,7 @@ for i, msg in ipairs(wedges) do
 end
 ok(R.wheel_index({ id = "cash", amount = 20 }) == 2 and R.wheel_index({ id = "tax", delta = -4 }) == 5, "cash amounts and a tax delta pick the right wedge")
 ok(R.wheel_ease(0) == 0 and R.wheel_ease(1) == 1 and R.wheel_ease(0.5) > 0.7, "the spin starts fast and eases out")
+ok(R.keep_bet(1, 1, true) == true and R.keep_bet(1, 2, true) == false and R.keep_bet(nil, 1, false) == false, "a shop bet lasts for that ante only")
 
 local spin = R.table_spin("house", 2)
 local found = false
@@ -214,6 +215,13 @@ local same = Core.GAMBEL.flip(bet.c.lobby.seed, bet.c.id, 3, 20)
 local opp = Core.GAMBEL.flip(bet.c.lobby.seed, bet.c.id, 3, 20, "black")
 ok(same.drawn == opp.drawn and same.won ~= opp.won, "the card stays put when the guess changes")
 ok(black_bet.choice == "black" and black_bet.drawn == opp.drawn and black_bet.suit == opp.suit and black_bet.won == opp.won, "the host scores black against that Ace")
+bet.c.lobby.gambelTwist = "pot"
+bet.c.lobby.gambelAnte = 3
+local snap = S:snapshot(bet.c.lobby.code, bet.c.id)
+local _, kept = Core.restore(snap, { now = function() return 2000 end, log = function() end, newHostId = bet.c.id, oldHostId = "old" })
+local kept_bet = false
+for _, sl in ipairs(kept.slots) do if sl.old and sl.old.gambelBetAnte == 3 then kept_bet = true end end
+ok(kept_bet and kept.gambelTwist == "pot" and kept.gambelAnte == 3, "a takeover keeps the shop bet and the chaos spin")
 
 local en = dofile("localization/en-us.lua").misc.dictionary
 local nl = dofile("localization/nl.lua").misc.dictionary
@@ -233,7 +241,8 @@ ok(shop:find("function G.FUNCS.mp_gambel_double(e)", 1, true) and shop:find("fun
 ok(shop:find("open_double", 1, true) and shop:find("overlay_menu", 1, true) and shop:find("CardArea", 1, true), "Double or Nothing opens a card overlay and does not spend the bet yet")
 ok(shop:find('MP.GAMBEL.pick_double("red")', 1, true) and shop:find('R.bet("double", choice)', 1, true), "Red or Black is what spends the bet")
 ok(shop:find("open_wheel", 1, true) and shop:find('R.bet("wheel")', 1, true) and shop:find('R.casino_frame(L("b_gambel_wheel"', 1, true) and shop:find('R.casino_frame(L("b_gambel_double"', 1, true), "Gambel Wheel opens the same felt table, and Spin spends the bet")
-ok(shop:find("if not (love and love.graphics", 1, true) and shop:find("love.graphics.polygon", 1, true), "the wheel canvas is skipped without Love2D")
+ok(shop:find("if not (love and love.graphics", 1, true) and shop:find("love.graphics.polygon", 1, true) and shop:find("G.TILESIZE", 1, true), "the wheel canvas is skipped without Love2D and drawn in pixels")
+ok(shop:find("gambel_bet_for", 1, true) and shop:find("sync_bet_ante", 1, true) and shop:find("drop_cards", 1, true), "the ante lock survives a shop rebuild, and a closed card is removed")
 ok(shop:find("STEAM_P2P", 1, true) and shop:find("R.flip", 1, true), "a lobby bet goes to the host, and a solo run with no Steam still rolls")
 local credits = io.open("CREDITS.md"):read("*a")
 ok(credits:find("Bass Gas M", 1, true), "the song credits Bass Gas M")

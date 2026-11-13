@@ -1138,7 +1138,8 @@ end
 
 local SLOT_FIELDS = { "team", "lives", "score", "handsLeft", "ante", "skips", "furthestBlind", "isReady", "firstReady",
 	"isReadyLobby", "roundLivesBlocker", "timerLivesBlocker", "location", "eliminated", "pvpDone",
-	"pvpTimerFailed", "playedThisBlind", "blindSeq", "inPvp", "sitOut", "modHash", "isCached", "spectator", "runState" }
+	"pvpTimerFailed", "playedThisBlind", "blindSeq", "inPvp", "sitOut", "modHash", "isCached", "spectator", "runState",
+	"gambelBetAnte" }
 
 --- Host match settings for one client. A full snapshot (defaults filled) so a guest's
 --- leftover local value cannot survive join / rejoin. Does not write those defaults
@@ -1384,6 +1385,8 @@ function Server:snapshot(code, hostId)
 		teamSize = L.teamSize, teamLives = plain(L.teamLives), koth = plain(L.koth), elimOrder = plain(L.elimOrder),
 		book = plain(L.book), teamBook = plain(L.teamBook), lastStats = plain(L.lastStats),
 		winnerId = L.winnerId, firstReadyAge = L.firstReadyAt and (now - L.firstReadyAt) or nil,
+		gambelTable = L.gambelTable, gambelAnte = L.gambelAnte, gambelTwist = L.gambelTwist,
+		gambelBossAnte = L.gambelBossAnte, gambelBossOpen = L.gambelBossOpen and true or false,
 		next_id = self.next_id, hostId = hostId, players = {}, slots = {},
 	}
 	for i, p in ipairs(L.players) do s.players[i] = snap_player(p) end
@@ -1412,6 +1415,8 @@ function Core.restore(snap, opts)
 		-- make the new host skip sending the real ending.
 		lastStats = not snap.isInGame and snap.lastStats or nil,
 		firstReadyAt = snap.firstReadyAge and (now - snap.firstReadyAge) or nil,
+		gambelTable = snap.gambelTable, gambelAnte = snap.gambelAnte, gambelTwist = snap.gambelTwist,
+		gambelBossAnte = snap.gambelBossAnte, gambelBossOpen = snap.gambelBossOpen and true or false,
 		players = {}, slots = {}, emptySince = nil,
 	}
 	if L.teamLives and next(L.teamLives) == nil and L.gameMode ~= "teams" then L.teamLives = nil end
