@@ -108,7 +108,7 @@ function R.on_blind(key)
 	local mark = tostring(G and G.GAME and G.GAME.round_resets and G.GAME.round_resets.ante) .. ":" .. phase
 	if MP.GAME.gambel_phase_mark ~= mark then
 		MP.GAME.gambel_phase_mark = mark
-		local names = { build = L("k_gambel_build", "Build-Up"), drop = L("k_gambel_drop", "Drop"), final = L("k_gambel_final", "Final Drop") }
+		local names = { build = L("k_gambel_build", "BUILD-UP"), drop = L("k_gambel_drop", "DROP!"), final = L("k_gambel_final", "FINAL DROP") }
 		R.toast(names[phase] or names.build)
 		local bonus = R.phase_bonus and R.phase_bonus(phase) or 0
 		if bonus > 0 then R.apply_delta(bonus) end
@@ -191,10 +191,10 @@ function R.play_wheel(msg)
 	local ante = G and G.GAME and G.GAME.round_resets and G.GAME.round_resets.ante or 1
 	if plan.kind == "cash" then
 		if msg.id ~= "cash" then R.apply_delta(plan.amount or 0) end
-		R.toast("+$" .. tostring(plan.amount or msg.amount or 0))
+	R.flash("+$" .. tostring(plan.amount or msg.amount or 0))
 	elseif plan.kind == "tax" then
 		if msg.id ~= "tax" then R.apply_delta(-(plan.amount or 4)) end
-		R.toast("-$" .. tostring(plan.amount or 4))
+		R.flash("-$" .. tostring(plan.amount or 4))
 	elseif plan.kind == "edition" then
 		local card = plain_joker()
 		local pick = WHEEL_EDITIONS[R.roll(seed, ante, "edition", #WHEEL_EDITIONS)]
@@ -207,28 +207,28 @@ function R.play_wheel(msg)
 				G.CONTROLLER.locks.edition = false
 				card:set_edition(edition, true, true)
 			end)
-			R.toast(L("k_gambel_edition", pick.label))
+			R.flash(pick.label)
 		else
 			R.apply_delta(8)
-			R.toast("+$8")
+			R.flash("+$8")
 		end
 	elseif plan.kind == "tag" then
 		local key = WHEEL_TAGS[R.roll(seed, ante, "tag", #WHEEL_TAGS)]
 		if add_tag and Tag and key then pcall(function() add_tag(Tag(key)) end) end
-		R.toast(L("k_gambel_tag", "Tag"))
+		R.flash(L("k_gambel_tag", "Tag"))
 	elseif plan.kind == "discard" then
 		R.arm_discard()
-		R.toast(L("k_gambel_discard", "-1 discard next round"))
+		R.flash(L("k_gambel_discard", "-1 discard next round"))
 	elseif plan.kind == "perish" then
 		local card = mortal_joker()
 		local stuck = false
 		if card and card.set_perishable then
 			stuck = pcall(function() card:set_perishable(true) end)
 		end
-		if stuck then R.toast(L("k_gambel_perish", "Perishable"))
+		if stuck then R.flash(L("k_gambel_perish", "Perishable"))
 		else
 			R.apply_delta(-math.min(4, dollars()))
-			R.toast("-$4")
+			R.flash("-$4")
 		end
 	end
 end
@@ -244,8 +244,8 @@ function R.apply_bet(msg)
 	if msg.kind == "double" or msg.id == "cash" or msg.id == "tax" or msg.won ~= nil then
 		R.apply_delta(msg.delta)
 	end
-	if msg.won == true then R.toast(L("b_gambel_double", "Double or Nothing"))
-	elseif msg.won == false then R.toast(L("k_gambel_house", "The House holds"))
+	if msg.won == true then R.flash(L("b_gambel_double", "Double or Nothing") .. " +$" .. tostring(msg.stake or ""))
+	elseif msg.won == false then R.flash(L("k_gambel_house", "The House holds") .. " -$" .. tostring(msg.stake or ""))
 	elseif msg.id then R.play_wheel(msg) end
 	R.clear_shop()
 end
@@ -284,6 +284,19 @@ function R.clear_shop()
 	if MP.GAME then MP.GAME.gambel_shop_box = nil end
 end
 
+function R.flash(text)
+	text = tostring(text or "")
+	if MP.GAME then MP.GAME.gambel_shop_note = text end
+	R.toast(text)
+	if attention_text and text ~= "" then
+		pcall(attention_text, {
+			text = text, scale = 0.9, hold = 1.3,
+			major = (G and (G.shop or G.play)) or nil,
+			align = "cm", backdrop_colour = G and G.C and G.C.GOLD or nil,
+		})
+	end
+end
+
 local function shop_button(id, func, label, colour, enabled)
 	return { n = G.UIT.C, config = { align = "cm", padding = 0.08 }, nodes = {
 		UIBox_button({
@@ -292,7 +305,7 @@ local function shop_button(id, func, label, colour, enabled)
 			label = { label },
 			minw = 3.6,
 			minh = 0.74,
-			scale = 0.4,
+			scale = 0.42,
 			col = true,
 			shadow = true,
 			colour = enabled and colour or (G.C.UI and G.C.UI.BACKGROUND_INACTIVE or G.C.GREY),
@@ -300,46 +313,37 @@ local function shop_button(id, func, label, colour, enabled)
 	} }
 end
 
-function R.shop_definition()
+--- One row inside the shop UI itself: Double or Nothing, then Gambel Wheel, then the last result.
+function R.shop_row()
+	MP.GAME.gambel_shop_note = MP.GAME.gambel_shop_note or ""
 	local used = MP.GAME.gambel_bet_sent and true or false
 	local cash = dollars()
-	return {
-		n = G.UIT.ROOT,
-		config = { align = "cm", colour = G.C.BLACK, padding = 0.1, r = 0.1, emboss = 0.05 },
-		nodes = {
-			{ n = G.UIT.R, config = { align = "cm", padding = 0.04 }, nodes = {
-				shop_button("mp_gambel_double", "mp_gambel_double", L("b_gambel_double", "Double or Nothing"), G.C.ORANGE, (not used) and cash >= 2),
-				shop_button("mp_gambel_wheel", "mp_gambel_wheel", L("b_gambel_wheel", "Gambel Wheel"), G.C.PURPLE, not used),
-			} },
-		},
-	}
+	return { n = G.UIT.R, config = { align = "cm", padding = 0.08, r = 0.1, colour = G.C.BLACK, emboss = 0.05 }, nodes = {
+		shop_button("mp_gambel_double", "mp_gambel_double", L("b_gambel_double", "Double or Nothing"), G.C.ORANGE, (not used) and cash >= 2),
+		shop_button("mp_gambel_wheel", "mp_gambel_wheel", L("b_gambel_wheel", "Gambel Wheel"), G.C.PURPLE, not used),
+		{ n = G.UIT.C, config = { align = "cm", minw = 2.2, padding = 0.06 }, nodes = {
+			{ n = G.UIT.T, config = { ref_table = MP.GAME, ref_value = "gambel_shop_note", scale = 0.4, colour = G.C.GOLD or G.C.WHITE } },
+		} },
+	} }
+end
+
+function R.hook_shop()
+	if R._shop or not (G and G.UIDEF and G.UIDEF.shop) then return false end
+	R._shop = true
+	local ref = G.UIDEF.shop
+	function G.UIDEF.shop()
+		local t = ref()
+		if R.active() and type(t) == "table" and type(t.nodes) == "table" then
+			table.insert(t.nodes, 1, R.shop_row())
+		end
+		return t
+	end
+	return true
 end
 
 function R.on_shop()
-	if not R.active() or not (UIBox and G and G.UIT) then return end
-	if not (G.STATES and G.STATE == G.STATES.SHOP) then
-		R.clear_shop()
-		return
-	end
-	local sig = tostring(MP.GAME.gambel_bet_sent) .. ":" .. tostring(dollars() >= 2)
-	if MP.GAME.gambel_shop_box and MP.GAME.gambel_shop_sig == sig then return end
+	R.hook_shop()
 	R.clear_shop()
-	local major = (G.shop and G.shop.T) and G.shop or G.ROOM_ATTACH
-	local ok, box = pcall(function()
-		return UIBox({
-			definition = R.shop_definition(),
-			config = {
-				align = major == G.shop and "tm" or "cm",
-				offset = major == G.shop and { x = 0, y = 1.05 } or { x = 0, y = 2.2 },
-				major = major,
-				bond = "Weak",
-			},
-		})
-	end)
-	if ok and box then
-		MP.GAME.gambel_shop_box = box
-		MP.GAME.gambel_shop_sig = sig
-	end
 end
 
 function R.register_music()
@@ -350,7 +354,7 @@ function R.register_music()
 		path = "music_gambel_time.ogg",
 		sync = false,
 		pitch = 1,
-		volume = 0.7,
+		volume = 1,
 		select_music_track = function()
 			local watching = MP.SPECTATE and MP.SPECTATE.watching and MP.SPECTATE.watching()
 			local stage = (G and G.STAGES and G.STAGE == G.STAGES.RUN) and "run" or "menu"
@@ -369,19 +373,24 @@ function R.register_ui()
 	G = G or {}
 	G.FUNCS = G.FUNCS or {}
 	function G.FUNCS.mp_gambel_double(e)
-		if MP.GAMBEL then MP.GAMBEL.bet("double") end
+		if not MP.GAMBEL then return end
+		MP.GAMBEL.bet("double")
+		if e and e.config then e.config.button = nil; e.config.colour = G.C.UI.BACKGROUND_INACTIVE end
 	end
 	function G.FUNCS.mp_gambel_wheel(e)
-		if MP.GAMBEL then MP.GAMBEL.bet("wheel") end
+		if not MP.GAMBEL then return end
+		MP.GAMBEL.bet("wheel")
+		if e and e.config then e.config.button = nil; e.config.colour = G.C.UI.BACKGROUND_INACTIVE end
 	end
+	R.hook_shop()
 	if R._ui or not (Game and Game.update) then return end
 	R._ui = true
 	local upd = Game.update
 	function Game:update(dt)
 		local r = upd(self, dt)
 		if MP.GAMBEL and MP.GAMBEL.active and MP.GAMBEL.active() and G and G.STATES then
-			if G.STATE == G.STATES.SHOP then MP.GAMBEL.on_shop()
-			else MP.GAMBEL.clear_shop() end
+			MP.GAMBEL.hook_shop()
+			if G.STATE ~= G.STATES.SHOP then MP.GAMBEL.clear_shop() end
 		end
 		return r
 	end
