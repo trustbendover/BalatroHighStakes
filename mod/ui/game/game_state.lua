@@ -339,6 +339,9 @@ function Game:update_shop(dt)
 	end
 	if G.STATE_COMPLETE and updated_location then updated_location = false end
 	update_shop_ref(self, dt)
+	-- Vanilla queues offset.y = -5.3 in an event. Lift after that event, including
+	-- when a closed booster copies the saved y back.
+	if MP.GAMBEL and MP.GAMBEL.queue_shop_place then MP.GAMBEL.queue_shop_place() end
 end
 
 local update_blind_select_ref = Game.update_blind_select

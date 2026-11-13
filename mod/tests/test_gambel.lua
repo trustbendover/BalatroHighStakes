@@ -212,4 +212,50 @@ end
 walk(R.shop_row())
 ok(wired[1] == "mp_gambel_double_btn" and wired[2] == "mp_gambel_wheel_btn", "the shop row refreshes both buttons every frame")
 
+-- The gambel row must not push the booster OPEN button off the bottom.
+local function find_cfg(node, id, acc)
+	acc = acc or {}
+	if type(node) ~= "table" then return acc end
+	if node.config and node.config.id == id then acc[#acc + 1] = node.config end
+	if node.nodes then for _, child in ipairs(node.nodes) do find_cfg(child, id, acc) end end
+	return acc
+end
+UIBox_button = function(args)
+	return { n = "BTN", config = { id = args.id, minh = args.minh, func = args.func, scale = args.scale } }
+end
+local row = R.shop_row()
+ok(row.n == G.UIT.R and row.config.padding == 0.05, "the shop row stays a compact row inside the shop")
+local dbl = find_cfg(row, "mp_gambel_double")[1]
+ok(dbl and dbl.minh == 0.56 and dbl.scale == 0.36, "the shop buttons are short enough to read")
+local lift = R.shop_row_height()
+ok(math.abs(lift - (0.05 * 2 + 0.04 * 2 + 0.56)) < 1e-9, "the lift matches the row that was added")
+ok(math.abs(R.shop_offset_y() - (-5.3 - lift)) < 1e-9 and R.shop_offset_y() < -6 and R.shop_offset_y() > -6.2, "Gambel Time moves the shop up by that row")
+G.STATES.SHOP = G.STATES.SHOP or 5
+G.shop = { alignment = { offset = { y = -5.3, py = -5.3 } } }
+R.place_shop()
+ok(math.abs(G.shop.alignment.offset.y - R.shop_offset_y()) < 1e-9, "a vanilla shop open is lifted")
+ok(math.abs(G.shop.alignment.offset.py - R.shop_offset_y()) < 1e-9, "the saved pack offset is lifted too, so closing a pack does not snap down")
+local held = G.shop.alignment.offset.y
+R.place_shop()
+ok(G.shop.alignment.offset.y == held, "an already lifted shop is not moved again")
+G.shop.alignment.offset.y = 18
+R.place_shop()
+ok(G.shop.alignment.offset.y == 18, "a pack that slid the shop off screen is left there")
+G.shop.alignment.offset.y = -5.3
+R.place_shop()
+ok(math.abs(G.shop.alignment.offset.y - R.shop_offset_y()) < 1e-9, "returning from a pack that restored -5.3 is lifted again")
+local queued = {}
+G.E_MANAGER = { add_event = function(_, ev) queued[#queued + 1] = ev end }
+Event = function(ev) return ev end
+G.shop.alignment.offset.y = -5.3
+queued[#queued + 1] = { func = function() G.shop.alignment.offset.y = -5.3; return true end }
+R.queue_shop_place()
+for _, ev in ipairs(queued) do ev.func() end
+ok(math.abs(G.shop.alignment.offset.y - R.shop_offset_y()) < 1e-9, "the lift runs after vanilla's shop event")
+MP.LOBBY.config.gamemode = "attrition"
+G.shop.alignment.offset.y = -5.3
+G.shop.alignment.offset.py = -5.3
+R.place_shop()
+ok(G.shop.alignment.offset.y == -5.3 and G.shop.alignment.offset.py == -5.3 and R.shop_offset_y() == -5.3, "other modes keep the vanilla shop position")
+
 print("PASS: gambel esc")

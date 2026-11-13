@@ -1343,16 +1343,60 @@ function R.flash(text)
 	R.toast(text)
 end
 
+-- Compact enough that the booster OPEN tag stays on screen. Vanilla shop is top-anchored,
+-- so this row's height is also how far G.shop must move up (R.shop_row_height).
+local SHOP_ROW_PAD = 0.05
+local SHOP_BTN_PAD = 0.04
+local SHOP_BTN_H = 0.56
+
+function R.shop_row_height()
+	return SHOP_ROW_PAD * 2 + SHOP_BTN_PAD * 2 + SHOP_BTN_H
+end
+
+--- Vanilla Game:update_shop and the pack-return paths set this. A more negative value moves the shop up.
+R.SHOP_VANILLA_Y = -5.3
+
+function R.shop_offset_y()
+	if not R.active() then return R.SHOP_VANILLA_Y end
+	return R.SHOP_VANILLA_Y - R.shop_row_height()
+end
+
+--- If a shop open or a pack return just wrote the vanilla -5.3, lift by the gambel row.
+--- Any other y (the pack sliding the shop off screen) is left alone. py is the value
+--- toggle_shop copies back, so it has to be lifted too or the shop snaps down on return.
+function R.place_shop()
+	if not R.active() then return end
+	local off = G and G.shop and G.shop.alignment and G.shop.alignment.offset
+	if type(off) ~= "table" then return end
+	local want = R.shop_offset_y()
+	local vanilla = R.SHOP_VANILLA_Y
+	if type(off.y) == "number" and math.abs(off.y - vanilla) < 1e-4 then off.y = want end
+	if type(off.py) == "number" and math.abs(off.py - vanilla) < 1e-4 then off.py = want end
+end
+
+function R.queue_shop_place()
+	R.place_shop()
+	if not (G and G.E_MANAGER and G.E_MANAGER.add_event and Event) then return end
+	G.E_MANAGER:add_event(Event({
+		trigger = "immediate",
+		blockable = false,
+		func = function()
+			if MP.GAMBEL and MP.GAMBEL.place_shop then MP.GAMBEL.place_shop() end
+			return true
+		end,
+	}))
+end
+
 local function shop_button(id, click, update, label, colour, enabled)
-	return { n = G.UIT.C, config = { align = "cm", padding = 0.08 }, nodes = {
+	return { n = G.UIT.C, config = { align = "cm", padding = SHOP_BTN_PAD }, nodes = {
 		UIBox_button({
 			id = id,
 			button = enabled and click or nil,
 			func = update,
 			label = { label },
 			minw = 3.6,
-			minh = 0.74,
-			scale = 0.42,
+			minh = SHOP_BTN_H,
+			scale = 0.36,
 			col = true,
 			shadow = true,
 			colour = enabled and colour or (G.C.UI and G.C.UI.BACKGROUND_INACTIVE or G.C.GREY),
@@ -1372,7 +1416,7 @@ end
 function R.shop_row()
 	R.sync_bet_ante()
 	MP.GAME.gambel_shop_note = MP.GAME.gambel_shop_note or ""
-	return { n = G.UIT.R, config = { align = "cm", padding = 0.08, r = 0.1, colour = G.C.BLACK, emboss = 0.05 }, nodes = {
+	return { n = G.UIT.R, config = { align = "cm", padding = SHOP_ROW_PAD, r = 0.1, colour = G.C.BLACK, emboss = 0.05 }, nodes = {
 		shop_button("mp_gambel_double", "mp_gambel_double", "mp_gambel_double_btn", L("b_gambel_double", "Double or Nothing"), G.C.ORANGE, R.can_double()),
 		shop_button("mp_gambel_wheel", "mp_gambel_wheel", "mp_gambel_wheel_btn", L("b_gambel_wheel", "Gambel Wheel"), G.C.PURPLE, R.can_wheel()),
 		{ n = G.UIT.C, config = { align = "cm", minw = 2.2, padding = 0.06 }, nodes = {
@@ -1514,6 +1558,7 @@ function R.register_ui()
 				MP.GAMBEL.double_view = nil
 			end
 			MP.GAMBEL.tick(dt)
+			if G.STATE == G.STATES.SHOP and MP.GAMBEL.place_shop then MP.GAMBEL.place_shop() end
 			local wheel = MP.GAMBEL.wheel_view
 			if wheel and not G.OVERLAY_MENU then
 				if wheel.pending_label and not wheel.announced then
