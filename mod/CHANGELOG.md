@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.7.1 - Hotfix: lobbies, rejoin, and shop odds
+
+- **Public lobbies.** Host, Mode, Players, Status, and Join share fixed columns. Join stays inside the panel. Each lobby's settings sit under that row. Only the standard Back button remains, plus Refresh. Long host names are shortened, and the list stays paged.
+- **Connected players.** Leaving and rejoining no longer lists the same player more than once. The name and the status each have their own column, and a long name is cut off.
+- **Blind select.** Picking a blind, or leaving while the pick animation is still running, no longer crashes when the blind screen is already gone.
+- **PvP.** A duplicate seat left behind by a rejoin no longer holds the blind open after everyone else is out of hands.
+- **Gambel Wheel and Double or Nothing.** Your own prize is applied after the spin or the card flip finishes, not when the host's answer arrives mid-animation.
+- **Shop odds.** Double or Nothing wins 18 times in 37 (one house zero). The wheel still has the same seven prizes, but the small losses come up more often. The house edge is small. The host still rolls both, and everyone uses that result.
+- **Pins.** Steamodded stays 1.0.0~BETA-1620a. Lovely stays 0.10.0.
+
 ## 0.7.0 - Gambel Time, chat, uneven teams
 
 - **Gambel Time.** A party mode for 1 to 8 players. Alone, you play The House: fail a blind, lose a life, and clear the target ante to win. With 2 to 8, every boss is a Nemesis. Each ante the host rolls one shared table rule. In the shop, once per ante, Double or Nothing or the Gambel Wheel. Each boss the host rolls a Chaos Spin (Reverse Stakes, Double Trouble, Joker Pot, Hot Potato, or All-In; solo bosses are House twists). The original track "GAMBEL TIME" by Bass Gas M plays during the run, used with permission.
