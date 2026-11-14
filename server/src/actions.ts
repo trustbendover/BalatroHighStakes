@@ -108,7 +108,7 @@ export type ActionChatLog = { action: 'chatLog'; view: 'lobby' | 'match'; lines:
 export type ActionChatReject = { action: 'chatReject'; reason: 'empty' | 'long' }
 export type ActionGambelTable = { action: 'gambelTable'; ante: number; spin: string }
 export type ActionGambelTwist = { action: 'gambelTwist'; twist: string; ante?: number; blind?: number; solo?: boolean }
-export type ActionGambelBetResult = { action: 'gambelBetResult'; kind?: string; ok: boolean; reason?: string; won?: boolean; id?: string; stake?: number; delta?: number; amount?: number; drawn?: 'red' | 'black'; suit?: 'H' | 'D' | 'S' | 'C'; choice?: 'red' | 'black' }
+export type ActionGambelBetResult = { action: 'gambelBetResult'; kind?: string; ok: boolean; reason?: string; won?: boolean; id?: string; stake?: number; delta?: number; amount?: number; drawn?: 'red' | 'black' | 'house'; suit?: 'H' | 'D' | 'S' | 'C' | '0'; choice?: 'red' | 'black' }
 export type ActionGambelHit = { action: 'gambelHit'; kind: string; amount?: number; payout?: number; joker?: boolean; role?: string }
 // TCG Actions (Server to Client)
 export type ActionTcgCompatible = { action: 'tcg_compatible' }

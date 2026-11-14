@@ -57,9 +57,25 @@ end
 
 local select_blind_ref = G.FUNCS.select_blind
 function G.FUNCS.select_blind(e)
+	local guard = MP.BLIND_GUARD
+	local ctx = e and e.config and e.config.ref_table
+	if guard and not guard.allow({
+		blind_select = G.blind_select, selecting = MP.GAME and MP.GAME.selecting_blind, context = ctx,
+	}) then
+		return
+	end
+	if not (select_blind_ref and G.blind_select and ctx) then return end
+	MP.GAME.selecting_blind = true
 	MP.GAME.end_pvp = false
 	MP.GAME.prevent_eval = false
-	select_blind_ref(e)
+	local function still() return G.blind_select end
+	local function clear() if MP.GAME then MP.GAME.selecting_blind = nil end end
+	if guard and G.E_MANAGER then
+		guard.protect(G.E_MANAGER, function() select_blind_ref(e) end, still, clear)
+	else
+		select_blind_ref(e)
+	end
+	if not still() then clear() end
 	if MP.GAMBEL and MP.GAMBEL.on_blind and e and e.config and e.config.ref_table then
 		MP.GAMBEL.on_blind(e.config.ref_table.key or e.config.ref_table.name)
 	end
@@ -84,6 +100,8 @@ end
 
 local skip_blind_ref = G.FUNCS.skip_blind
 G.FUNCS.skip_blind = function(e)
+	if not G.blind_select or not (e and e.UIBox) then return end
+	if MP.GAME and MP.GAME.selecting_blind then return end
 	skip_blind_ref(e)
 	if MP.LOBBY.code then
         MP.GAME.skips_before_pvp = (MP.GAME.skips_before_pvp or 0) + 1

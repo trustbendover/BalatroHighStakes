@@ -226,6 +226,7 @@ function MP.reset_game_states()
 		comeback_bonus_given = true,
 		comeback_bonus = 0,
 		end_pvp = false,
+		selecting_blind = nil,
 		-- 3P fork: per-opponent state keyed by server player id
 		enemies = {},
 		enemy_focus_id = nil,

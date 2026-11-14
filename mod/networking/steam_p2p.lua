@@ -966,6 +966,7 @@ function M.new_router(o)
 									function() if R.gen == gen then B.send(id, "K") end end)
 								conn_peer[p.conn] = id
 							end
+							p.conn.steam_id = m.peer
 							core:receive(p.conn, msg)
 							if seq then p.ack = math.max(p.ack or 0, seq) end
 							if HM then HM.mark_dirty() end

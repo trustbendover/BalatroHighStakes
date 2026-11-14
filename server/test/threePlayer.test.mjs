@@ -59,6 +59,11 @@ async function main() {
   const infoA = A.msgs.filter((m) => m.action === 'lobbyInfo').pop()
   assert.equal(infoA.players.length, 3); assert.equal(infoA.isHost, true)
   console.log('ok: lobbyInfo lists 3 players')
+  B.send({ action: 'joinLobby', code })
+  await sleep(200)
+  const rejoined = A.msgs.filter((m) => m.action === 'lobbyInfo').pop()
+  assert.equal(rejoined.players.length, 3)
+  console.log('ok: joining again does not duplicate a seated player')
 
   const ids = Object.fromEntries(infoA.players.map((p) => [p.username, p.id]))
   const all = [A, B, C]

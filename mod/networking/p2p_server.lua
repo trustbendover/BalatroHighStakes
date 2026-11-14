@@ -211,6 +211,115 @@ end
 local Server = {}
 Server.__index = Server
 
+--- Same human: the live object, the same player id, or the same Steam id.
+--- A new socket after leave/rejoin keeps the Steam id and must not become a second seat.
+function Server:same_person(a, b)
+	if not a or not b then return false end
+	if a == b then return true end
+	local as, bs = a.steam_id, b.steam_id
+	if type(as) == "string" and as ~= "" and as == bs then return true end
+	if a.id and b.id and a.id == b.id then return true end
+	return false
+end
+
+function Server:seat_of(L, c)
+	for i, p in ipairs(L.players or {}) do
+		if self:same_person(p, c) then return i, p end
+	end
+end
+
+--- Drop every seated copy of this person. Returns true when at least one seat was removed.
+function Server:purge_person(L, c)
+	if not L then return false end
+	local removed = false
+	for i = #(L.players or {}), 1, -1 do
+		local p = L.players[i]
+		if self:same_person(p, c) then
+			table.remove(L.players, i)
+			if p ~= c then p.lobby = nil end
+			removed = true
+		end
+	end
+	return removed
+end
+
+--- How far this seat got in the current blind. A live rejoin outranks an idle ghost.
+local function seat_rank(p)
+	local r = 0
+	if p.pvpDone then r = r + 8 end
+	if p.playedThisBlind then r = r + 4 end
+	if (tonumber(p.handsLeft) or 4) < 4 then r = r + 2 end
+	local sc = p.score
+	if type(sc) == "table" and ((sc.c or 0) > 0 or (sc.e or 0) > 0 or (sc.ec or 0) > 0) then r = r + 1 end
+	return r
+end
+
+--- One seat per Steam id / player id. An unplayed copy of a held seat is a ghost
+--- (it never sends a score) and is removed so a PvP blind can resolve.
+--- A later equal-rank entry is the socket that just reconnected.
+function Server:dedupe_roster(L)
+	if not L or type(L.players) ~= "table" then return false end
+	local changed = false
+	local out, at = {}, {}
+	for _, p in ipairs(L.players) do
+		local key = (type(p.steam_id) == "string" and p.steam_id ~= "" and ("s:" .. p.steam_id))
+			or (p.id and ("i:" .. tostring(p.id))) or nil
+		if not key then
+			out[#out + 1] = p
+		elseif not at[key] then
+			at[key] = #out + 1
+			out[#out + 1] = p
+		else
+			changed = true
+			local i = at[key]
+			if seat_rank(p) >= seat_rank(out[i]) then
+				if out[i] ~= p then out[i].lobby = nil end
+				out[i] = p
+			elseif p.lobby == L then
+				p.lobby = nil
+			end
+		end
+	end
+	local filtered = {}
+	for _, p in ipairs(out) do
+		local slot = (not L.migration) and find(L.slots or {}, function(s)
+			return s.since and s.old and s.old ~= p and self:same_person(s.old, p)
+		end) or nil
+		-- A spectator may watch their own held seat. That is not a ghost.
+		local idle = not p.spectator and not p.pvpDone and not p.playedThisBlind and (tonumber(p.handsLeft) or 4) >= 4
+		if slot and p.spectator then
+			filtered[#filtered + 1] = p
+		elseif slot and idle then
+			if p.lobby == L then p.lobby = nil end
+			changed = true
+		else
+			filtered[#filtered + 1] = p
+			if slot and not idle then
+				self:drop_held(L, slot)
+				changed = true
+			end
+		end
+	end
+	if #filtered ~= #L.players then changed = true end
+	if not changed then
+		for i, p in ipairs(filtered) do if L.players[i] ~= p then changed = true end end
+	end
+	if changed then L.players = filtered end
+	return changed
+end
+
+function Server:expire_due(L)
+	if not L or not L.isInGame or L.migration then return end
+	local now, grace = self.now(), Core.rejoin_grace(L.options, L.gameMode)
+	for _, sl in ipairs(L.slots or {}) do
+		local spent = sl.since and self:grace_spent(sl.since, now)
+		if sl.old and not sl.old.eliminated and not sl.old.spectator and sl.since and not sl.migration
+			and spent and spent >= grace then
+			self:expire_slot(L, sl)
+		end
+	end
+end
+
 function Core.new(opts)
 	opts = opts or {}
 	local self = setmetatable({}, Server)
@@ -352,6 +461,7 @@ function Server:enemy_info(p, with_score)
 end
 
 function Server:lobby_info(L)
+	self:dedupe_roster(L)
 	local host = L.players[1]
 	if not host then return end
 	local players = {}
@@ -364,7 +474,8 @@ function Server:lobby_info(L)
 	for i, p in ipairs(L.players) do
 		players[i] = { id = p.id, username = p.username, hash = p.modHash, cached = p.isCached, ready = p.isReadyLobby,
 			isHost = i == 1, lives = p.lives, eliminated = p.eliminated, team = preview and (p.team or preview[p.id]) or nil,
-			spectator = p.spectator or nil, rejoining = p.rejoining or nil }
+			spectator = p.spectator or nil, rejoining = p.rejoining or nil,
+			sid = (type(p.steam_id) == "string" and p.steam_id ~= "") and p.steam_id or nil }
 	end
 	local away = {}
 	local now, grace = self.now(), Core.rejoin_grace(L.options, L.gameMode)
@@ -653,6 +764,7 @@ end
 
 function Server:try_start_blind(L)
 	if not L.isInGame or L.blindActive or L.migration then return false end
+	self:dedupe_roster(L)
 	-- Solo Gambel Time plays vanilla blinds against The House. There is no Nemesis to start.
 	if self:gambel_solo(L) then return false end
 	local alive = self:alive(L)
@@ -718,6 +830,9 @@ end
 
 function Server:try_resolve_pvp(L)
 	if not L.isInGame or not L.blindActive or L.migration then return end
+	-- Ghost copies of a held seat never send a score. Drop them before the
+	-- "everyone is done" check, or the blind waits forever.
+	self:dedupe_roster(L)
 	local alive = self:participants(L)
 	if #alive == 0 then return end
 	if not every(alive, function(p) return p.pvpDone or p.handsLeft < 1 end) then return end
@@ -1177,8 +1292,7 @@ function Server:leave(c)
 		and find(L.players, function(p) return p == c end) then
 		return self:disconnect(c)
 	end
-	local was = find(L.players, function(p) return p == c end)
-	remove_value(L.players, c)
+	local was = self:purge_person(L, c)
 	local was_eliminated = c.eliminated
 	c.lobby, c.eliminated = nil, false
 	if not was then return end
@@ -1224,6 +1338,8 @@ function Server:disconnect(c)
 	L.slots[#L.slots + 1] = { reconnectToken = c.reconnectToken, index = idx, old = c, since = self.now() }
 	table.remove(L.players, idx)
 	c.lobby = nil
+	-- A second socket for this Steam id must not stay seated with a full hand.
+	self:dedupe_roster(L)
 	for _, p in ipairs(L.players) do
 		sendA(p, { action = "enemyDisconnected", timeout = 0, playerId = c.id, username = c.username, held = true,
 			grace = (not c.eliminated) and grace or nil })
@@ -1411,7 +1527,9 @@ end
 function Server:join(L, c, want_spectate)
 	if L.isInGame then
 		local name = base_name(c.username)
-		local slot = find(L.slots, function(s) return base_name(s.old.username) == name end)
+		local slot = find(L.slots, function(s)
+			return s.old and (self:same_person(s.old, c) or base_name(s.old.username) == name)
+		end)
 		if slot and not want_spectate then
 			if c.spectator and c.lobby == L then -- 0.6.9: watching your own held seat, now taking it back
 				remove_value(L.players, c); c.spectator, c.lobby = nil, nil
@@ -1420,7 +1538,9 @@ function Server:join(L, c, want_spectate)
 			return self:reclaim(L, c, slot)
 		end
 		if slot then return self:spectate(L, c) end
-		local stale = find(L.players, function(p) return base_name(p.username) == name and p ~= c end)
+		local stale = find(L.players, function(p)
+			return p ~= c and (self:same_person(p, c) or base_name(p.username) == name)
+		end)
 		if stale then
 			local s2 = self:take_over(L, stale)
 			if s2 then return self:reclaim(L, c, s2) end
@@ -1429,6 +1549,21 @@ function Server:join(L, c, want_spectate)
 		if not want_spectate and not Core.no_late_join(L.gameMode)
 			and #self:seated(L) + #L.slots < Core.max_players(L.gameMode) then return self:late_join(L, c) end
 		return self:spectate(L, c)
+	end
+	local idx, old = self:seat_of(L, c)
+	if idx then
+		-- Same person, new socket (or a repeated join on the live one). Replace the seat.
+		if old ~= c then
+			old.lobby = nil
+			L.players[idx] = c
+			c.isReadyLobby = false
+		end
+		c.eliminated, c.lobby = false, L
+		sendA(c, { action = "joinedLobby", code = L.code, type = L.gameMode, reconnectToken = c.reconnectToken })
+		self:send_options(c)
+		self:lobby_info(L)
+		self:chat_sync(c)
+		return
 	end
 	if #self:seated(L) >= Core.max_players(L.gameMode) then
 		return sendA(c, { action = "error", message = "Lobby is full or does not exist." })
@@ -2013,13 +2148,10 @@ function Server:tick()
 	local now = self.now()
 	for code, L in pairs(self.lobbies) do
 		if L.migration and now >= L.migration.untilT then self:end_migration(L) end
+		self:dedupe_roster(L)
 		if L.isInGame and not L.migration then
-			local grace = Core.rejoin_grace(L.options, L.gameMode)
-			for _, sl in ipairs(L.slots) do
-				local spent = sl.since and self:grace_spent(sl.since, now)
-				if L.isInGame and sl.old and not sl.old.eliminated and not sl.old.spectator and sl.since and not sl.migration
-					and spent and spent >= grace then self:expire_slot(L, sl) end
-			end
+			self:expire_due(L)
+			if L.blindActive then self:try_resolve_pvp(L) end
 		end
 		if #L.players == 0 and L.emptySince and now - L.emptySince > Core.EMPTY_LOBBY_TTL then
 			self:destroy(L)

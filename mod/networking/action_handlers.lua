@@ -284,8 +284,30 @@ local function action_lobbyInfo(p)
 	MP.LOBBY.is_host = is_host
 	-- 3P fork: the server sends the full ordered player list.
 	MP.LOBBY.my_id = p.you or MP.LOBBY.my_id
-	MP.LOBBY.player_list = p.players or {}
-	MP.LOBBY.player_count = (p.players and #p.players or ((guest ~= nil) and 2 or 1)) + (p.away and #p.away or 0)
+	local function unique_players(list)
+		local out, seen = {}, {}
+		for _, pl in ipairs(list or {}) do
+			if type(pl) == "table" then
+				local key = (type(pl.sid) == "string" and pl.sid ~= "" and ("s:" .. pl.sid))
+					or (pl.id and ("i:" .. tostring(pl.id))) or nil
+				if not key or not seen[key] then
+					if key then seen[key] = true end
+					out[#out + 1] = pl
+				end
+			end
+		end
+		return out
+	end
+	local roster = unique_players(p.players)
+	MP.LOBBY.player_list = roster
+	local away = p.away or {}
+	local seated_ids = {}
+	for _, pl in ipairs(roster) do if pl.id then seated_ids[pl.id] = true end end
+	local away_extra = 0
+	for _, a in ipairs(away) do
+		if type(a) == "table" and a.id and not seated_ids[a.id] then away_extra = away_extra + 1 end
+	end
+	MP.LOBBY.player_count = #roster + away_extra
 	if p.players and p.players[2] then
 		guest, guestHash, guestCached = p.players[2].username, p.players[2].hash, p.players[2].cached
 	end
@@ -337,8 +359,8 @@ local function action_lobbyInfo(p)
 	end
 	-- All seats 1..8 in server order (seat 1 = host). host/guest/third stay as aliases.
 	MP.LOBBY.seats = { MP.LOBBY.host, MP.LOBBY.guest.username and MP.LOBBY.guest or nil, MP.LOBBY.third.username and MP.LOBBY.third or nil }
-	for i = 4, #(p.players or {}) do
-		local pl = p.players[i]
+	for i = 4, #roster do
+		local pl = roster[i]
 		local sName, sCol = parseName(pl.username)
 		local sConfig, sMods = MP.UTILS.parse_Hash(pl.hash)
 		MP.LOBBY.seats[i] = {
@@ -350,10 +372,12 @@ local function action_lobbyInfo(p)
 			config = sConfig,
 		}
 	end
-	for i, pl in ipairs(p.players or {}) do
+	for i = #roster + 1, 8 do MP.LOBBY.seats[i] = nil end
+	for i, pl in ipairs(roster) do
 		if MP.LOBBY.seats[i] then
 			MP.LOBBY.seats[i].team = pl.team
 			MP.LOBBY.seats[i].id = pl.id
+			MP.LOBBY.seats[i].sid = pl.sid
 			MP.LOBBY.seats[i].spectator = pl.spectator and true or nil
 			MP.LOBBY.seats[i].rejoining = pl.rejoining and true or nil
 			MP.LOBBY.seats[i].eliminated = pl.eliminated and true or nil
@@ -366,16 +390,24 @@ local function action_lobbyInfo(p)
 	for _, pl in ipairs(MP.LOBBY.player_list) do
 		MP.LOBBY.names_by_id[pl.id] = (parseName(pl.username))
 	end
+	if MP.GAME and MP.GAME.enemies then
+		local live = {}
+		for _, pl in ipairs(roster) do if pl.id then live[pl.id] = true end end
+		for _, a in ipairs(MP.LOBBY.away or {}) do if type(a) == "table" and a.id then live[a.id] = true end end
+		for id in pairs(MP.GAME.enemies) do
+			if id ~= "legacy" and not live[id] then MP.GAME.enemies[id] = nil end
+		end
+	end
 
 	-- Ready when the player count fits the mode (MP.MODES.start_problem) and every non-host is ready
 	if p.players then
 	local minp = 2
 	if is_host and MP.MODES and MP.MODES.limits then minp = MP.MODES.limits().min or 2 end
-	local all_ready = #p.players >= minp
-		if is_host and MP.MODES and MP.MODES.start_problem(#p.players) then all_ready = false end
+	local all_ready = #roster >= minp
+		if is_host and MP.MODES and MP.MODES.start_problem(#roster) then all_ready = false end
 		local unready = 0
-		for i = 2, #p.players do
-			if not p.players[i].ready then all_ready = false; unready = unready + 1 end
+		for i = 2, #roster do
+			if not roster[i].ready then all_ready = false; unready = unready + 1 end
 		end
 		MP.LOBBY.ready_to_start = all_ready
 		MP.LOBBY.unready_count = unready -- 0.6.8: for the host's "waiting for N players" hint

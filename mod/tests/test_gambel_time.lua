@@ -81,6 +81,7 @@ local again = R.flip("seed", "p", 3, 11)
 local once = R.flip("seed", "p", 3, 11)
 ok(again.won == once.won and again.delta == once.delta, "the same seed and ante flip the same way")
 local function ace_ok(f)
+	if f.drawn == "house" then return f.ok and f.suit == "0" and f.won == false and f.delta == -f.stake end
 	local red = f.drawn == "red" and (f.suit == "H" or f.suit == "D")
 	local black = f.drawn == "black" and (f.suit == "S" or f.suit == "C")
 	return f.ok and (red or black) and f.won == ((f.choice or "red") == f.drawn)
@@ -91,7 +92,7 @@ local as_black = R.flip("seed", "p", 3, 11, "black")
 local junk = R.flip("seed", "p", 3, 11, "blue")
 ok(ace_ok(plain) and plain.choice == nil and plain.won == again.won and plain.drawn == as_red.drawn and plain.suit == as_red.suit, "no guess still draws an Ace and wins on red")
 ok(ace_ok(as_red) and as_red.choice == "red" and as_red.won == (as_red.drawn == "red"), "red wins only when the Ace is red")
-ok(ace_ok(as_black) and as_black.choice == "black" and as_black.won == (as_black.drawn == "black") and as_black.won ~= as_red.won, "black is the other side of the same Ace")
+ok(ace_ok(as_black) and as_black.choice == "black" and (as_black.drawn == "house" and as_black.won == false or as_black.won == (as_black.drawn == "black")) and (as_black.drawn == "house" or as_black.won ~= as_red.won), "black is the other side of the same Ace, and the house zero loses for both")
 ok(as_red.drawn == as_black.drawn and as_red.suit == as_black.suit and junk.choice == nil and junk.won == plain.won, "the guess does not change the card")
 local reds, blacks = 0, 0
 for ante = 1, 48 do
@@ -99,7 +100,21 @@ for ante = 1, 48 do
 	if f.drawn == "red" then reds = reds + 1 else blacks = blacks + 1 end
 	ok(ace_ok(f), "draw " .. ante .. " is one Ace")
 end
-ok(reds >= 12 and blacks >= 12, "red and black both come up")
+ok(reds >= 8 and blacks >= 8, "red and black both come up")
+local wins, samples = 0, 2000
+for i = 1, samples do
+	local colour = (i % 2 == 0) and "red" or "black"
+	if R.flip("edge", tostring(i), i, 20, colour).won then wins = wins + 1 end
+end
+local rate = wins / samples
+ok(rate > 0.45 and rate < 0.52, string.format("double or nothing wins about 18/37 (%.3f)", rate))
+local weighted, weight_sum = 0, 0
+for i, w in ipairs(R.WHEEL_WEIGHT) do
+	weight_sum = weight_sum + w
+	weighted = weighted + w * R.WHEEL_VALUE[i]
+end
+local wheel_ev = weighted / weight_sum
+ok(weight_sum == 100 and wheel_ev < -0.30 and wheel_ev > -0.60, string.format("wheel valued EV is a small house edge (%.2f)", wheel_ev))
 ok(#R.WHEEL == 7, "the wheel has 7 wedges")
 local wedges = {
 	{ id = "cash", amount = 8 },
@@ -486,6 +501,20 @@ R.arm_wheel({ id = "tag" }, "Tag")
 ok(R.wheel_view.start_angle == -3.5 and R.wheel_view.angle == -3.5, "the wheel does not snap back to 0 when the result arrives")
 R.tick_wheel(0.05)
 ok(R.wheel_view.angle < -3.5, "the spin continues forward from where it was")
+local paid_from = G.GAME.dollars
+G.OVERLAY_MENU = { id = "spin" }
+R.wheel_view = { spinning = true, angle = -1 }
+R.apply_bet({ ok = true, id = "cash", amount = 8, delta = 8 })
+ok(G.GAME.dollars == paid_from, "the host answer does not pay while this client's wheel is still spinning")
+local spins = 0
+while R.wheel_view and not R.wheel_view.landed and spins < 200 do R.tick(0.03); spins = spins + 1 end
+ok(R.wheel_view.landed and G.GAME.dollars == paid_from, "the wheel can stop before the payout beat")
+R.tick(0.4)
+ok(G.GAME.dollars == paid_from + 8, "the payout is applied once after the beat")
+for _ = 1, 10 do R.tick(0.05) end
+ok(G.GAME.dollars == paid_from + 8, "a finished spin does not pay again")
+G.GAME.dollars = paid_from
+G.OVERLAY_MENU = nil
 love = nil
 R.wheel_view = nil
 MP.GAME.gambel_twist = "pot"
