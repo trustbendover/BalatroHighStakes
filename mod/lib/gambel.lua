@@ -171,6 +171,7 @@ function R.reset()
 		MP.GAME.gambel_applied_spin = nil
 		MP.GAME.gambel_applied_ante = nil
 		MP.GAME.gambel_spin_delta = nil
+		MP.GAME.gambel_committed = nil
 	end
 	if R.drop_cards then R.drop_cards(R.double_view) end
 	R.double_view = nil
@@ -347,7 +348,8 @@ function R.arm_discard()
 	R.sync_state()
 end
 
-function R.play_wheel(msg, quiet)
+--- hold = true: the label only. Money, jokers and tags wait until the wheel has stopped.
+function R.play_wheel(msg, quiet, hold)
 	local plan = R.prize_plan(msg.id, {
 		plain_joker = plain_joker() ~= nil,
 		mortal_joker = mortal_joker() ~= nil,
@@ -360,43 +362,81 @@ function R.play_wheel(msg, quiet)
 		return text
 	end
 	if plan.kind == "cash" then
-		if msg.id ~= "cash" then R.apply_delta(plan.amount or 0) end
+		if not hold and msg.id ~= "cash" then R.apply_delta(plan.amount or 0) end
 		return say("+$" .. tostring(plan.amount or msg.amount or 0))
 	elseif plan.kind == "tax" then
-		if msg.id ~= "tax" then R.apply_delta(-(plan.amount or 4)) end
+		if not hold and msg.id ~= "tax" then R.apply_delta(-(plan.amount or 4)) end
 		return say("-$" .. tostring(plan.amount or 4))
 	elseif plan.kind == "edition" then
 		local card = plain_joker()
 		local pick = WHEEL_EDITIONS[R.roll(seed, ante, "edition", #WHEEL_EDITIONS)]
 		if card and card.set_edition and pick then
-			pcall(function()
+			if not hold then pcall(function()
 				local edition = {}
 				if pick.foil then edition.foil = true
 				elseif pick.holo then edition.holo = true
 				else edition.polychrome = true end
 				G.CONTROLLER.locks.edition = false
 				card:set_edition(edition, true, true)
-			end)
+			end) end
 			return say(L(pick.key, pick.label))
 		end
-		R.apply_delta(8)
+		if not hold then R.apply_delta(8) end
 		return say("+$8")
 	elseif plan.kind == "tag" then
 		local key = WHEEL_TAGS[R.roll(seed, ante, "tag", #WHEEL_TAGS)]
-		if add_tag and Tag and key then pcall(function() add_tag(Tag(key)) end) end
+		if not hold and add_tag and Tag and key then pcall(function() add_tag(Tag(key)) end) end
 		return say(L("k_gambel_tag", "Tag"))
 	elseif plan.kind == "discard" then
-		R.arm_discard()
+		if not hold then R.arm_discard() end
 		return say(L("k_gambel_discard", "-1 discard next round"))
 	elseif plan.kind == "perish" then
 		local card = mortal_joker()
 		local stuck = false
-		if card and card.set_perishable then
+		if not hold and card and card.set_perishable then
 			stuck = pcall(function() card:set_perishable(true) end)
+		elseif hold and card and card.set_perishable then
+			stuck = true
 		end
 		if stuck then return say(L("k_gambel_perish", "Perishable")) end
-		R.apply_delta(-math.min(4, dollars()))
+		if not hold then R.apply_delta(-math.min(4, dollars())) end
 		return say("-$4")
+	end
+end
+
+--- One payout per result. A second copy of the same host message does nothing.
+function R.bet_signature(msg)
+	if type(msg) ~= "table" then return "" end
+	return table.concat({
+		tostring(msg.kind or ""), tostring(msg.id or ""), tostring(msg.ante or ""),
+		tostring(msg.delta or ""), tostring(msg.won), tostring(msg.stake or ""), tostring(msg.drawn or ""),
+	}, "|")
+end
+
+function R.commit_personal(msg)
+	if type(msg) ~= "table" or msg.ok == false then return end
+	MP.GAME = MP.GAME or {}
+	local sig = R.bet_signature(msg)
+	MP.GAME.gambel_committed = MP.GAME.gambel_committed or {}
+	if MP.GAME.gambel_committed[sig] then return end
+	MP.GAME.gambel_committed[sig] = true
+	if msg.kind == "double" or msg.id == "cash" or msg.id == "tax" or msg.won ~= nil then
+		R.apply_delta(msg.delta)
+	end
+	if msg.id and msg.kind ~= "double" and msg.won == nil then
+		R.play_wheel(msg, true)
+	end
+end
+
+local REVEAL_BEAT = 0.35
+
+function R.release_wheel(view)
+	if not view or view.reward_done then return end
+	view.reward_done = true
+	if view.pending_msg then R.commit_personal(view.pending_msg) end
+	if view.pending_label and not view.announced then
+		view.announced = true
+		R.flash(view.pending_label)
 	end
 end
 
@@ -417,23 +457,36 @@ function R.apply_bet(msg)
 	MP.GAME.gambel_bet_for = G and G.GAME and G.GAME.round_resets and tonumber(G.GAME.round_resets.ante) or MP.GAME.gambel_bet_for
 	R.mirror_shop_used()
 	R.mute_shop_buttons()
-	if msg.kind == "double" or msg.id == "cash" or msg.id == "tax" or msg.won ~= nil then
-		R.apply_delta(msg.delta)
-	end
 	local line
 	if msg.won == true then line = "+$" .. tostring(msg.stake or "")
 	elseif msg.won == false then line = "-$" .. tostring(msg.stake or "") end
-	local showing = R.double_view and R.double_view.picked and (msg.kind == "double" or msg.drawn) and G and G.OVERLAY_MENU
-	if line and not showing then
+	-- The host answer can arrive while this client's wheel or card is still moving.
+	-- Keep the payout off the screen until that animation has finished.
+	local spinning = R.wheel_view and R.wheel_view.spinning and G and G.OVERLAY_MENU and msg.id
+	local showing = R.double_view and R.double_view.picked and (msg.kind == "double" or msg.drawn or msg.won ~= nil) and G and G.OVERLAY_MENU
+	if spinning then
+		R.wheel_view.pending_msg = msg
+		R.wheel_view.reward_done = false
+		R.wheel_view.beat = 0
+		R.arm_wheel(msg, R.play_wheel(msg, true, true))
+		R.clear_shop()
+		return
+	end
+	if showing then
+		R.double_view.pending_msg = msg
+		R.reveal_double(msg, line)
+		R.clear_shop()
+		return
+	end
+	R.commit_personal(msg)
+	if line then
 		local title = msg.won and L("b_gambel_double", "Double or Nothing") or L("k_gambel_house", "The House holds")
 		R.flash(title .. " " .. line)
-	elseif msg.id and not showing then
-		local spinning = R.wheel_view and R.wheel_view.spinning and G and G.OVERLAY_MENU
-		if spinning then R.arm_wheel(msg, R.play_wheel(msg, true))
-		else R.play_wheel(msg) end
+	elseif msg.id then
+		local label = R.play_wheel(msg, true, true)
+		if label then R.flash(label) end
 	end
-	if showing then R.reveal_double(msg, line)
-	elseif R.double_view and R.double_view.picked then R.double_view = nil end
+	if R.double_view and R.double_view.picked then R.double_view = nil end
 	R.clear_shop()
 end
 
@@ -533,6 +586,10 @@ end
 function R.close_double()
 	local view = R.double_view
 	local flip = view and view.flip
+	if view and view.pending_msg and not view.reward_done then
+		view.reward_done = true
+		R.commit_personal(view.pending_msg)
+	end
 	if flip and not flip.done and flip.line and flip.line ~= "" then
 		R.flash(flip.line)
 	end
@@ -572,7 +629,9 @@ function R.reveal_double(msg, line)
 	local view = R.double_view
 	if not view then return end
 	local suit = msg and msg.suit
-	if suit ~= "H" and suit ~= "D" and suit ~= "S" and suit ~= "C" then
+	if msg and msg.drawn == "house" then
+		suit = "0"
+	elseif suit ~= "H" and suit ~= "D" and suit ~= "S" and suit ~= "C" then
 		suit = (msg and msg.drawn == "black") and "S" or "H"
 	end
 	local key = suit .. "_A"
@@ -621,9 +680,9 @@ function R.tick_double(dt)
 	if not flip.swapped and flip.t >= turn * 0.5 then
 		flip.swapped = true
 		view.face = "front"
-		view.pip = "A"
+		view.pip = flip.suit == "0" and "0" or "A"
 		view.suit_mark = flip.suit
-		local def = G and G.P_CARDS and G.P_CARDS[flip.key]
+		local def = flip.suit ~= "0" and G and G.P_CARDS and G.P_CARDS[flip.key]
 		if card and def then
 			pcall(function()
 				R.with_classic_suits(function()
@@ -660,6 +719,10 @@ function R.tick_double(dt)
 			R.mute_ace(card, view.area)
 		end
 		view.flip = nil
+		if view.pending_msg and not view.reward_done then
+			view.reward_done = true
+			R.commit_personal(view.pending_msg)
+		end
 		if flip.line and flip.line ~= "" then R.toast(flip.line) end
 		-- Rebuild once. Hiding a sibling row leaves a blank gap in Balatro's UIBox.
 		R.reshow_double()
@@ -669,6 +732,7 @@ end
 function R.tick(dt)
 	R.tick_double(dt)
 	R.tick_wheel(dt)
+	R.tick_wheel_beat(dt)
 end
 
 function R.outcome_from(msg, line)
@@ -692,6 +756,7 @@ function R.finish_double(line)
 end
 
 function R.ace_name(suit)
+	if suit == "0" then return L("k_gambel_house_zero", "House") end
 	local keys = { H = "k_gambel_ace_h", D = "k_gambel_ace_d", S = "k_gambel_ace_s", C = "k_gambel_ace_c" }
 	local fb = { H = "Ace of Hearts", D = "Ace of Diamonds", S = "Ace of Spades", C = "Ace of Clubs" }
 	return L(keys[suit] or "", fb[suit] or "")
@@ -700,8 +765,9 @@ end
 local function ace_fallback(view)
 	local front = view.face == "front"
 	local red = view.suit_mark == "H" or view.suit_mark == "D"
-	local ink = front and (red and { 0.86, 0.16, 0.18, 1 } or { 0.08, 0.08, 0.1, 1 }) or { 0.95, 0.95, 0.98, 1 }
-	local paper = front and { 0.96, 0.94, 0.88, 1 } or { 0.12, 0.28, 0.62, 1 }
+	local house = view.suit_mark == "0"
+	local ink = front and (house and { 0.45, 0.28, 0.05, 1 } or red and { 0.86, 0.16, 0.18, 1 } or { 0.08, 0.08, 0.1, 1 }) or { 0.95, 0.95, 0.98, 1 }
+	local paper = front and (house and { 0.93, 0.78, 0.28, 1 } or { 0.96, 0.94, 0.88, 1 }) or { 0.12, 0.28, 0.62, 1 }
 	return { n = G.UIT.C, config = { align = "cm", minw = 1.7, minh = 2.35, r = 0.08, colour = paper, emboss = 0.08 }, nodes = {
 		{ n = G.UIT.R, config = { align = "cm" }, nodes = {
 			{ n = G.UIT.T, config = { ref_table = view, ref_value = "pip", scale = 0.7, colour = ink, shadow = true } },
@@ -1269,7 +1335,8 @@ function R.arm_wheel(msg, label)
 		view.show_close = true
 		view.result = label or ""
 		view.announced = true
-		if label then R.flash(label) end
+		if view.pending_msg then R.release_wheel(view)
+		elseif label then R.flash(label) end
 	end
 end
 
@@ -1300,11 +1367,16 @@ function R.tick_wheel(dt)
 		view.spinning = false
 		view.show_close = true
 		view.result = view.pending_label or ""
-		if view.pending_label and not view.announced then
-			view.announced = true
-			R.flash(view.pending_label)
-		end
+		return
 	end
+end
+
+-- After the wheel has stopped, keep the payout back for a short beat.
+function R.tick_wheel_beat(dt)
+	local view = R.wheel_view
+	if not view or not view.landed or view.reward_done or not view.pending_msg then return end
+	view.beat = (view.beat or 0) + (tonumber(dt) or 0)
+	if view.beat >= REVEAL_BEAT then R.release_wheel(view) end
 end
 
 function R.wheel_definition()
@@ -1561,7 +1633,9 @@ function R.register_ui()
 			if G.STATE == G.STATES.SHOP and MP.GAMBEL.place_shop then MP.GAMBEL.place_shop() end
 			local wheel = MP.GAMBEL.wheel_view
 			if wheel and not G.OVERLAY_MENU then
-				if wheel.pending_label and not wheel.announced then
+				if wheel.pending_msg and not wheel.reward_done and MP.GAMBEL.release_wheel then
+					MP.GAMBEL.release_wheel(wheel)
+				elseif wheel.pending_label and not wheel.announced then
 					wheel.announced = true
 					MP.GAMBEL.flash(wheel.pending_label)
 				end

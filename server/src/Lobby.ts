@@ -383,6 +383,19 @@ class Lobby {
 		return true;
 	};
 
+	/** One row per client id, and per hardware id when the mod sent one. */
+	collapsePlayers = () => {
+		const seen = new Set<string>();
+		const next: Client[] = [];
+		for (const p of this.players) {
+			const key = p.connectionId ? `c:${p.connectionId}` : `i:${p.id}`;
+			if (seen.has(key)) { p.setLobby(null); continue; }
+			seen.add(key);
+			next.push(p);
+		}
+		this.players = next;
+	};
+
 	join = (client: Client) => {
 		if (this.isInGame) {
 			const name = baseName(client.username);
@@ -409,6 +422,24 @@ class Lobby {
 				return;
 			}
 			client.sendAction({ action: "error", message: "Lobby is full." });
+			return;
+		}
+		this.collapsePlayers();
+		const mine = this.players.findIndex((p) => p.id === client.id || (client.connectionId != null && p.connectionId === client.connectionId));
+		if (mine >= 0) {
+			const old = this.players[mine];
+			if (old !== client) {
+				old.setLobby(null);
+				this.players[mine] = client;
+				client.isReadyLobby = false;
+			}
+			client.eliminated = false;
+			client.setLobby(this);
+			this.handyAllowMPExtension.set(client.id, false);
+			client.sendAction({ action: "joinedLobby", code: this.code, type: this.gameMode, reconnectToken: client.reconnectToken });
+			client.sendAction({ action: "lobbyOptions", gamemode: this.gameMode, ...this.options });
+			this.broadcastLobbyInfo();
+			this.chatSync(client);
 			return;
 		}
 		if (this.players.length >= this.maxPlayers) {
@@ -959,6 +990,12 @@ class Lobby {
 	 */
 	tryResolvePvP = () => {
 		if (!this.isInGame || !this.blindActive) return;
+		this.collapsePlayers();
+		this.players = this.players.filter((p) => {
+			const held = this.disconnectedSlots.some((s) => s.old !== p && (s.old.id === p.id || (p.connectionId != null && s.old.connectionId === p.connectionId)));
+			if (held && !p.spectator && !p.pvpDone && !p.playedThisBlind && p.handsLeft >= 4) { p.setLobby(null); return false; }
+			return true;
+		});
 		// Away / sitting-out players are skipped, so nobody waits forever
 		const alive = this.participants();
 		if (alive.length === 0) return;

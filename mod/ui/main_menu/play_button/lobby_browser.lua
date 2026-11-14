@@ -148,21 +148,36 @@ function G.FUNCS.mp_browser_next(e)
 	MP.BROWSER.redraw()
 end
 
-local function text_col(text, scale, maxw, minw, colour)
+-- Shared column widths. minw and maxw match so a short header cannot sit
+-- left of a longer value, and a Join button cannot grow past the panel.
+local COL = { host = 2.45, mode = 2.05, count = 1.2, state = 1.85, act = 1.6 }
+local TABLE_W = COL.host + COL.mode + COL.count + COL.state + COL.act
+
+local function cell(key, text, scale, colour)
+	local w = COL[key]
+	local inner = w - 0.08
 	return {
 		n = G.UIT.C,
-		config = { align = "cm", minw = minw, padding = 0.02 },
+		config = { align = "cm", minw = w, maxw = w, padding = 0, mp_col = key },
 		nodes = {
 			{
 				n = G.UIT.T,
 				config = {
-					text = clip(text, scale, maxw),
+					text = clip(text, scale, inner),
 					scale = scale,
 					colour = colour or G.C.UI.TEXT_LIGHT,
-					maxw = maxw,
+					maxw = inner,
 				},
 			},
 		},
+	}
+end
+
+local function action_cell(node)
+	return {
+		n = G.UIT.C,
+		config = { align = "cm", minw = COL.act, maxw = COL.act, padding = 0, mp_col = "act" },
+		nodes = { node },
 	}
 end
 
@@ -228,17 +243,19 @@ function G.UIDEF.mp_lobby_browser()
 			shown = B.rows
 		end
 		B.page = page
-		body[#body + 1] = {
+		local muted = G.C.UI.TEXT_INACTIVE or G.C.UI.TEXT_LIGHT
+		local header = {
 			n = G.UIT.R,
-			config = { align = "cm", padding = 0.02 },
+			config = { align = "cl", padding = 0, minw = TABLE_W, maxw = TABLE_W },
 			nodes = {
-				text_col(loc("k_browser_host", "Host"), 0.28, 3.0, 3.0, G.C.UI.TEXT_INACTIVE or G.C.UI.TEXT_LIGHT),
-				text_col(loc("k_browser_mode", "Mode"), 0.28, 2.4, 2.4, G.C.UI.TEXT_INACTIVE or G.C.UI.TEXT_LIGHT),
-				text_col(loc("k_browser_count", "Players"), 0.28, 1.3, 1.3, G.C.UI.TEXT_INACTIVE or G.C.UI.TEXT_LIGHT),
-				text_col(loc("k_browser_state", "Status"), 0.28, 2.2, 2.2, G.C.UI.TEXT_INACTIVE or G.C.UI.TEXT_LIGHT),
-				text_col("", 0.28, 1.8, 1.8),
+				cell("host", loc("k_browser_host", "Host"), 0.28, muted),
+				cell("mode", loc("k_browser_mode", "Mode"), 0.28, muted),
+				cell("count", loc("k_browser_count", "Players"), 0.28, muted),
+				cell("state", loc("k_browser_state", "Status"), 0.28, muted),
+				cell("act", "", 0.28, muted),
 			},
 		}
+		local blocks = { header }
 		for _, row in ipairs(shown) do
 			local how, why = nil, row.reason
 			if row.action == "join" or row.action == "watch" then how = row.action
@@ -249,48 +266,77 @@ function G.UIDEF.mp_lobby_browser()
 				local key = "mp_browser_" .. how .. "_" .. tostring(row.id)
 				G.FUNCS[key] = function() MP.BROWSER.press(row.id, how) end
 				local label = how == "watch" and loc("b_browser_watch", "Watch") or loc("b_browser_join", "Join")
-				action_node = UIBox_button({
+				action_node = action_cell(UIBox_button({
 					button = key,
 					label = { label },
-					minw = 1.7,
-					minh = 0.45,
-					scale = 0.32,
+					minw = COL.act - 0.2,
+					minh = 0.42,
+					scale = 0.28,
 					colour = how == "watch" and G.C.BLUE or G.C.GREEN,
 					ref_table = { id = row.id, how = how },
-				})
+				}))
 			else
 				local reason = (why == "full" and loc("k_browser_full", "Full"))
 					or (why == "playing" and loc("k_browser_no_watch", "No watch"))
 					or loc("k_browser_closed", "Closed")
-				action_node = text_col(reason, 0.28, 1.8, 1.8, G.C.UI.TEXT_INACTIVE or G.C.UI.TEXT_LIGHT)
+				action_node = cell("act", reason, 0.26, muted)
 			end
-			body[#body + 1] = {
+			local detail_w = TABLE_W - 0.16
+			blocks[#blocks + 1] = {
 				n = G.UIT.R,
-				config = { align = "cm", padding = 0.02 },
-				nodes = {
-					text_col(name, 0.32, 3.0, 3.0),
-					text_col(MP.BROWSER.mode_text(row), 0.32, 2.4, 2.4),
-					text_col(tostring(row.players) .. "/" .. tostring(row.max), 0.32, 1.3, 1.3),
-					text_col(MP.BROWSER.state_text(row), 0.32, 2.2, 2.2),
-					action_node,
-				},
-			}
-			body[#body + 1] = {
-				n = G.UIT.R,
-				config = { align = "cm", padding = 0.01 },
+				config = { align = "cm", padding = 0, minh = 0.72, minw = TABLE_W, maxw = TABLE_W },
 				nodes = {
 					{
-						n = G.UIT.T,
-						config = {
-							text = clip(detail_line(row), 0.26, 10),
-							scale = 0.26,
-							colour = G.C.UI.TEXT_INACTIVE or G.C.UI.TEXT_LIGHT,
-							maxw = 10,
+						n = G.UIT.C,
+						config = { align = "tm", minw = TABLE_W, maxw = TABLE_W, padding = 0 },
+						nodes = {
+							{
+								n = G.UIT.R,
+								config = { align = "cl", padding = 0, minw = TABLE_W, maxw = TABLE_W },
+								nodes = {
+									cell("host", name, 0.32),
+									cell("mode", MP.BROWSER.mode_text(row), 0.32),
+									cell("count", tostring(row.players) .. "/" .. tostring(row.max), 0.32),
+									cell("state", MP.BROWSER.state_text(row), 0.32),
+									action_node,
+								},
+							},
+							{
+								n = G.UIT.R,
+								config = { align = "cl", padding = 0, minw = TABLE_W, maxw = TABLE_W, mp_detail = true },
+								nodes = {
+									{
+										n = G.UIT.C,
+										config = { minw = 0.12, maxw = 0.12 },
+										nodes = {},
+									},
+									{
+										n = G.UIT.T,
+										config = {
+											text = clip(detail_line(row), 0.24, detail_w),
+											scale = 0.24,
+											colour = muted,
+											maxw = detail_w,
+										},
+									},
+								},
+							},
 						},
 					},
 				},
 			}
 		end
+		body[#body + 1] = {
+			n = G.UIT.R,
+			config = { align = "cm", padding = 0, minw = TABLE_W, maxw = TABLE_W },
+			nodes = {
+				{
+					n = G.UIT.C,
+					config = { align = "tm", minw = TABLE_W, maxw = TABLE_W, padding = 0 },
+					nodes = blocks,
+				},
+			},
+		}
 		if pages > 1 then
 			body[#body + 1] = {
 				n = G.UIT.R,
@@ -347,11 +393,6 @@ function G.UIDEF.mp_lobby_browser()
 		n = G.UIT.R,
 		config = { align = "cm", padding = 0.08 },
 		nodes = {
-			UIBox_button({
-				button = "play_options",
-				label = { loc("b_browser_back", "Back") },
-				minw = 2.4, minh = 0.5, scale = 0.35, colour = G.C.RED,
-			}),
 			UIBox_button({
 				button = "mp_browser_refresh",
 				label = { loc("b_browser_refresh", "Refresh") },

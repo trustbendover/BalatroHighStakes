@@ -469,7 +469,10 @@ for _, lang in ipairs({ "en-us", "nl" }) do
 	MP.BROWSER.page = 1
 	local loading = G.UIDEF.mp_lobby_browser()
 	local lt = texts(loading)
-	ok(lt:find(localize("k_browser_loading"), 1, true) and #buttons(loading) == 2, lang .. ": loading, with Back and Refresh only")
+	local load_buttons = buttons(loading)
+	local inner_back = 0
+	for _, b in ipairs(load_buttons) do if b.config.button == "play_options" then inner_back = inner_back + 1 end end
+	ok(lt:find(localize("k_browser_loading"), 1, true) and #load_buttons == 1 and load_buttons[1].config.button == "mp_browser_refresh" and inner_back == 0 and loading.config.back == "play_options", lang .. ": loading shows Refresh, and Back is only the overlay button")
 	MP.BROWSER.phase = "empty"
 	local empty_ui = texts(G.UIDEF.mp_lobby_browser())
 	ok(empty_ui:find(localize("k_browser_empty"), 1, true), lang .. ": empty list says there are no public lobbies")
@@ -502,6 +505,25 @@ for _, lang in ipairs({ "en-us", "nl" }) do
 	local joins_bt = 0
 	for _, b in ipairs(buttons(page1)) do if tostring(b.config.button):find("^mp_browser_join_") then joins_bt = joins_bt + 1 end end
 	ok(joins_bt >= 1, lang .. ": Join is a button")
+	local function col_rows(node, out)
+		out = out or {}
+		if type(node) ~= "table" then return out end
+		local cols = {}
+		for _, c in ipairs(node.nodes or {}) do
+			if c.config and c.config.mp_col then cols[c.config.mp_col] = c.config end
+		end
+		if cols.host and cols.mode and cols.act then out[#out + 1] = cols end
+		for _, c in ipairs(node.nodes or {}) do col_rows(c, out) end
+		return out
+	end
+	local cols = col_rows(page1)
+	ok(#cols >= 2, lang .. ": header and a lobby row share column tags")
+	for _, key in ipairs({ "host", "mode", "count", "state", "act" }) do
+		ok(cols[1][key] and cols[2][key] and cols[1][key].minw == cols[2][key].minw and cols[1][key].maxw == cols[2][key].maxw and cols[1][key].minw == cols[1][key].maxw, lang .. ": " .. key .. " column is fixed and shared")
+	end
+	local detail = UM.find(page1, function(n) return n.config and n.config.mp_detail end)[1]
+	ok(detail and detail.config.align == "cl", lang .. ": the settings line is left-aligned under its row")
+	ok(not t1:find(("W"):rep(24), 1, true), lang .. ": a long host name is truncated")
 	local _, issues = UM.measure(page1)
 	ok(#issues == 0, lang .. ": page 1 fits" .. (#issues > 0 and (" " .. issues[1]) or ""))
 	G.FUNCS.mp_browser_next()

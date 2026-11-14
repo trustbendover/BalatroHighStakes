@@ -25,6 +25,17 @@ G.WHEEL = {
 	{ id = "discard" },
 	{ id = "perish" },
 }
+-- How often each wedge is drawn, in the same order. Sum 100.
+-- Old draw was 1/7 each. Cash-only expected value was (8+20-4)/7 = +$3.43.
+-- Gameplay values below price a tag, an edition, a lost discard and a perishable
+-- at about their cash fallback. Weights 5,6,6,7,33,23,20 make that value -$0.41
+-- per spin (-4.1% of a $10 reference, the stake of a $20 Double or Nothing).
+G.WHEEL_WEIGHT = { 5, 6, 6, 7, 33, 23, 20 }
+G.WHEEL_VALUE = { 8, 20, 4, 8, -4, -3, -4 }
+-- 37 pockets, one of them the house (roulette's single zero). A chosen colour
+-- wins 18/37 = 48.65% of the time. Even money then returns -1/37 of the stake.
+G.FLIP_POCKETS = 37
+G.FLIP_RED = 18
 
 function G.is_mode(mode)
 	mode = tostring(mode or "")
@@ -248,27 +259,55 @@ end
 
 local ACES = { "H", "D", "S", "C" }
 
---- One Ace. Hearts and diamonds are red, spades and clubs are black.
---- One 32-bit mix picks the suit, so each suit is its own card and the colour
---- stays about half and half. A missing or other guess still wins on red.
+--- One pocket in 0..36. 0 is the house zero. 1..18 are red, 19..36 are black.
+--- 2^32 mod 37 leaves a remainder of 7, so the bias is 7/2^32 and is not a player edge.
+function G.flip_pocket(seed, id, ante)
+	return mix(seed, ante, "ace:" .. tostring(id)) % G.FLIP_POCKETS
+end
+
+--- One Ace, plus a rare house zero. Hearts and diamonds are red, spades and clubs
+--- are black. The zero is not a colour: both guesses lose, and the buttons stay
+--- red and black. A missing or other guess still wins only on red.
 --- The guess is not part of the mix, so it cannot steer the card.
 function G.flip(seed, id, ante, money, choice)
 	local stake = G.stake(money)
 	if stake < 1 then return { ok = false, reason = "low", stake = 0, delta = 0, money = G.money(money) } end
-	local suit = ACES[(mix(seed, ante, "ace:" .. tostring(id)) % 4) + 1]
-	local drawn = (suit == "H" or suit == "D") and "red" or "black"
+	local pocket = G.flip_pocket(seed, id, ante)
+	local suit, drawn
+	if pocket == 0 then
+		suit, drawn = "0", "house"
+	else
+		local red = pocket <= G.FLIP_RED
+		local odd = pocket % 2 == 1
+		if red then suit, drawn = odd and "H" or "D", "red"
+		else suit, drawn = odd and "S" or "C", "black" end
+	end
 	if choice ~= "red" and choice ~= "black" then choice = nil end
-	local won = choice and (choice == drawn) or (not choice and drawn == "red")
+	local won = drawn ~= "house" and ((choice and choice == drawn) or (not choice and drawn == "red"))
 	won = won and true or false
 	local delta = won and stake or -stake
 	return {
 		ok = true, won = won, stake = stake, delta = delta, money = G.money(money) + delta,
-		drawn = drawn, suit = suit, choice = choice,
+		drawn = drawn, suit = suit, choice = choice, house = drawn == "house" or nil,
 	}
 end
 
+--- Weighted wedge. The visual wheel stays seven slices; the weights are the odds.
+function G.wheel_pick(seed, id, ante)
+	local total = 0
+	for _, w in ipairs(G.WHEEL_WEIGHT) do total = total + w end
+	if total < 1 then return 1 end
+	local r = G.roll(seed, ante, "wheelw:" .. tostring(id), total)
+	local acc = 0
+	for i, w in ipairs(G.WHEEL_WEIGHT) do
+		acc = acc + w
+		if r <= acc then return i end
+	end
+	return #G.WHEEL
+end
+
 function G.wheel(seed, id, ante, money)
-	local prize = G.WHEEL[G.roll(seed, ante, "wheel:" .. tostring(id), #G.WHEEL)]
+	local prize = G.WHEEL[G.wheel_pick(seed, id, ante)]
 	local delta = 0
 	if prize.id == "cash" then delta = prize.amount or 0
 	elseif prize.id == "tax" then delta = -math.min(prize.amount or G.TAX, G.money(money)) end

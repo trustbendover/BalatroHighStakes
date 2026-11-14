@@ -7,29 +7,40 @@ local function presence_label(player)
 	return MP.PRESENCE.label(kind, localize, player.grace)
 end
 
+local NAME_W, STATUS_W = 1.85, 1.45
+
+local function clip_name(text, scale, maxw)
+	text = tostring(text or "")
+	if MP.FIT and MP.FIT.ellipsize then return MP.FIT.ellipsize(text, scale, maxw) end
+	if #text > 18 then return text:sub(1, 16) .. ".." end
+	return text
+end
+
 local function create_player_info_row(player, player_type, text_scale)
 	if not player or not player.username then return nil end
 	player.display_name = (MP.TEAMS and MP.TEAMS.seat_label) and MP.TEAMS.seat_label(player) or player.username
 	player.status_text = presence_label(player)
+	local name_scale = text_scale * (MP.THREEP.seat_count() > 4 and 0.65 or 0.8)
+	local status_scale = text_scale * 0.48
+	local name = clip_name(player.display_name, name_scale, NAME_W - 0.08)
+	local status = player.status_text ~= "" and clip_name(player.status_text, status_scale, STATUS_W - 0.06) or ""
 
-	return MP.UI.UTILS.create_row({ padding = MP.THREEP.seat_count() > 4 and 0.03 or 0.1, align = "cm" }, {
-        MP.UI.UTILS.create_column({ align = "cm", maxw = 3 }, {
-            MP.UI.UTILS.create_text_node(nil, {
-                ref_table = player,
-                ref_value = "display_name",
-                scale = text_scale * (MP.THREEP.seat_count() > 4 and 0.65 or 0.8),
+	return MP.UI.UTILS.create_row({ padding = MP.THREEP.seat_count() > 4 and 0.03 or 0.06, align = "cl" }, {
+        MP.UI.UTILS.create_column({ align = "cl", minw = NAME_W, maxw = NAME_W }, {
+            MP.UI.UTILS.create_text_node(name, {
+                scale = name_scale,
                 colour = G.C.UI.TEXT_LIGHT,
-                maxw = 3.5
+                maxw = NAME_W - 0.08,
             }),
-            player.status_text ~= "" and MP.UI.UTILS.create_text_node(nil, {
-                ref_table = player,
-                ref_value = "status_text",
-                scale = text_scale * 0.45,
-                colour = G.C.UI.TEXT_INACTIVE or G.C.UI.TEXT_LIGHT,
-                maxw = 3.5
-            }) or nil,
         }),
-		MP.UI.UTILS.create_blank(0.1, 0.1),
+        MP.UI.UTILS.create_column({ align = "cl", minw = STATUS_W, maxw = STATUS_W }, {
+            MP.UI.UTILS.create_text_node(status, {
+                scale = status_scale,
+                colour = G.C.UI.TEXT_INACTIVE or G.C.UI.TEXT_LIGHT,
+                maxw = STATUS_W - 0.06,
+            }),
+        }),
+		MP.UI.UTILS.create_blank(0.08, 0.1),
 		player.hash and UIBox_button({
 			id = player_type .. "_hash",
 			button = "view_" .. player_type .. "_hash",
@@ -45,7 +56,7 @@ local function create_player_info_row(player, player_type, text_scale)
 end
 
 function MP.UI.create_players_section(text_scale)
-	return MP.UI.UTILS.create_column({ align = "tm", minw = 2.65 }, {
+	return MP.UI.UTILS.create_column({ align = "tm", minw = NAME_W + STATUS_W + 0.2 }, {
 		MP.UI.UTILS.create_row({ align = "cm", padding = 0.15 }, {
 			MP.UI.UTILS.create_text_node(localize("k_connect_player"), {
 				scale = text_scale * 0.8,
@@ -58,19 +69,29 @@ end
 
 --- One row per filled seat (up to 8). Seat 1 is the host.
 function MP.UI.players_section_rows(text_scale)
-	local rows = {}
+	local rows, seen = {}, {}
+	local function take(player, kind)
+		if not player or not player.username then return nil end
+		local key = (type(player.sid) == "string" and player.sid ~= "" and ("s:" .. player.sid))
+			or (player.id and ("i:" .. tostring(player.id)))
+			or ("n:" .. tostring(player.username))
+		if seen[key] then return nil end
+		seen[key] = true
+		return create_player_info_row(player, kind, text_scale)
+	end
 	for i = 1, 8 do
 		local seat = (MP.LOBBY.seats and MP.LOBBY.seats[i]) or (i == 1 and MP.LOBBY.host) or (i == 2 and MP.LOBBY.guest) or (i == 3 and MP.LOBBY.third)
-		local row = create_player_info_row(seat, "seat" .. i, text_scale)
+		local row = take(seat, "seat" .. i)
 		if row then rows[#rows + 1] = row end
 	end
 	-- Held seats are not in the seated list. Show them with the same status words.
 	for i, a in ipairs(MP.LOBBY.away or {}) do
 		if type(a) == "table" and a.username then
 			local name = tostring(a.username):gsub("~.*$", "")
-			rows[#rows + 1] = create_player_info_row({
-				username = name, held = true, eliminated = a.eliminated, grace = a.left,
-			}, "away" .. i, text_scale)
+			local row = take({
+				username = name, id = a.id, sid = a.sid, held = true, eliminated = a.eliminated, grace = a.left,
+			}, "away" .. i)
+			if row then rows[#rows + 1] = row end
 		end
 	end
 	-- Teams: the host picks who plays together. On 3v2/4v3 the first seats in that order are the larger side.

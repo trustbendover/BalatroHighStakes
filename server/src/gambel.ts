@@ -13,6 +13,10 @@ export const WHEEL = [
 	{ id: "discard" },
 	{ id: "perish" },
 ] as const;
+/** Same weights as mod/networking/gambel_rules.lua G.WHEEL_WEIGHT. */
+export const WHEEL_WEIGHT = [5, 6, 6, 7, 33, 23, 20] as const;
+export const FLIP_POCKETS = 37;
+export const FLIP_RED = 18;
 
 export type GambelEntry<S> = { id: string; score: S; hands?: number; give?: boolean; room?: boolean };
 
@@ -154,23 +158,48 @@ function mix(seed: unknown, ante: unknown, salt: string): number {
 	return fnv32(s);
 }
 
-/** One Ace. Red is hearts or diamonds, black is spades or clubs.
- *  A missing or other guess still wins on red. The guess is not part of the mix. */
+/** 0 is the house zero, 1..18 red, 19..36 black. Same mix as the Lua host. */
+export function gambelFlipPocket(seed: unknown, id: unknown, ante: unknown): number {
+	return mix(seed, ante, `ace:${id}`) % FLIP_POCKETS;
+}
+
+/** One Ace, plus a rare house zero. Buttons stay red and black.
+ *  A missing or other guess still wins only on red. The guess is not part of the mix. */
 export function gambelFlip(seed: unknown, id: unknown, ante: unknown, money: unknown, choice?: unknown) {
 	const cash = finiteMoney(money);
 	const stake = gambelStake(cash);
 	if (stake < 1) return { ok: false as const, reason: "low" as const, stake: 0, delta: 0, money: cash };
-	const suit = ACES[mix(seed, ante, `ace:${id}`) % 4];
-	const drawn = suit === "H" || suit === "D" ? "red" as const : "black" as const;
+	const pocket = gambelFlipPocket(seed, id, ante);
+	let suit: "H" | "D" | "S" | "C" | "0";
+	let drawn: "red" | "black" | "house";
+	if (pocket === 0) {
+		suit = "0";
+		drawn = "house";
+	} else {
+		const red = pocket <= FLIP_RED;
+		const odd = pocket % 2 === 1;
+		if (red) { suit = odd ? "H" : "D"; drawn = "red"; }
+		else { suit = odd ? "S" : "C"; drawn = "black"; }
+	}
 	const picked = choice === "red" ? "red" as const : choice === "black" ? "black" as const : undefined;
-	const won = picked ? picked === drawn : drawn === "red";
+	const won = drawn !== "house" && (picked ? picked === drawn : drawn === "red");
 	const delta = won ? stake : -stake;
-	return { ok: true as const, won, stake, delta, money: cash + delta, drawn, suit, choice: picked };
+	return { ok: true as const, won, stake, delta, money: cash + delta, drawn, suit, choice: picked, house: drawn === "house" || undefined };
+}
+
+function gambelWheelPick(seed: unknown, id: unknown, ante: unknown): number {
+	const total = WHEEL_WEIGHT.reduce((s, w) => s + w, 0);
+	let r = gambelRoll(seed, ante, `wheelw:${id}`, total);
+	for (let i = 0; i < WHEEL_WEIGHT.length; i++) {
+		r -= WHEEL_WEIGHT[i];
+		if (r <= 0) return i;
+	}
+	return WHEEL.length - 1;
 }
 
 export function gambelWheel(seed: unknown, id: unknown, ante: unknown, money: unknown) {
 	const cash = finiteMoney(money);
-	const prize = WHEEL[gambelRoll(seed, ante, `wheel:${id}`, WHEEL.length) - 1];
+	const prize = WHEEL[gambelWheelPick(seed, id, ante)];
 	let delta = 0;
 	if (prize.id === "cash") delta = prize.amount ?? 0;
 	else if (prize.id === "tax") delta = -Math.min(prize.amount ?? 4, cash);
