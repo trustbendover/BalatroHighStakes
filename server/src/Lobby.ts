@@ -327,6 +327,13 @@ class Lobby {
 		});
 	};
 
+	/** Drop both logs. A rejoin after this only receives the current phase. */
+	clearChat = (view: "lobby" | "match") => {
+		this.chatLobby = [];
+		this.chatMatch = [];
+		this.broadcastAction({ action: "chatState", view, clear: true });
+	};
+
 	sayChat = (client: Client, text: unknown) => {
 		const accepted = acceptChat(text);
 		if (!accepted.ok) {
@@ -815,6 +822,7 @@ class Lobby {
 		this.isInGame = false;
 		this.blindActive = false;
 		this.disconnectedSlots = [];
+		this.clearChat("lobby");
 		return true;
 	};
 
@@ -873,6 +881,7 @@ class Lobby {
 			this.isInGame = false;
 			this.blindActive = false;
 			this.disconnectedSlots = [];
+			this.clearChat("lobby");
 			this.deathmatchBroadcast();
 			return true;
 		}
@@ -886,6 +895,7 @@ class Lobby {
 				this.isInGame = false;
 				this.blindActive = false;
 				this.disconnectedSlots = [];
+				this.clearChat("lobby");
 				return true;
 			}
 			return false;
@@ -897,6 +907,7 @@ class Lobby {
 				this.isInGame = false;
 				this.blindActive = false;
 				this.disconnectedSlots = [];
+				this.clearChat("lobby");
 				return true;
 			}
 			return false;
@@ -907,6 +918,7 @@ class Lobby {
 			this.blindActive = false;
 			this.disconnectedSlots = [];
 			this.winnerId = alive[0]?.id ?? null;
+			this.clearChat("lobby");
 			this.deathmatchBroadcast();
 			return true;
 		}

@@ -295,10 +295,33 @@ function CH.lobby_row()
 	} }
 end
 
+function CH.wipe(view)
+	local R = rules()
+	CH.state = R and R.blank() or { view = "lobby", lobby = {}, match = {} }
+	if view == "match" or view == "lobby" then CH.state.view = view end
+	CH.seen = 0
+	CH.scroll = 0
+	CH._sig = nil
+	pcall(CH.paint_slots)
+end
+
 function CH.apply(msg)
 	local R = rules()
 	if R then CH.state = R.reduce(CH.state, msg) end
-	CH.refresh()
+	if type(msg) == "table" and (msg.action == "chatState" or msg.action == "chatLog") then
+		-- chatState clear and a history sync are not new unread lines.
+		-- Paint immediately: the lobby rebuild often bails while a menu is open,
+		-- which left the previous lines sitting in the shared slot strings.
+		if msg.action == "chatState" and msg.clear then
+			CH.seen = 0
+		else
+			CH.seen = #CH.current()
+		end
+		CH.scroll = 0
+		CH._sig = nil
+		pcall(CH.paint_slots)
+	end
+	CH.refresh(type(msg) == "table" and (msg.action == "chatState" or msg.action == "chatLog"))
 end
 
 --- The hooked field's config is the create_text_input args, which point at CH.draft.
