@@ -18,8 +18,10 @@
 local M = {}
 
 M.CHANNEL = 7
-M.HEARTBEAT = 3
-M.TIMEOUT = 20
+M.HEARTBEAT = 5
+-- Must stay under host-migration FALLBACK_AT (30s). A stall shorter than this
+-- does not close the session; a cut-off guest still falls back at 30s.
+M.TIMEOUT = 24
 M.SELF_STALL = 8 -- our own update gap this long counts as "we were frozen"
 M.JOIN_ACTIONS = { version = true, username = true, joinLobby = true, rejoinLobby = true, connected = true, keepAlive = true }
 M.LOBBY_KEY = "mp3p_code" -- protocol key, kept for compatibility with earlier builds
@@ -147,9 +149,13 @@ function M.new_ffi_backend()
 		for d in tostring(s):gmatch("%d") do v = v * 10 + tonumber(d) end
 		return v
 	end
+	local id_cache = {}
 	local function ident(s)
+		local hit = id_cache[s]
+		if hit then return hit end
 		local id = ffi.new("MP3P_SteamNetworkingIdentity")
 		lib.SteamAPI_SteamNetworkingIdentity_SetSteamID64(id, s2id(s))
+		id_cache[s] = id
 		return id
 	end
 
@@ -402,11 +408,12 @@ function M.new_ffi_backend()
 		return lib.SteamAPI_ISteamNetworkingMessages_SendMessageToUser(net, ident(peer), data, #data, 40, M.CHANNEL) == 1
 	end
 	local msgs = ffi.new("MP3P_SteamNetworkingMessage*[32]")
+	local NONE = {}
 	function B.receive()
+		local n = lib.SteamAPI_ISteamNetworkingMessages_ReceiveMessagesOnChannel(net, M.CHANNEL, msgs, 32)
+		if n <= 0 then return NONE end
 		local out = {}
 		while true do
-			local n = lib.SteamAPI_ISteamNetworkingMessages_ReceiveMessagesOnChannel(net, M.CHANNEL, msgs, 32)
-			if n <= 0 then break end
 			for i = 0, n - 1 do
 				local m = msgs[i]
 				local sid = ffi.cast("uint64_t*", m.m_identityPeer.m_data)[0]
@@ -414,6 +421,8 @@ function M.new_ffi_backend()
 				lib.SteamAPI_SteamNetworkingMessage_t_Release(m)
 			end
 			if n < 32 then break end
+			n = lib.SteamAPI_ISteamNetworkingMessages_ReceiveMessagesOnChannel(net, M.CHANNEL, msgs, 32)
+			if n <= 0 then break end
 		end
 		return out
 	end

@@ -461,10 +461,35 @@ function Server:enemy_info(p, with_score)
 	}
 end
 
-function Server:lobby_info(L)
+function Server:lobby_sig(L)
+	local host = L.players[1]
+	local grace = Core.rejoin_grace(L.options, L.gameMode)
+	local now = self.now()
+	local b = {}
+	b[#b + 1] = (L.isInGame and "1|" or "0|") .. tostring(host and host.id)
+	b[#b + 1] = tostring(L.options.teams_order or "") .. "|" .. tostring(L.options.teams_size or "") .. "|" .. tostring(L.options.teams_format or "")
+	for i, p in ipairs(L.players) do
+		b[#b + 1] = table.concat({
+			i, p.id, p.username, p.modHash or "", p.isCached and 1 or 0, p.isReadyLobby and 1 or 0, p.lives or 0,
+			p.eliminated and 1 or 0, p.spectator and 1 or 0, p.rejoining and 1 or 0, p.team or "",
+		}, ",")
+	end
+	for _, s in ipairs(L.slots) do
+		local spent = s.since and self:grace_spent(s.since, now)
+		local left = (L.isInGame and spent and not s.old.eliminated) and math.max(0, math.floor(grace - spent)) or 0
+		b[#b + 1] = "w," .. tostring(s.old.id) .. "," .. tostring(s.old.lives or 0) .. "," .. left
+	end
+	return table.concat(b, ";")
+end
+
+function Server:lobby_info(L, force)
+	if not L then return end
 	self:dedupe_roster(L)
 	local host = L.players[1]
 	if not host then return end
+	local sig = self:lobby_sig(L)
+	if not force and sig == L.info_sig then return end
+	L.info_sig = sig
 	local players = {}
 	local preview = nil
 	if L.gameMode == "teams" and Core.TEAMS then
@@ -1799,7 +1824,7 @@ function H.rejoinLobby(S, c, a)
 		sendA(c, { action = "rejoinFailed", message = "Could not rejoin lobby. Token invalid or slot expired." })
 	end
 end
-function H.lobbyInfo(S, c) if c.lobby then S:lobby_info(c.lobby) end end
+function H.lobbyInfo(S, c) if c.lobby then S:lobby_info(c.lobby, true) end end
 function H.leaveLobby(S, c) S:leave(c) end
 function H.readyLobby(S, c) c.isReadyLobby = true; if c.lobby then S:lobby_info(c.lobby) end end
 function H.unreadyLobby(S, c) c.isReadyLobby = false; if c.lobby then S:lobby_info(c.lobby) end end
@@ -2085,6 +2110,21 @@ function H.readyBlind(S, c)
 	S:try_start_blind(L)
 end
 function H.unreadyBlind(S, c) c.isReady = false end
+function Server:send_enemy(to, msg)
+	if not to or type(msg) ~= "table" then return end
+	local order = msg.pvpOrder
+	local sig = table.concat({
+		tostring(msg.playerId), tostring(msg.score), tostring(msg.handsLeft), tostring(msg.lives),
+		tostring(msg.ante), tostring(msg.eliminated), tostring(msg.noScore), tostring(msg.skips),
+		tostring(msg.away), tostring(msg.pvpTimerOrder), order and table.concat(order, ",") or "",
+	}, "|")
+	local key = "e:" .. tostring(msg.playerId)
+	to._esig = to._esig or {}
+	if to._esig[key] == sig then return end
+	to._esig[key] = sig
+	sendA(to, msg)
+end
+
 function H.playHand(S, c, a)
 	local L = c.lobby
 	if not L or not L.isInGame or c.eliminated then return end
@@ -2118,8 +2158,8 @@ function H.playHand(S, c, a)
 	for i, p in ipairs(ranking) do order[i] = p.id end
 	for _, o in ipairs(L.players) do
 		if o ~= c then
-			sendA(o, copy(S:enemy_info(c, not hide or o.playedThisBlind), { pvpTimerOrder = order[1] == c.id and "guest" or "host", pvpOrder = order }))
-			sendA(c, copy(S:enemy_info(o, not hide or c.playedThisBlind), { pvpTimerOrder = order[1] == c.id and "host" or "guest", pvpOrder = order }))
+			S:send_enemy(o, copy(S:enemy_info(c, not hide or o.playedThisBlind), { pvpTimerOrder = order[1] == c.id and "guest" or "host", pvpOrder = order }))
+			S:send_enemy(c, copy(S:enemy_info(o, not hide or c.playedThisBlind), { pvpTimerOrder = order[1] == c.id and "host" or "guest", pvpOrder = order }))
 		end
 	end
 	S:try_resolve_pvp(L)
