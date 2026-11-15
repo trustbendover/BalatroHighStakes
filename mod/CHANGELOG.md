@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.3 - Chat resets, and you can watch a player's table
+
+- **Chat.** The lobby chat clears when a match starts. The match chat clears when you return to the lobby, including a normal end, a rematch, and leaving back to the lobby. A rejoin does not replay the previous chat, and the unread count clears too.
+- **Spectate.** Follow a player and see their hand, jokers, consumables, the played cards, chips times mult, money, hands and discards, the blind, and the shop while they are shopping. Board and Stats switch between that table and the old list. You cannot click their cards.
+- **Pins.** Steamodded stays 1.0.0~BETA-1620a. Lovely stays 0.10.0.
+
 ## 0.7.2 - The first hand is dealt
 
 - **Opening hand.** Selecting the first blind no longer skips the draw. Round 1 deals cards in normal modes and in Gambel Time, including a solo game against The House.

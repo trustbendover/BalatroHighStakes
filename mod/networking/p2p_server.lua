@@ -38,7 +38,7 @@ function Core.start_error(mode, n, options)
 	end
 	return nil
 end
-Core.SERVER_VERSION = "0.7.2"
+Core.SERVER_VERSION = "0.7.3"
 Core.STARTING_LIVES = { attrition = 4, showdown = 2, survival = 1, koth = 3, teams = 4, duel = 4, deathmatch = 4, gambel_time = 3 }
 -- Deathmatch: seconds a disconnected player may rejoin before counting as eliminated
 Core.DEATHMATCH_GRACE = 60
