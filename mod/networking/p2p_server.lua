@@ -64,7 +64,8 @@ Core.MAX_SPECTATORS = 8
 Core.SPECTATOR_OK = { username = true, version = true, leaveLobby = true, lobbyInfo = true, keepAlive = true,
 	keepAliveAck = true, stopGame = true, syncClient = true,
 	rejoinLobby = true, -- 0.6.9: "Rejoin" while watching your own held seat
-	chat = true } -- watchers may read and send; the host labels them as watching
+	chat = true, -- watchers may read and send; the host labels them as watching
+	spectateWatch = true, spectateSnap = true } -- watch request, and their own board if someone follows them
 -- relays an eliminated player may still send (end-of-game screens)
 Core.END_GAME_RELAYS = { getEndGameJokers = true, receiveEndGameJokers = true, getNemesisDeck = true,
 	receiveNemesisDeck = true, endGameStatsRequested = true, nemesisEndGameStats = true }
@@ -550,6 +551,8 @@ local function notify_match_over(self, L)
 	for _, p in ipairs(L.players) do
 		if p.spectator then sendA(p, { action = "matchOver", winnerId = L.winnerId }) end
 	end
+	self:chat_reset(L, "lobby")
+	self:pov_reset(L)
 end
 
 function Server:destroy(L)
@@ -1286,6 +1289,7 @@ end
 function Server:leave(c)
 	local L = c.lobby
 	if not L then return end
+	self:pov_drop(L, c.id)
 	-- 0.6.9: leaving a running match through the menu holds the seat exactly like a lost connection
 	-- (grace timer, rejoin by code / Steam / "Rejoin" in the spectator panel); expiry still eliminates
 	if L.isInGame and not c.spectator and not c.eliminated and not L.migration
@@ -1330,6 +1334,7 @@ end
 function Server:disconnect(c)
 	local L = c.lobby
 	if not L then return end
+	self:pov_drop(L, c.id)
 	local _, idx = find(L.players, function(p) return p == c end)
 	if not idx then return end
 	if not L.isInGame or c.spectator then self:leave(c); return end
@@ -1426,6 +1431,7 @@ function Server:reclaim(L, c, slot)
 	end
 	self:lobby_info(L)
 	self:chat_sync(c)
+	self:pov_demand(L, c.id)
 end
 
 function Server:take_over(L, stale)
@@ -1797,6 +1803,13 @@ function H.lobbyInfo(S, c) if c.lobby then S:lobby_info(c.lobby) end end
 function H.leaveLobby(S, c) S:leave(c) end
 function H.readyLobby(S, c) c.isReadyLobby = true; if c.lobby then S:lobby_info(c.lobby) end end
 function H.unreadyLobby(S, c) c.isReadyLobby = false; if c.lobby then S:lobby_info(c.lobby) end end
+function Server:chat_reset(L, view)
+	if not L then return end
+	L.chatLobby, L.chatMatch = {}, {}
+	view = (view == "match") and "match" or "lobby"
+	self:broadcast(L, { action = "chatState", view = view, clear = true })
+end
+
 function Server:chat_sync(c)
 	local L = c and c.lobby
 	if not L or not Core.CHAT then return end
@@ -1807,6 +1820,138 @@ function Server:chat_sync(c)
 		lines[i] = { id = m.id, scope = m.scope, name = m.name, watch = m.watch, text = m.text, col = m.col }
 	end
 	sendA(c, { action = "chatLog", view = view, lines = lines })
+end
+
+local POV_PHASE = { select = true, play = true, shop = true, round = true, pack = true, idle = true, gone = true }
+
+local function pov_find(L, id)
+	if not id or id == "" then return nil end
+	local p = find(L.players, function(x) return x.id == id end)
+	if p then return p end
+	for _, sl in ipairs(L.slots or {}) do
+		if sl.old and sl.old.id == id then return sl.old end
+	end
+	return nil
+end
+
+local function pov_cards(list, n)
+	if type(list) ~= "table" then return nil end
+	local out = {}
+	for i = 1, math.min(n, #list) do
+		local c = list[i]
+		if type(c) == "table" then
+			out[#out + 1] = {
+				k = type(c.k) == "string" and c.k:sub(1, 40) or nil,
+				r = type(c.r) == "string" and c.r:sub(1, 4) or nil,
+				s = type(c.s) == "string" and c.s:sub(1, 1) or nil,
+				e = type(c.e) == "string" and c.e:sub(1, 8) or "",
+				st = type(c.st) == "string" and c.st:sub(1, 8) or "",
+				cost = tonumber(c.cost) and math.floor(tonumber(c.cost)) or nil,
+			}
+		end
+	end
+	return out
+end
+
+function Server:pov_reset(L)
+	if not L then return end
+	local prev = L.povDemand or {}
+	L.povWatch, L.povDemand, L.povCache, L.povLast = {}, {}, {}, {}
+	for id, on in pairs(prev) do
+		if on then
+			local p = find(L.players, function(x) return x.id == id end)
+			if p then sendA(p, { action = "spectateDemand", on = false }) end
+		end
+	end
+end
+
+function Server:pov_demand(L, id)
+	if not L or not id or id == "" then return end
+	local POV = Core.POV
+	local want = POV and POV.wanted(L.povWatch, id) or false
+	if not POV then
+		want = false
+		for _, tid in pairs(L.povWatch or {}) do if tid == id then want = true end end
+	end
+	L.povDemand = L.povDemand or {}
+	local was = L.povDemand[id] and true or false
+	if was == want then return end
+	L.povDemand[id] = want or nil
+	local p = find(L.players, function(x) return x.id == id end)
+	if p then sendA(p, { action = "spectateDemand", on = want }) end
+end
+
+function Server:pov_drop(L, id)
+	if not L or not id then return end
+	local prev = L.povWatch and L.povWatch[id]
+	if L.povWatch then L.povWatch[id] = nil end
+	self:pov_demand(L, prev)
+	if L.povDemand then L.povDemand[id] = nil end
+	local cached = L.povCache and L.povCache[id]
+	if cached then
+		cached.phase = "gone"
+		local POV = Core.POV
+		local ids = POV and POV.recipients(L.players, L.povWatch, id) or {}
+		for _, wid in ipairs(ids) do
+			local p = find(L.players, function(x) return x.id == wid end)
+			if p then sendA(p, cached) end
+		end
+	end
+end
+
+function Server:pov_watch(c, id)
+	local L = c and c.lobby
+	if not L or not L.isInGame then return end
+	if not (c.spectator or c.eliminated) then return end
+	id = type(id) == "string" and id or nil
+	if id == "" then id = nil end
+	local target = id and pov_find(L, id) or nil
+	if not target or target.spectator then id = nil end
+	L.povWatch = L.povWatch or {}
+	local prev = L.povWatch[c.id]
+	L.povWatch[c.id] = id
+	if prev ~= id then
+		self:pov_demand(L, prev)
+		self:pov_demand(L, id)
+	end
+	if id and L.povCache and L.povCache[id] then sendA(c, L.povCache[id]) end
+end
+
+function Server:pov_relay(c, a)
+	local L = c and c.lobby
+	if not L or not L.isInGame or not c.id then return end
+	if not (L.povDemand and L.povDemand[c.id]) then return end
+	local now = self.now()
+	L.povLast = L.povLast or {}
+	local last = L.povLast[c.id]
+	if last and now - last < 0.35 and now ~= last then return end
+	if last and now == last then return end
+	L.povLast[c.id] = now
+	local phase = POV_PHASE[a and a.phase] and a.phase or "idle"
+	local msg = {
+		action = "spectateSnap", playerId = c.id, seq = math.floor(tonumber(a and a.seq) or 0),
+		phase = phase, ante = math.max(1, math.floor(tonumber(a and a.ante) or 1)),
+		blind = type(a and a.blind) == "string" and a.blind:sub(1, 32) or "",
+		money = math.floor(tonumber(a and a.money) or 0),
+		hands = math.max(0, math.floor(tonumber(a and a.hands) or 0)),
+		discards = math.max(0, math.floor(tonumber(a and a.discards) or 0)),
+		score = type(a and a.score) == "string" and a.score:sub(1, 24) or tostring(a and a.score or "0"):sub(1, 24),
+		chips = type(a and a.chips) == "string" and a.chips:sub(1, 24) or "0",
+		mult = type(a and a.mult) == "string" and a.mult:sub(1, 24) or "0",
+		sig = type(a and a.sig) == "string" and a.sig:sub(1, 400) or "",
+		hand = pov_cards(a and a.hand, 12), jokers = pov_cards(a and a.jokers, 10),
+		cons = pov_cards(a and a.cons, 5), played = pov_cards(a and a.played, 8),
+	}
+	if phase == "shop" then msg.shop = pov_cards(a and a.shop, 6) end
+	L.povCache = L.povCache or {}
+	L.povCache[c.id] = msg
+	local POV = Core.POV
+	local ids = POV and POV.recipients(L.players, L.povWatch, c.id) or {}
+	if not POV then return end
+	for _, id in ipairs(ids) do
+		local p = find(L.players, function(x) return x.id == id end)
+		if p then sendA(p, msg) end
+	end
 end
 
 function Server:chat_say(c, text)
@@ -1851,6 +1996,12 @@ function H.gambelBet(S, c, a)
 		id = res.id, stake = res.stake, delta = res.delta, amount = res.amount,
 		drawn = res.drawn, suit = res.suit, choice = res.choice })
 end
+function H.spectateWatch(S, c, a)
+	S:pov_watch(c, a and a.playerId)
+end
+function H.spectateSnap(S, c, a)
+	S:pov_relay(c, a)
+end
 function H.chat(S, c, a)
 	if not c.lobby or not Core.CHAT then return end
 	local text, why = Core.CHAT.accept(a and a.text)
@@ -1873,7 +2024,7 @@ function H.rematch(S, c)
 		return sendA(c, { action = "error", message = "A match is still running." })
 	end
 	S:prepare_rematch(L)
-	S:broadcast(L, { action = "chatState", view = "lobby", clear = false })
+	S:chat_reset(L, "lobby")
 	local config = Core.MATCH and Core.MATCH.complete(L.options, L.gameMode) or nil
 	S:broadcast(L, { action = "rematch", config = config })
 	S:lobby_info(L)
@@ -1899,8 +2050,8 @@ function H.startGame(S, c)
 	L.seed = seed
 	S:reset_players(L)
 	L.isInGame = true
-	L.chatMatch = {}
-	S:broadcast(L, { action = "chatState", view = "match", clear = true })
+	S:pov_reset(L)
+	S:chat_reset(L, "match")
 	local seated = S:seated(L)
 	local config = Core.MATCH and Core.MATCH.complete(L.options, L.gameMode) or nil
 	for _, p in ipairs(seated) do sendA(p, { action = "startGame", deck = "c_multiplayer_1", seed = seed, playerCount = #seated, config = config }) end
@@ -1984,8 +2135,14 @@ function H.failPvPTimer(S, c)
 end
 function H.stopGame(S, c)
 	if not c.lobby then return end
-	-- An eliminated player (or spectator) going back to the lobby must not end the match for the others
-	if c.lobby.isInGame and c.eliminated then return sendA(c, { action = "stopGame" }) end
+	-- An eliminated player (or spectator) going back to the lobby must not end the match for the others.
+	-- Their own chat still clears, so the lobby they land in is empty.
+	if c.lobby.isInGame and c.eliminated then
+		sendA(c, { action = "chatState", view = "lobby", clear = true })
+		return sendA(c, { action = "stopGame" })
+	end
+	S:chat_reset(c.lobby, "lobby")
+	S:pov_reset(c.lobby)
 	S:broadcast(c.lobby, { action = "stopGame" })
 	S:reset_players(c.lobby)
 end
@@ -2068,6 +2225,8 @@ function H.setAnte(S, c, a)
 		L.winnerId = c.id
 		L.isInGame, L.blindActive = false, false
 		S:stats_finish(L)
+		S:chat_reset(L, "lobby")
+		S:pov_reset(L)
 	end
 end
 function H.setLocation(S, c, a) S:set_location(c, a.location) end
@@ -2187,6 +2346,10 @@ do
 	if not Core.GAMBEL then
 		local m = take("gambel_rules.lua", function(m) return type(m) == "table" and m.resolve end)
 		if m then Core.GAMBEL = m end
+	end
+	if not Core.POV then
+		local m = take("spectator_pov.lua", function(m) return type(m) == "table" and m.recipients end)
+		if m then Core.POV = m end
 	end
 end
 

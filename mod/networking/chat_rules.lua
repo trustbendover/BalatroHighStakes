@@ -90,16 +90,20 @@ function C.reduce(state, msg)
 	if type(msg) ~= "table" then return state end
 	if msg.action == "chatState" then
 		if msg.view == "match" or msg.view == "lobby" then state.view = msg.view end
-		if msg.clear and msg.view == "match" then state.match = {} end
+		-- A phase change drops both logs. Keeping the lobby lines and only
+		-- emptying the match bucket is what put the old lobby chat back on screen.
+		if msg.clear then state.lobby, state.match = {}, {} end
 	elseif msg.action == "chatLog" then
 		local lines = {}
 		for i, m in ipairs(msg.lines or {}) do
 			if type(m) == "table" and (m.scope == "lobby" or m.scope == "match") then lines[i] = m end
 		end
+		-- The sync is the current phase only. The other bucket is the previous
+		-- phase and must not survive a rejoin to be shown later.
 		if msg.view == "match" then
-			state.view, state.match = "match", lines
+			state.view, state.match, state.lobby = "match", lines, {}
 		else
-			state.view, state.lobby = "lobby", lines
+			state.view, state.lobby, state.match = "lobby", lines, {}
 		end
 	elseif msg.action == "chat" and (msg.scope == "lobby" or msg.scope == "match") and type(msg.text) == "string" then
 		local bucket = msg.scope == "match" and state.match or state.lobby

@@ -906,6 +906,7 @@ local function action_rematch(p)
 	local msg = host and loc_or("k_rematch_host", "Same lobby. Everyone must ready up again.")
 		or loc_or("k_rematch_guest", "Rematch. Press Ready when you want to play again.")
 	if MP.UI and MP.UI.UTILS and MP.UI.UTILS.overlay_message then pcall(MP.UI.UTILS.overlay_message, msg) end
+	if MP.CHAT and MP.CHAT.wipe then MP.CHAT.wipe("lobby") end
 end
 
 local function action_stop_game()
@@ -921,6 +922,7 @@ local function action_stop_game()
 	end
 	MP.RLOG.end_run({ result = "stop" })
 	MP.UTILS.emit_log_checksum()
+	if MP.CHAT and MP.CHAT.wipe then MP.CHAT.wipe("lobby") end
 end
 
 local function action_end_pvp(p)

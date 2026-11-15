@@ -7,6 +7,20 @@
 MP.SPECTATE = MP.SPECTATE or {}
 local SP = MP.SPECTATE
 
+local function ensure_pov()
+	if MP.POV then return MP.POV end
+	if MP.load_mp_file then
+		local m = MP.load_mp_file("networking/spectator_pov.lua")
+		if type(m) == "table" then MP.POV = m end
+	end
+	if not MP.POV then
+		local ok, m = pcall(dofile, "networking/spectator_pov.lua")
+		if ok and type(m) == "table" then MP.POV = m end
+	end
+	return MP.POV
+end
+ensure_pov()
+
 SP.MAX_ROWS = 8
 SP.REFRESH = 0.5
 -- 0.6.8 layout: fixed widths (UI units) so the panel never grows or jumps when a row changes.
@@ -18,6 +32,8 @@ SP.CELL_PAD = 0.02
 SP.TEXT_W = 9.2 -- follow / detail / where lines
 SP.state = SP.state or { active = false, follow = nil, joined = false, match = false }
 SP.view = SP.view or {}
+SP.boards = SP.boards or {}
+SP.demand = SP.demand or false
 
 local function L(key, fallback, vars)
 	local ok, s = pcall(localize, vars and { type = "variable", key = key, vars = vars } or key)
@@ -180,6 +196,14 @@ function SP.refresh()
 			F_colour(SP.colours[i].status, c.kind == "ahead" and G.C.GREEN or (c.kind == "away" or c.kind == "rejoining") and G.C.ORANGE or grey)
 		end)
 	end
+	local POV = ensure_pov()
+	local board = SP.boards[SP.state.follow]
+	local lines = POV and POV.lines(board) or {}
+	for i = 1, 7 do
+		local s = lines[i] or ""
+		if s == "" and i == 1 and not board then s = L("k_sp_pov_wait", "Waiting for their table") end
+		SP.view["pov" .. i] = fit().ellipsize(s, 0.32, SP.TEXT_W - 0.12)
+	end
 	return rows
 end
 
@@ -219,18 +243,32 @@ function SP.ui()
 	SP.refresh()
 	local rows = {}
 	for i = 1, SP.MAX_ROWS do rows[#rows + 1] = SP.row_node(i) end
+	local pov_rows = {}
+	for i = 1, 7 do
+		pov_rows[#pov_rows + 1] = { n = G.UIT.R, config = { align = "cl", padding = 0.01, minw = SP.TEXT_W, maxw = SP.TEXT_W }, nodes = {
+			{ n = G.UIT.T, config = { ref_table = SP.view, ref_value = "pov" .. i, scale = 0.32, colour = G.C.UI.TEXT_LIGHT, shadow = true,
+				maxw = SP.TEXT_W } },
+		} }
+	end
 	local contents = {
 			text("title", 0.6, G.C.GOLD),
+			{ n = G.UIT.R, config = { align = "cm", padding = 0.04, r = 0.1, colour = { 0.1, 0.14, 0.2, 1 },
+				minw = SP.BOX_W, maxw = SP.BOX_W }, nodes = pov_rows },
 			line("follow", 0.5),
 			line("detail", 0.4),
 			line("where", 0.4, G.C.UI.TEXT_INACTIVE),
-			{ n = G.UIT.R, config = { align = "cm", padding = 0.08, r = 0.1, colour = G.C.BLACK, minw = SP.BOX_W, maxw = SP.BOX_W }, nodes = rows },
-			{ n = G.UIT.R, config = { align = "cm", padding = 0.1 }, nodes = {
-				UIBox_button({ button = "mp_sp_prev", label = { L("b_sp_prev", "< Prev") }, minw = 2.2, minh = 0.6, scale = 0.4, col = true }),
-				{ n = G.UIT.C, config = { minw = 0.2 } },
-				UIBox_button({ button = "mp_sp_next", label = { L("b_sp_next", "Next >") }, minw = 2.2, minh = 0.6, scale = 0.4, col = true }),
-			} },
 	}
+	if SP.state.stats ~= false then
+		contents[#contents + 1] = { n = G.UIT.R, config = { align = "cm", padding = 0.08, r = 0.1, colour = G.C.BLACK, minw = SP.BOX_W, maxw = SP.BOX_W }, nodes = rows }
+	end
+	local stats_label = (SP.state.stats == false) and L("b_sp_stats", "Stats") or L("b_sp_board", "Board")
+	contents[#contents + 1] = { n = G.UIT.R, config = { align = "cm", padding = 0.1 }, nodes = {
+		UIBox_button({ button = "mp_sp_prev", label = { L("b_sp_prev", "< Prev") }, minw = 2.2, minh = 0.6, scale = 0.4, col = true }),
+		{ n = G.UIT.C, config = { minw = 0.15 } },
+		UIBox_button({ button = "mp_sp_next", label = { L("b_sp_next", "Next >") }, minw = 2.2, minh = 0.6, scale = 0.4, col = true }),
+		{ n = G.UIT.C, config = { minw = 0.15 } },
+		UIBox_button({ button = "mp_sp_stats", label = { stats_label }, minw = 2.2, minh = 0.6, scale = 0.4, col = true }),
+	} }
 	-- 0.6.9: you hold a seat in this match: take it back while the grace runs
 	if SP.state.held then contents[#contents + 1] = { n = G.UIT.R, config = { align = "cm", padding = 0.05 }, nodes = {
 				{ n = G.UIT.C, config = { button = "mp_sp_rejoin", colour = G.C.BLUE, r = 0.1, minw = 4.6, minh = 0.7,
@@ -251,10 +289,58 @@ function SP.close()
 	pcall(G.FUNCS.exit_overlay_menu)
 end
 
+function SP.sync_watch()
+	if not (Client and Client.send and MP.LOBBY and MP.LOBBY.code and SP.watching()) then return end
+	Client.send({ action = "spectateWatch", playerId = SP.state.follow or "" })
+end
+
+function SP.read_board()
+	if not (G and G.GAME) then return nil end
+	local function cards(area) return area and area.cards or nil end
+	local round = G.GAME.current_round or {}
+	local hand = round.current_hand or {}
+	local blind = ""
+	if G.GAME.blind then
+		blind = G.GAME.blind.name or (G.GAME.blind.config and G.GAME.blind.config.blind and G.GAME.blind.config.blind.key) or ""
+	end
+	local chips, mult = hand.chips, hand.mult
+	return {
+		state = G.STATE, states = G.STATES,
+		ante = G.GAME.round_resets and G.GAME.round_resets.ante,
+		blind = blind,
+		money = G.GAME.dollars,
+		hands = round.hands_left,
+		discards = round.discards_left,
+		score = G.GAME.chips,
+		chips = chips, mult = mult,
+		hand = cards(G.hand), jokers = cards(G.jokers), cons = cards(G.consumeables),
+		played = cards(G.play), shop = cards(G.shop_jokers),
+	}
+end
+
+function SP.maybe_send(now)
+	if not SP.demand then return end
+	local POV = ensure_pov()
+	if not POV or not (Client and Client.send) then return end
+	local raw = SP.read_board()
+	if not raw then return end
+	raw.states = G and G.STATES or nil
+	if G and G.STATES and raw.state then raw.phase = nil end
+	local snap = POV.capture(raw)
+	now = tonumber(now) or (love and love.timer and love.timer.getTime and love.timer.getTime()) or os.clock()
+	if not POV.due(SP.sent_sig, snap.sig, now, SP.sent_at) then return end
+	SP.sent_sig, SP.sent_at = snap.sig, now
+	SP.snap_seq = (SP.snap_seq or 0) + 1
+	snap.action = "spectateSnap"
+	snap.seq = SP.snap_seq
+	Client.send(snap)
+end
+
 local function follow_step(dir)
 	local rows = SP.refresh()
 	SP.state.follow = SP.step(rows, SP.state.follow, dir)
 	SP.refresh()
+	SP.sync_watch()
 end
 
 function SP.register()
@@ -263,7 +349,13 @@ function SP.register()
 
 	G.FUNCS.mp_sp_prev = function() follow_step(-1) end
 	G.FUNCS.mp_sp_next = function() follow_step(1) end
-	G.FUNCS.mp_sp_open = function() SP.open() end
+	G.FUNCS.mp_sp_stats = function()
+		SP.state.stats = SP.state.stats == false
+		if SP.state.active and G.FUNCS and G.FUNCS.overlay_menu then
+			pcall(function() G.FUNCS.overlay_menu({ definition = SP.ui() }) end)
+		end
+	end
+	G.FUNCS.mp_sp_open = function() SP.open(); SP.sync_watch() end
 	G.FUNCS.mp_sp_rejoin = function()
 		local h = SP.state.held
 		if not h or not (MP.LOBBY and MP.LOBBY.code) then return end
@@ -283,6 +375,16 @@ function SP.register()
 		MP.GAME.lives = 0
 		pcall(sendWarnMessage, L("k_sp_joined", "You are watching the running match"), "MULTIPLAYER")
 		SP.open()
+		SP.sync_watch()
+	end)
+	MP.register_action("spectateDemand", function(p)
+		SP.demand = p and p.on and true or false
+		if not SP.demand then SP.sent_sig, SP.sent_at = nil, nil end
+	end)
+	MP.register_action("spectateSnap", function(p)
+		if type(p) ~= "table" or not p.playerId then return end
+		SP.boards[p.playerId] = p
+		if SP.state.active then pcall(SP.refresh) end
 	end)
 	MP.register_action("spectatorJoined", function(p)
 		pcall(sendWarnMessage, L("k_sp_spectator_joined", "#1# is watching", { clean(p.username) }), "MULTIPLAYER")
@@ -321,6 +423,10 @@ function SP.register()
 				pcall(SP.refresh)
 			end
 		end
+		if SP.demand then
+			local now = love and love.timer and love.timer.getTime and love.timer.getTime() or os.clock()
+			pcall(SP.maybe_send, now)
+		end
 		return r
 	end
 end
@@ -335,7 +441,10 @@ function SP.end_button()
 end
 
 --- Match state hooks (called from action_handlers)
-function SP.on_match_start() SP.state.match, SP.state.joined, SP.state.follow = true, false, nil end
+function SP.on_match_start()
+	SP.state.match, SP.state.joined, SP.state.follow = true, false, nil
+	SP.demand, SP.boards, SP.sent_sig, SP.sent_at = false, {}, nil, nil
+end
 --- 0.6.9: spectateStart: drop the enemies of an earlier run (fresh enemyInfo follows) and remember a held seat.
 function SP.on_spectate_start(p, t)
 	if p and p.reset and MP.GAME then MP.GAME.enemies = {} end
@@ -357,5 +466,6 @@ function SP.on_rejoined() SP.state.joined, SP.state.held = false, nil; if SP.sta
 function SP.on_match_end()
 	SP.state.held = nil
 	SP.state.match, SP.state.joined = false, false
+	SP.demand, SP.boards = false, {}
 	if SP.state.active then SP.close() end
 end

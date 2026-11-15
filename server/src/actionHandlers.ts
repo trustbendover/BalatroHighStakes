@@ -175,8 +175,7 @@ const startGameAction = (client: Client) => {
 	lobby.resetPlayers();
 
 	lobby.isInGame = true;
-	lobby.chatMatch = [];
-	lobby.broadcastAction({ action: "chatState", view: "match", clear: true });
+	lobby.clearChat("match");
 	lobby.broadcastAction({
 		action: "startGame",
 		deck: "c_multiplayer_1",
@@ -281,7 +280,7 @@ const rematchAction = (client: Client) => {
 		return;
 	}
 	lobby.prepareRematch();
-	lobby.broadcastAction({ action: "chatState", view: "lobby", clear: false });
+	lobby.clearChat("lobby");
 	lobby.broadcastAction({ action: "rematch", config: { ...lobby.options, gamemode: lobby.gameMode } });
 	lobby.broadcastLobbyInfo();
 };
@@ -290,11 +289,14 @@ const stopGameAction = (client: Client) => {
 	if (!client.lobby) {
 		return;
 	}
-	// An eliminated player (or spectator) going back to the lobby must not end the match for the others
+	// An eliminated player (or spectator) going back to the lobby must not end the match for the others.
+	// Their own chat still clears, so the lobby they land in is empty.
 	if (client.lobby.isInGame && client.eliminated) {
+		client.sendAction({ action: "chatState", view: "lobby", clear: true });
 		client.sendAction({ action: "stopGame" });
 		return;
 	}
+	client.lobby.clearChat("lobby");
 	client.lobby.broadcastAction({ action: "stopGame" });
 	client.lobby.resetPlayers();
 };
@@ -357,6 +359,7 @@ const setAnteAction = (
 		lobby.winnerId = client.id;
 		lobby.isInGame = false;
 		lobby.blindActive = false;
+		lobby.clearChat("lobby");
 	}
 };
 

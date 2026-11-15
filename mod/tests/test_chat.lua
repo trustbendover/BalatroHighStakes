@@ -103,7 +103,7 @@ ok(rejected == 2, "the sender is told both were rejected")
 S:receive(bob, { action = "readyLobby" })
 S:receive(ann, { action = "startGame" })
 ok(texts(ann.box) == "" and texts(bob.box) == "", "a new match starts with an empty match log")
-ok(view(ann.box).lobby[1].text == "hello from the host", "the lobby lines are still stored")
+ok(#view(ann.box).lobby == 0 and #view(ann.box).match == 0, "the lobby lines are cleared too, not kept beside an empty match log")
 S:receive(ann, { action = "chat", text = "during the match" })
 ok(texts(bob.box) == "during the match" and bob.last("chat").scope == "match", "guest sees the match line")
 
@@ -119,13 +119,28 @@ ok(texts(dee.box):find("during the match", 1, true) and texts(dee.box):find("wat
 
 ann.lobby.isInGame = false
 S:receive(ann, { action = "rematch" })
-ok(texts(ann.box) == "hello from the host|hello from the guest", "after rematch the current log is the lobby chat")
-ok(not texts(ann.box):find("during the match", 1, true), "the previous match line is not the current log")
+ok(texts(ann.box) == "" and texts(bob.box) == "" and texts(dee.box) == "", "rematch clears the chat on the host, the guest and the watcher")
+ok(#view(ann.box).lobby == 0 and #view(ann.box).match == 0, "rematch does not bring the old lobby lines back")
 for _, p in ipairs(ann.lobby.players) do if p ~= ann then S:receive(p, { action = "readyLobby" }) end end
 S:receive(ann, { action = "startGame" })
 ok(texts(ann.box) == "" and texts(bob.box) == "", "the next match does not reuse the previous match log")
 S:receive(bob, { action = "chat", text = "only this game" })
 ok(texts(ann.box) == "only this game" and texts(bob.box) == "only this game", "host and guest see only the new match")
+
+local token = bob.reconnectToken
+S:disconnect(bob)
+local bob2 = client(S, "Bob~2")
+S:receive(bob2, { action = "rejoinLobby", code = joined.code, reconnectToken = token })
+local again = bob2.last("chatLog")
+local replay = ""
+for _, line in ipairs(again and again.lines or {}) do replay = replay .. line.text .. "|" end
+ok(again and again.view == "match" and replay:find("only this game", 1, true) and not replay:find("hello from the host", 1, true)
+	and not replay:find("during the match", 1, true), "rejoin replays the current match log and not the lobby or the previous match")
+
+S:receive(ann, { action = "stopGame" })
+ok(texts(ann.box) == "" and texts(bob2.box) == "", "leaving the match back to the lobby clears the chat again")
+S:receive(ann, { action = "chat", text = "back in the lobby" })
+ok(texts(bob2.box) == "back in the lobby" and bob2.last("chat").scope == "lobby", "the next lobby line is not mixed with the match")
 
 local CH = dofile("lib/chat.lua")
 G = {
@@ -270,5 +285,9 @@ ok(CH.open == false and CH.seen == 3, "Close marks lines that arrived while chat
 ok(CH.unread() == 0, "those lines do not light an unread badge")
 CH.state.match[#CH.state.match + 1] = { id = 4, text = "after" }
 ok(CH.unread() == 1, "a line that arrives after Close still counts as unread")
+CH.apply({ action = "chatState", view = "lobby", clear = true })
+ok(CH.seen == 0 and #CH.current() == 0 and CH.unread() == 0, "clearing the chat resets the unread badge")
+CH.apply({ action = "chat", scope = "lobby", id = 9, text = "after the clear", name = "Ann", col = 1 })
+ok(CH.unread() == 1, "a line after the clear counts as unread")
 
 print("PASS: chat")
