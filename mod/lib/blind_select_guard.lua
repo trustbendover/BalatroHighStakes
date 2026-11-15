@@ -19,11 +19,11 @@ end
 function B.shield(ev, still, clear)
 	if type(ev) ~= "table" or type(ev.func) ~= "function" then return ev end
 	local fn = ev.func
+	-- Vanilla select_blind queues several events. The 0.2s one removes
+	-- G.blind_select. The later one is new_round's draw. Skipping every
+	-- event once the panel is gone also skips that draw, so round 1 starts
+	-- with an empty hand. Run the event. Only a crash on a nil panel is swallowed.
 	ev.func = function(...)
-		if still and not still() then
-			if clear then clear() end
-			return true
-		end
 		local ok, ret = pcall(fn, ...)
 		if not ok then
 			if tostring(ret):find("blind_select", 1, true) then
