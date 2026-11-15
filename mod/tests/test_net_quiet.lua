@@ -40,4 +40,30 @@ ok(bob.count("enemyInfo") == once, "the same score is not sent again")
 S:receive(ann, { action = "playHand", score = "250", handsLeft = 2 })
 ok(bob.count("enemyInfo") == once + 1, "a changed score is sent")
 
+local dropped = false
+local real = bob.send
+bob.send = function(t)
+	if t.action == "enemyInfo" and not dropped then dropped = true; return false end
+	return real(t)
+end
+local held = bob.count("enemyInfo")
+S:receive(ann, { action = "playHand", score = "400", handsLeft = 1 })
+ok(dropped and bob.count("enemyInfo") == held, "a rejected score is not kept")
+S:receive(ann, { action = "playHand", score = "400", handsLeft = 1 })
+ok(bob.count("enemyInfo") == held + 1, "the same score is sent again after a reject")
+bob.send = real
+
+ann.lobby.info_sig = nil
+local lobby_drop = false
+local real_ann = ann.send
+ann.send = function(t)
+	if t.action == "lobbyInfo" and not lobby_drop then lobby_drop = true; return false end
+	return real_ann(t)
+end
+local n = ann.count("lobbyInfo")
+S:lobby_info(ann.lobby)
+ok(lobby_drop and ann.count("lobbyInfo") == n, "a rejected lobby snapshot is not kept")
+S:lobby_info(ann.lobby)
+ok(ann.count("lobbyInfo") == n + 1, "the same lobby snapshot is sent again after a reject")
+
 print("PASS: net quiet")

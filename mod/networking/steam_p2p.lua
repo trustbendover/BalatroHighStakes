@@ -971,7 +971,10 @@ function M.new_router(o)
 							if msg.action == "rejoinLobby" and R.dropped then R.dropped[m.peer] = nil end
 							if not p.conn then
 								local id, gen = m.peer, R.gen
-								p.conn = core:connect(function(x) if R.gen == gen then B.send(id, "J" .. json.encode(x)) end end,
+								p.conn = core:connect(function(x)
+									if R.gen ~= gen then return false end
+									return B.send(id, "J" .. json.encode(x))
+								end,
 									function() if R.gen == gen then B.send(id, "K") end end)
 								conn_peer[p.conn] = id
 							end

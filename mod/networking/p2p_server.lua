@@ -376,7 +376,7 @@ function Server:connect(send, close)
 	return c
 end
 
-local function sendA(c, t) if c and c.send then c.send(t) end end
+local function sendA(c, t) if c and c.send then return c.send(t) end end
 
 ---------------------------------------------------------------- client-ish
 function Server:reset_blocker(c) c.roundLivesBlocker = false; c.timerLivesBlocker = false end
@@ -437,7 +437,11 @@ function Server:spectators(L) return filter(L.players, function(p) return p.spec
 function Server:seated(L) return filter(L.players, function(p) return not p.spectator end) end
 function Server:participants(L) return filter(self:alive(L), function(p) return not p.sitOut end) end
 
-function Server:broadcast(L, t) for _, p in ipairs(L.players) do sendA(p, t) end end
+function Server:broadcast(L, t)
+	local ok = true
+	for _, p in ipairs(L.players) do if sendA(p, t) == false then ok = false end end
+	return ok
+end
 --- Teams: same team (never true outside a running teams game).
 function Server:is_teammate(a, b)
 	return a ~= b and a.team ~= nil and a.team == b.team and a.lobby ~= nil and a.lobby.gameMode == "teams"
@@ -470,7 +474,7 @@ function Server:lobby_sig(L)
 	b[#b + 1] = tostring(L.options.teams_order or "") .. "|" .. tostring(L.options.teams_size or "") .. "|" .. tostring(L.options.teams_format or "")
 	for i, p in ipairs(L.players) do
 		b[#b + 1] = table.concat({
-			i, p.id, p.username, p.modHash or "", p.isCached and 1 or 0, p.isReadyLobby and 1 or 0, p.lives or 0,
+			i, p.id, p.username, p.modHash or "", p.steam_id or "", p.isCached and 1 or 0, p.isReadyLobby and 1 or 0, p.lives or 0,
 			p.eliminated and 1 or 0, p.spectator and 1 or 0, p.rejoining and 1 or 0, p.team or "",
 		}, ",")
 	end
@@ -489,7 +493,6 @@ function Server:lobby_info(L, force)
 	if not host then return end
 	local sig = self:lobby_sig(L)
 	if not force and sig == L.info_sig then return end
-	L.info_sig = sig
 	local players = {}
 	local preview = nil
 	if L.gameMode == "teams" and Core.TEAMS then
@@ -510,6 +513,7 @@ function Server:lobby_info(L, force)
 		away[i] = { id = s.old.id, username = s.old.username, lives = s.old.lives, eliminated = s.old.eliminated or nil,
 			left = (L.isInGame and spent and not s.old.eliminated) and math.max(0, math.floor(grace - spent)) or nil }
 	end
+	local failed = false
 	for _, p in ipairs(L.players) do
 		local a = { action = "lobbyInfo", host = host.username, hostHash = host.modHash, isHost = p == host,
 			hostCached = host.isCached, players = players, you = p.id, maxPlayers = Core.max_players(L.gameMode), away = away, inGame = L.isInGame }
@@ -518,9 +522,10 @@ function Server:lobby_info(L, force)
 			a.guest, a.guestHash, a.guestCached = g.username, g.modHash, g.isCached
 			a.guestReady = every(L.players, function(o) return o == host or o.isReadyLobby end)
 		end
-		sendA(p, a)
+		if sendA(p, a) == false then failed = true end
 	end
-	self:broadcast(L, { action = "handyMPExtensionLobbyEnabled", enabled = false })
+	if self:broadcast(L, { action = "handyMPExtensionLobbyEnabled", enabled = false }) == false then failed = true end
+	if not failed then L.info_sig = sig end
 end
 
 --- Match is over: same lobby, same options (including teams), connected players stay.
@@ -2121,8 +2126,8 @@ function Server:send_enemy(to, msg)
 	local key = "e:" .. tostring(msg.playerId)
 	to._esig = to._esig or {}
 	if to._esig[key] == sig then return end
+	if sendA(to, msg) == false then return end
 	to._esig[key] = sig
-	sendA(to, msg)
 end
 
 function H.playHand(S, c, a)
