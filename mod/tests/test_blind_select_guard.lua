@@ -56,6 +56,17 @@ ok(Rules.phase_bonus("build") == 0, "the first blind's build-up does not wait on
 
 local src = io.open("ui/game/functions.lua"):read("*a")
 ok(src:find("MP.BLIND_GUARD", 1, true) and src:find("selecting_blind", 1, true), "select_blind consults the guard before calling vanilla")
+ok(src:find("next_blind_context = e", 1, true), "selecting a blind remembers the button for a later retry")
+
+-- A draw error that is not the missing panel must still surface. Wild Odds
+-- must not be swallowed just because the guard wraps the queue.
+queued = {}
+local mgr2 = { add_event = function(self, ev) queued[#queued + 1] = ev end }
+B.protect(mgr2, function()
+	mgr2:add_event({ func = function() error("wild_odds broke the draw") end })
+end, function() return true end, function() end)
+local surfaced, err = pcall(queued[1].func)
+ok(not surfaced and tostring(err):find("wild_odds", 1, true), "a Wild Odds failure is not treated as a finished event")
 
 -- Match start -> first blind, host and guest. Normal mode and Gambel Time.
 local Core = dofile("networking/p2p_server.lua")
@@ -90,6 +101,45 @@ local house = client(solo, "Ada~1")
 solo:receive(house, { action = "createLobby", gameMode = "gambel_time" })
 solo:receive(house, { action = "startGame" })
 ok(house.last("startGame") and house.lobby.isInGame, "solo Gambel Time starts against The House")
+solo:receive(house, { action = "setAnte", ante = 1 })
+local table_msg = house.last("gambelTable")
+ok(table_msg and table_msg.ante == 1 and type(table_msg.spin) == "string", "solo ante 1 gets a table spin before the first hand")
+-- The reported run landed on wild_odds. Applying it only marks the local flag.
+MP = MP or {}
+MP.GAME = { gambel_wild = false }
+MP.LOBBY = { config = { gamemode = "gamemode_mp_gambel_time" } }
+MP.load_mp_file = function(p) return dofile(p) end
+dofile("lib/smods_compat.lua")
+local saved_g = G
+dofile("lib/gambel.lua")
+G = {
+	blind_select = { alignment = { offset = {} } },
+	GAME = {
+		round_resets = { ante = 1, hands = 4, discards = 4 },
+		current_round = { hands_left = 4, discards_left = 4 },
+		dollars = 4, interest_amount = 1, interest_cap = 5, inflation = 0,
+	},
+}
+MP.GAMBEL.apply_table("wild_odds", 1)
+ok(MP.GAME.gambel_wild == true, "wild_odds at ante 1 is applied immediately")
+ok(MP.GAME.gambel_committed == nil, "the table spin does not wait for a wheel payout")
+local doubled_n, doubled_d = MP.UTILS.wrap_probability_vars(function(_, n, d) return n, d end)({ ability = {} }, 1, 4, "wild", false, nil)
+ok(doubled_n == 2 and doubled_d == 4, "wild odds doubles the chance and does not throw")
+local solo_dealt = false
+local solo_q = {}
+local solo_mgr = { add_event = function(self, ev) solo_q[#solo_q + 1] = ev end }
+B.protect(solo_mgr, function()
+	solo_mgr:add_event({ func = function()
+		G.blind_select.alignment.offset.y = 1
+		G.blind_select = nil
+		return true
+	end })
+	solo_mgr:add_event({ func = function() solo_dealt = true; return true end })
+end, function() return G.blind_select end, function() end)
+solo_q[1].func()
+solo_q[2].func()
+ok(solo_dealt, "after wild_odds, the opening draw still runs once the panel closes")
+G = saved_g
 solo:receive(house, { action = "readyBlind" })
 ok(not house.last("startBlind"), "solo Gambel Time deals its own first blind, with no Nemesis to wait for")
 

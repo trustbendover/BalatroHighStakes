@@ -26,7 +26,10 @@ function B.shield(ev, still, clear)
 	ev.func = function(...)
 		local ok, ret = pcall(fn, ...)
 		if not ok then
-			if tostring(ret):find("blind_select", 1, true) then
+			-- Only the vanilla crash: attempt to index field 'blind_select' (a nil value).
+			-- A filename or another error that merely mentions the panel must still fail.
+			local msg = tostring(ret)
+			if msg:find("field 'blind_select'", 1, true) or msg:find('field "blind_select"', 1, true) then
 				if clear then clear() end
 				return true
 			end

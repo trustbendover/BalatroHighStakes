@@ -57,6 +57,12 @@ end
 
 local select_blind_ref = G.FUNCS.select_blind
 function G.FUNCS.select_blind(e)
+	-- A direct Small-blind click never goes through Ready, which is the only
+	-- other place this is stored. The later retry (unstuck / PvP countdown)
+	-- logs "No next blind context" when it is missing.
+	if MP.GAME and e and e.config and e.config.ref_table then
+		MP.GAME.next_blind_context = e
+	end
 	local guard = MP.BLIND_GUARD
 	local ctx = e and e.config and e.config.ref_table
 	if guard and not guard.allow({
