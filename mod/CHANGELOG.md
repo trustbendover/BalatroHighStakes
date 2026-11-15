@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.2 - The first hand is dealt
+
+- **Opening hand.** Selecting the first blind no longer skips the draw. Round 1 deals cards in normal modes and in Gambel Time, including a solo game against The House.
+- **Wild Odds.** The ante 1 table spin still applies. It does not hold the deal, and a failure in that spin is not treated as a finished event.
+- **Retry.** The blind button is remembered, so a later retry is not "No next blind context".
+- **Pins.** Steamodded stays 1.0.0~BETA-1620a. Lovely stays 0.10.0.
+
 ## 0.7.1 - Hotfix: lobbies, rejoin, and shop odds
 
 - **Public lobbies.** Host, Mode, Players, Status, and Join share fixed columns. Join stays inside the panel. Each lobby's settings sit under that row. Only the standard Back button remains, plus Refresh. Long host names are shortened, and the list stays paged.
