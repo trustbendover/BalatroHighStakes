@@ -409,7 +409,7 @@ const gambelBetAction = (
 };
 
 // TODO: Fix this
-const serverVersion = "0.7.3";
+const serverVersion = "0.7.4";
 /** Verifies the client version and allows connection if it matches the server's */
 const versionAction = (
 	{ version }: ActionHandlerArgs<ActionVersion>,

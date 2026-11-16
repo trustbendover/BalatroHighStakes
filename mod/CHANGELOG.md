@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.7.4 - Less P2P traffic, and a short stall stays connected
+
+- **Lobby.** An unchanged roster is not broadcast again. Asking for the lobby still gets a fresh copy. A Steam send that fails is tried again.
+- **Scores.** A repeated hand with the same score, hands, lives, and order is not sent again. A changed score still goes out, and a rejected send is retried.
+- **Lag.** Heartbeats are every 5 seconds. A peer can be quiet for 24 seconds without the session closing. A cut-off guest still falls back at 30 seconds.
+- **Idle.** A quiet receive no longer allocates a table every frame, and each peer's Steam identity is reused.
+- **Pins.** Steamodded stays 1.0.0~BETA-1620a. Lovely stays 0.10.0.
+
 ## 0.7.3 - Chat resets, and you can watch a player's table
 
 - **Chat.** The lobby chat clears when a match starts. The match chat clears when you return to the lobby, including a normal end, a rematch, and leaving back to the lobby. A rejoin does not replay the previous chat, and the unread count clears too.
