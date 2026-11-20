@@ -2078,6 +2078,9 @@ function H.startGame(S, c)
 	L.startPlayers = #S:seated(L)
 	L.lastStats = nil
 	local lives = tonumber(L.options.starting_lives) or Core.STARTING_LIVES[L.gameMode] or 4
+	lives = math.floor(lives)
+	if lives < 1 then lives = Core.STARTING_LIVES[L.gameMode] or 4 end
+	if lives > 16 then lives = 16 end
 	if L.gameMode == "gambel_time" and Core.GAMBEL then lives = Core.GAMBEL.lives(lives) end
 	local seed = nil
 	if not L.options.different_seeds then seed = rand_str("ABCDEFGHIJKLMNPQRSTUVWXYZ123456789", 8) end
