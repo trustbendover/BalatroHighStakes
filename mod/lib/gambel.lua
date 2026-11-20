@@ -98,7 +98,8 @@ function R.announce(kind, id)
 	local name, desc = R.effect_line(kind, id)
 	if not name or name == "" then return end
 	local line = (desc ~= "") and (name .. " — " .. desc) or name
-	R.toast(line)
+	R.toast(name)
+	R.banner = { name = name, desc = desc, line = line }
 	if MP.CHAT and MP.CHAT.note then pcall(MP.CHAT.note, line) end
 	if R.sync_badge then R.sync_badge() end
 	return line
