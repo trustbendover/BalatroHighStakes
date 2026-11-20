@@ -286,6 +286,7 @@ end
 
 function SP.close()
 	SP.state.active = false
+	SP.drop_art()
 	pcall(G.FUNCS.exit_overlay_menu)
 end
 
@@ -331,14 +332,24 @@ function SP.maybe_send(now)
 	if not POV.due(SP.sent_sig, snap.sig, now, SP.sent_at) then return end
 	SP.sent_sig, SP.sent_at = snap.sig, now
 	SP.snap_seq = (SP.snap_seq or 0) + 1
+	snap.ev = POV.guess_event and POV.guess_event(SP.last_snap, snap) or "snap"
+	SP.last_snap = snap
 	snap.action = "spectateSnap"
 	snap.seq = SP.snap_seq
 	Client.send(snap)
 end
 
+function SP.drop_art()
+	local POV = ensure_pov()
+	if POV and POV.cleanup then POV.cleanup(SP.art) end
+	SP.art, SP.art_sig = nil, nil
+end
+
 local function follow_step(dir)
 	local rows = SP.refresh()
+	local prev = SP.state.follow
 	SP.state.follow = SP.step(rows, SP.state.follow, dir)
+	if SP.state.follow ~= prev then SP.drop_art() end
 	SP.refresh()
 	SP.sync_watch()
 end
@@ -384,6 +395,14 @@ function SP.register()
 	MP.register_action("spectateSnap", function(p)
 		if type(p) ~= "table" or not p.playerId then return end
 		SP.boards[p.playerId] = p
+		if p.playerId == SP.state.follow then
+			local POV = ensure_pov()
+			if POV and POV.realize and p.sig ~= SP.art_sig then
+				SP.drop_art()
+				SP.art = POV.realize(p, POV.make_live)
+				SP.art_sig = p.sig
+			end
+		end
 		if SP.state.active then pcall(SP.refresh) end
 	end)
 	MP.register_action("spectatorJoined", function(p)
@@ -466,6 +485,7 @@ function SP.on_rejoined() SP.state.joined, SP.state.held = false, nil; if SP.sta
 function SP.on_match_end()
 	SP.state.held = nil
 	SP.state.match, SP.state.joined = false, false
-	SP.demand, SP.boards = false, {}
+	SP.demand, SP.boards, SP.last_snap = false, {}, nil
+	SP.drop_art()
 	if SP.state.active then SP.close() end
 end

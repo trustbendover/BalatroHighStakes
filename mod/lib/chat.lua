@@ -350,6 +350,18 @@ function CH.blank_letters()
 	args.current_prompt_text = args.prompt_text or ""
 end
 
+--- A local line, such as a Chaos Spin. It is not sent to the other players.
+function CH.note(text)
+	text = tostring(text or "")
+	if text == "" then return end
+	local R = rules()
+	if not R or not R.push then return end
+	local scope = (CH.state and CH.state.view == "match") and "match" or "lobby"
+	local bucket = scope == "match" and CH.state.match or CH.state.lobby
+	R.push(bucket, { id = "note-" .. tostring(#bucket + 1), scope = scope, name = "Chaos", text = text, col = 2 })
+	if CH.refresh then pcall(CH.refresh) end
+end
+
 function CH.send()
 	local text = tostring(CH.draft.text or "")
 	CH.draft.text = ""

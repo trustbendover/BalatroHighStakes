@@ -1876,6 +1876,9 @@ local function pov_cards(list, n)
 				s = type(c.s) == "string" and c.s:sub(1, 1) or nil,
 				e = type(c.e) == "string" and c.e:sub(1, 8) or "",
 				st = type(c.st) == "string" and c.st:sub(1, 8) or "",
+				en = type(c.en) == "string" and c.en:sub(1, 24) or nil,
+				sl = type(c.sl) == "string" and c.sl:sub(1, 12) or nil,
+				up = (c.up == 1 or c.up == true) and 1 or nil,
 				cost = tonumber(c.cost) and math.floor(tonumber(c.cost)) or nil,
 			}
 		end
@@ -1969,6 +1972,7 @@ function Server:pov_relay(c, a)
 		chips = type(a and a.chips) == "string" and a.chips:sub(1, 24) or "0",
 		mult = type(a and a.mult) == "string" and a.mult:sub(1, 24) or "0",
 		sig = type(a and a.sig) == "string" and a.sig:sub(1, 400) or "",
+		ev = type(a and a.ev) == "string" and a.ev:sub(1, 12) or nil,
 		hand = pov_cards(a and a.hand, 12), jokers = pov_cards(a and a.jokers, 10),
 		cons = pov_cards(a and a.cons, 5), played = pov_cards(a and a.played, 8),
 	}

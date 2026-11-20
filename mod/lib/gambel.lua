@@ -69,6 +69,75 @@ function R.twist_name(id)
 	return L(row[1], row[2])
 end
 
+local SPIN_DESC = {
+	double_interest = { "k_gambel_spin_double_interest_d", "Interest pays double this ante." },
+	inflation = { "k_gambel_spin_inflation_d", "Shop prices step up." },
+	golden_hour = { "k_gambel_spin_golden_hour_d", "Clearing a blind pays $3." },
+	wild_odds = { "k_gambel_spin_wild_odds_d", "Listed chances are doubled." },
+	high_roller = { "k_gambel_spin_high_roller_d", "+1 hand and +1 discard." },
+	slim_hands = { "k_gambel_spin_slim_hands_d", "One fewer hand, and $5." },
+}
+local TWIST_DESC = {
+	reverse = { "k_gambel_twist_reverse_d", "Lowest score wins this blind." },
+	double = { "k_gambel_twist_double_d", "The lowest score loses 2 lives." },
+	pot = { "k_gambel_twist_pot_d", "One joker moves to the winner, or $8." },
+	house = { "k_gambel_twist_house_d", "The House takes $5 when you are behind." },
+	sabotage = { "k_gambel_twist_sabotage_d", "Your first score is passed along." },
+	allin = { "k_gambel_twist_allin_d", "The winner doubles the boss payout." },
+}
+
+function R.effect_line(kind, id)
+	local name = (kind == "spin") and R.spin_name(id) or R.twist_name(id)
+	local row = (kind == "spin") and SPIN_DESC[id] or TWIST_DESC[id]
+	local desc = row and L(row[1], row[2]) or ""
+	return name, desc
+end
+
+--- Banner plus a chat line. The small badge is refreshed by the run update.
+function R.announce(kind, id)
+	local name, desc = R.effect_line(kind, id)
+	if not name or name == "" then return end
+	local line = (desc ~= "") and (name .. " — " .. desc) or name
+	R.toast(line)
+	if MP.CHAT and MP.CHAT.note then pcall(MP.CHAT.note, line) end
+	if R.sync_badge then R.sync_badge() end
+	return line
+end
+
+function R.sync_badge()
+	if not (G and UIBox and G.UIT and G.ROOM_ATTACH and G.STAGES) then return end
+	local game = MP.GAME
+	local spin = game and game.gambel_table
+	local twist = game and game.gambel_twist
+	local show = G.STAGE == G.STAGES.RUN and (spin or twist)
+	if not show then
+		if R.badge and R.badge.remove then pcall(function() R.badge:remove() end) end
+		R.badge, R.badge_text = nil, nil
+		return
+	end
+	local function bit(kind, id)
+		local n, d = R.effect_line(kind, id)
+		return (d ~= "") and (n .. " — " .. d) or n
+	end
+	local bits = {}
+	if spin then bits[#bits + 1] = bit("spin", spin) end
+	if twist then bits[#bits + 1] = bit("twist", twist) end
+	local text = table.concat(bits, "   ")
+	if R.badge and R.badge_text == text then return end
+	if R.badge and R.badge.remove then pcall(function() R.badge:remove() end) end
+	R.badge_text = text
+	R.badge_view = R.badge_view or { text = "" }
+	R.badge_view.text = text
+	R.badge = UIBox({
+		definition = { n = G.UIT.ROOT, config = { align = "cm", colour = G.C.CLEAR }, nodes = {
+			{ n = G.UIT.R, config = { align = "cm", padding = 0.06, r = 0.1, colour = G.C.BLACK, emboss = 0.05, maxw = 8 }, nodes = {
+				{ n = G.UIT.T, config = { ref_table = R.badge_view, ref_value = "text", scale = 0.32, colour = G.C.GOLD or G.C.WHITE, shadow = true } },
+			} },
+		} },
+		config = { align = "tm", offset = { x = 0, y = 0.55 }, major = G.ROOM_ATTACH, bond = "Weak" },
+	})
+end
+
 local function dollars()
 	if G and G.GAME and G.GAME.dollars ~= nil and to_big then
 		local ok, n = pcall(function() return to_number(to_big(G.GAME.dollars)) end)
@@ -176,6 +245,7 @@ function R.reset()
 	if R.drop_cards then R.drop_cards(R.double_view) end
 	R.double_view = nil
 	R.wheel_view = nil
+	if R.sync_badge then R.sync_badge() end
 	if G and G.GAME then G.GAME.mp_gambel_shop_used = nil end
 	R.state = {}
 end
@@ -194,7 +264,7 @@ function R.apply_table(spin, ante)
 		MP.GAME.gambel_table = spin
 		MP.GAME.gambel_gold_paid = false
 		R.sync_state()
-		R.toast(R.spin_name(spin))
+		R.announce("spin", spin)
 		return
 	end
 	R.undo_table()
@@ -226,7 +296,7 @@ function R.apply_table(spin, ante)
 	end
 	MP.GAME.gambel_spin_delta = delta
 	R.sync_state()
-	R.toast(R.spin_name(spin))
+	R.announce("spin", spin)
 end
 
 function R.on_new_round()
@@ -1619,6 +1689,7 @@ function R.register_ui()
 	function Game:update(dt)
 		local r = upd(self, dt)
 		if MP.GAMBEL and MP.GAMBEL.active and MP.GAMBEL.active() and G and G.STATES then
+			if MP.GAMBEL.sync_badge then MP.GAMBEL.sync_badge() end
 			MP.GAMBEL.hook_shop()
 			if G.STATE ~= G.STATES.SHOP then MP.GAMBEL.clear_shop() end
 			local view = MP.GAMBEL.double_view

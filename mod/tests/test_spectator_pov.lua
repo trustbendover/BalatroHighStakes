@@ -85,6 +85,12 @@ ok(cam.last("spectateSnap").sig == "board-1", "a second snapshot inside the gap 
 clock.t = clock.t + 0.5
 S:receive(ann, { action = "spectateSnap", phase = "shop", sig = "shop-1", shop = { { k = "j_gros_michel", cost = 5 } }, hand = {} })
 ok(cam.last("spectateSnap").phase == "shop" and cam.last("spectateSnap").shop[1].cost == 5, "the shop row is relayed only in the shop phase")
+clock.t = clock.t + 1
+S:receive(ann, { action = "spectateSnap", phase = "play", sig = "up-1", ev = "select",
+	hand = { { r = "A", s = "H", up = 1, en = "m_bonus", sl = "Gold" } } })
+local marked = cam.last("spectateSnap")
+ok(marked.hand[1].up == 1 and marked.hand[1].en == "m_bonus" and marked.hand[1].sl == "Gold" and marked.ev == "select",
+	"a raised, enhanced, sealed card and its select event reach only the watcher")
 
 S:receive(cam, { action = "spectateWatch", playerId = bob.id })
 ok(ann.last("spectateDemand").on == false and bob.last("spectateDemand").on == true, "switching the followed player stops the old demand and starts the new one")
@@ -150,5 +156,24 @@ local function walkb(node)
 end
 walkb(ui)
 ok(buttons.mp_sp_prev and buttons.mp_sp_next and buttons.mp_sp_back and buttons.mp_sp_stats, "Prev, Next, Back and the stats toggle stay on the panel")
+
+local raised = POV.card({ base = { value = "A", suit = "Hearts" }, highlighted = true, seal = "Gold", config = { center = { key = "m_bonus" } } })
+ok(raised.up == 1 and raised.sl == "Gold" and raised.en == "m_bonus", "a raised enhanced sealed card keeps those marks")
+ok(POV.guess_event(
+	{ phase = "play", hand = { { up = 0 } }, played = {}, chips = "0", mult = "0" },
+	{ phase = "play", hand = { { up = 1 } }, played = {}, chips = "0", mult = "0" }
+) == "select", "raising a card is a select event")
+ok(POV.guess_event(
+	{ phase = "play", hand = { {} }, played = {}, chips = "1", mult = "1" },
+	{ phase = "play", hand = { {} }, played = {}, chips = "8", mult = "4" }
+) == "score", "chips x mult changing is a score event")
+local bag = POV.realize({ hand = { { r = "A", s = "H", up = 1 } }, played = { { r = "K", s = "S" } } }, function(d)
+	return { d = d, highlighted = false, REMOVED = false, states = { collide = { can = true }, drag = { can = true } },
+		remove = function(self) self.REMOVED = true end }
+end)
+local kept = bag.objects[1]
+ok(#bag.objects == 2 and kept.highlighted and kept.states.collide.can == false and kept.states.drag.can == false, "watched cards are raised copies and cannot be clicked")
+POV.cleanup(bag)
+ok(kept.REMOVED and #bag.objects == 0 and #bag.areas == 0, "switch, leave and match end remove every watched card")
 
 print("PASS: spectator pov")

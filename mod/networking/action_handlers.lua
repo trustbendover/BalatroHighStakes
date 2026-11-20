@@ -1984,7 +1984,7 @@ local last_game_seed = nil
 -- they must not run: ease_dollars indexes G.HUD and crashes.
 local RUN_ACTIONS = {
 	startBlind = true, enemyInfo = true, endPvP = true, playerInfo = true,
-	gambelTable = true, gambelTwist = true, gambelBetResult = true, gambelHit = true,
+	gambelTable = true, gambelBetResult = true, gambelHit = true,
 	enemyLocation = true, sendPhantom = true, removePhantom = true,
 	speedrun = true, asteroid = true, soldJoker = true,
 	letsGoGamblingNemesis = true, eatPizza = true, spentLastShop = true,
@@ -2026,7 +2026,8 @@ local HANDLERS = {
 	gambelTwist = function(p)
 		if not MP.GAMBEL then return end
 		MP.GAME.gambel_twist = p.twist
-		if MP.GAMBEL.toast and MP.GAMBEL.twist_name then MP.GAMBEL.toast(MP.GAMBEL.twist_name(p.twist)) end
+		if MP.GAMBEL.announce then MP.GAMBEL.announce("twist", p.twist)
+		elseif MP.GAMBEL.toast and MP.GAMBEL.twist_name then MP.GAMBEL.toast(MP.GAMBEL.twist_name(p.twist)) end
 	end,
 	gambelBetResult = function(p) if MP.GAMBEL and MP.GAMBEL.apply_bet then MP.GAMBEL.apply_bet(p) end end,
 	gambelHit = function(p) if MP.GAMBEL and MP.GAMBEL.apply_hit then MP.GAMBEL.apply_hit(p) end end,

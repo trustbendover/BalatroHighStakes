@@ -36,12 +36,20 @@ function P.card(card)
 	local suit = (base and base.suit) or card.suit or card.s or ""
 	local key = (center and center.key) or card.key or card.k or ""
 	local cost = tonumber(card.cost)
+	local center_key = (center and center.key) or ""
+	local enh = (type(center_key) == "string" and center_key:sub(1, 2) == "m_") and center_key or ""
+	if enh == "" and type(card.en) == "string" then enh = card.en end
+	local seal = card.seal or (type(card.ability) == "table" and card.ability.seal) or card.sl or ""
+	local raised = (card.highlighted == true or card.up == 1 or card.up == true) and 1 or nil
 	return {
 		k = tostring(key) ~= "" and tostring(key):sub(1, 40) or nil,
 		r = tostring(rank) ~= "" and tostring(rank):sub(1, 4) or nil,
 		s = tostring(suit) ~= "" and tostring(suit):sub(1, 1) or nil,
 		e = P.edition(card) ~= "" and P.edition(card) or (type(card.e) == "string" and card.e:sub(1, 8) or ""),
 		st = P.sticker(card) ~= "" and P.sticker(card) or (type(card.st) == "string" and card.st:sub(1, 8) or ""),
+		en = enh ~= "" and tostring(enh):sub(1, 24) or nil,
+		sl = tostring(seal) ~= "" and tostring(seal):sub(1, 12) or nil,
+		up = raised,
 		cost = cost and math.floor(cost) or nil,
 	}
 end
@@ -119,7 +127,89 @@ function P.signature(snap)
 		tostring(snap.hands), tostring(snap.discards), tostring(snap.score), tostring(snap.chips), tostring(snap.mult),
 		join_cards(snap.hand, 12), join_cards(snap.jokers, 10), join_cards(snap.cons, 5),
 		join_cards(snap.played, 8), join_cards(snap.shop, 6),
+		tostring(P.raised(snap.hand)),
 	}, "|")
+end
+
+function P.raised(list)
+	local n = 0
+	for _, c in ipairs(list or {}) do if c and c.up == 1 then n = n + 1 end end
+	return n
+end
+
+--- What changed since the last board. The watcher still receives the whole table.
+function P.guess_event(prev, snap)
+	if type(snap) ~= "table" then return "snap" end
+	if type(prev) ~= "table" or prev.phase ~= snap.phase then return "snap" end
+	if tostring(prev.chips or "0") ~= tostring(snap.chips or "0") or tostring(prev.mult or "0") ~= tostring(snap.mult or "0") then
+		return "score"
+	end
+	if #(snap.played or {}) > #(prev.played or {}) then return "play" end
+	if #(snap.hand or {}) < #(prev.hand or {}) and #(snap.played or {}) == 0 then return "discard" end
+	if #(snap.hand or {}) > #(prev.hand or {}) then return "draw" end
+	if snap.phase == "shop" and join_cards(snap.shop, 6) ~= join_cards(prev.shop, 6) then return "shop" end
+	if P.raised(snap.hand) ~= P.raised(prev.hand) then return "select" end
+	if join_cards(snap.jokers, 10) ~= join_cards(prev.jokers, 10) then return "joker" end
+	return "snap"
+end
+
+function P.cleanup(bag)
+	if type(bag) ~= "table" then return end
+	for _, obj in ipairs(bag.objects or {}) do
+		if obj and obj.remove and not obj.REMOVED then pcall(function() obj:remove() end) end
+		if obj then obj.REMOVED = true end
+	end
+	for _, area in ipairs(bag.areas or {}) do
+		if area and area.remove and not area.REMOVED then pcall(function() area:remove() end) end
+		if area then area.REMOVED = true end
+	end
+	bag.objects, bag.areas = {}, {}
+end
+
+--- View-only copies. make(desc) returns an object; clicks are turned off.
+function P.realize(snap, make)
+	local bag = { objects = {}, areas = {} }
+	if type(make) ~= "function" or type(snap) ~= "table" then return bag end
+	local function pile(list)
+		for _, desc in ipairs(list or {}) do
+			local obj = make(desc)
+			if type(obj) == "table" then
+				obj.highlighted = desc.up == 1
+				if obj.states and obj.states.collide then obj.states.collide.can = false end
+				if obj.states and obj.states.drag then obj.states.drag.can = false end
+				bag.objects[#bag.objects + 1] = obj
+			end
+		end
+	end
+	pile(snap.hand); pile(snap.played); pile(snap.jokers); pile(snap.cons); pile(snap.shop)
+	return bag
+end
+
+local EDITION_FLAG = { foil = "foil", holo = "holo", poly = "polychrome", neg = "negative" }
+
+--- A real Card when Balatro is present. Otherwise a inert stand-in the tests can remove.
+function P.make_live(desc)
+	desc = desc or {}
+	local function inert()
+		return { desc = desc, highlighted = desc.up == 1, REMOVED = false,
+			states = { collide = { can = false }, drag = { can = false } },
+			remove = function(self) self.REMOVED = true end }
+	end
+	if not (Card and G and G.CARD_W and G.P_CENTERS) then return inert() end
+	local front = nil
+	if desc.s and desc.r and G.P_CARDS then
+		front = G.P_CARDS[tostring(desc.s) .. "_" .. tostring(desc.r)] or G.P_CARDS[tostring(desc.r) .. "_" .. tostring(desc.s)]
+	end
+	local center = (desc.k and G.P_CENTERS[desc.k]) or (desc.en and G.P_CENTERS[desc.en]) or G.P_CENTERS.c_base
+	local ok, card = pcall(Card, 0, 0, G.CARD_W, G.CARD_H, front, center)
+	if not ok or type(card) ~= "table" then return inert() end
+	card.highlighted = desc.up == 1
+	local flag = EDITION_FLAG[desc.e or ""]
+	if flag and card.set_edition then pcall(function() card:set_edition({ [flag] = true }, true, true) end) end
+	if desc.sl and desc.sl ~= "" and card.set_seal then pcall(function() card:set_seal(desc.sl, true, true) end) end
+	if card.states and card.states.collide then card.states.collide.can = false end
+	if card.states and card.states.drag then card.states.drag.can = false end
+	return card
 end
 
 --- True when a snapshot is worth sending. Identical boards wait for the heartbeat.
