@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.7.5 - Heat Rush, a watched table, and a menu that stays on the menu
+
+- **Heat Rush.** A timed mode for one player, or two to eight. Clearing a blind fills Heat up to 100. The next hand is Overdrive at x1.5 and spends the meter. A fast clear can give a free reroll or $3. A boss inside the clock can give a Tag. Going slow takes nothing away. Solo ends after ante 8. Lives still eliminate you. If everyone loses their last life together, the higher total Heat wins, then ante, then score. Music: Heat Rush track by Lille Lilienthal
+- **Spectate.** Following a player shows their hand, jokers, consumables, and shop as view-only cards. The text board is still there. Cards are cleaned up when you leave, switch, or the match ends.
+- **Chaos.** Each spin and twist keeps the short toast, and adds the name plus a one-line description on a banner and in chat.
+- **Lives.** The host's pick from 1 to 16 is the starting count, including Gambel Time, which used to stop at 5.
+- **Menu.** A saved match asks Rejoin or a new lobby. Create and Join drop the saved match. Run actions, including money, wait until a run and its HUD exist.
+- **Pins.** Steamodded stays 1.0.0~BETA-1620a. Lovely stays 0.10.0.
+
 ## 0.7.4 - Less P2P traffic, and a short stall stays connected
 
 - **Lobby.** An unchanged roster is not broadcast again. Asking for the lobby still gets a fresh copy. A Steam send that fails is tried again.
