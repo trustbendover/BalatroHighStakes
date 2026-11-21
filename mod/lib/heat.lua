@@ -69,12 +69,118 @@ function H.report(blind)
 	})
 end
 
+function H.room_rect()
+	local t = G and G.ROOM and G.ROOM.T
+	if not t then return nil end
+	return { x = t.x or 0, y = t.y or 0, w = t.w or 0, h = t.h or 0 }
+end
+
+function H.blockers()
+	local list = {}
+	local function add(box)
+		local t = box and not box.REMOVED and box.T
+		if t and t.w and t.w > 0 and t.h and t.h > 0 then
+			list[#list + 1] = { x = t.x or 0, y = t.y or 0, w = t.w, h = t.h }
+		end
+	end
+	local gambel = MP.GAMBEL
+	if gambel and gambel.badge then add(gambel.badge) end
+	local chat = MP.CHAT
+	if chat and chat.box then add(chat.box) end
+	if G and G.MP3P_KOTH_UI then add(G.MP3P_KOTH_UI) end
+	return list
+end
+
+--- Stop the bond from pulling the strip back down onto the cards.
+function H.hold(box)
+	if not box then return end
+	if G and G.ROOM then box.container = G.ROOM end
+	if box.alignment then
+		box.alignment.type = "a"
+		box.alignment.prev_type = "a"
+		if box.alignment.type_list then box.alignment.type_list.a = true end
+	end
+end
+
+function H.sync_visual(box)
+	if not box or not box.T then return end
+	if box.hard_set_VT then
+		pcall(function() box:hard_set_VT() end)
+	elseif box.VT then
+		box.VT.x, box.VT.y, box.VT.w, box.VT.h = box.T.x, box.T.y, box.T.w, box.T.h
+	end
+	local seen = {}
+	local function snap(node)
+		if type(node) ~= "table" or seen[node] then return end
+		seen[node] = true
+		if node ~= box and node.move_with_major and node.role and node.role.major then
+			pcall(function() node:move_with_major(0) end)
+		end
+		if node.hard_set_VT then
+			pcall(function() node:hard_set_VT() end)
+		elseif node ~= box and node.VT and node.T then
+			node.VT.x, node.VT.y, node.VT.w, node.VT.h = node.T.x, node.T.y, node.T.w, node.T.h
+		end
+		local obj = node.config and node.config.object
+		if type(obj) == "table" then snap(obj) end
+		if node.children then
+			for _, child in ipairs(node.children) do snap(child) end
+		end
+	end
+	snap(box)
+	if box.UIRoot then snap(box.UIRoot) end
+end
+
+function H.pin()
+	local box = H.badge
+	local area = G and G.jokers
+	if not box or box.REMOVED or not area then return end
+	local slot = H.layout_badge(area, area.cards, H.blockers(), H.room_rect())
+	if not slot then return end
+	H.hold(box)
+	box.T.x, box.T.y, box.T.w, box.T.h = slot.x, slot.y, slot.w, slot.h
+	if box.VT then box.VT.x, box.VT.y, box.VT.w, box.VT.h = slot.x, slot.y, slot.w, slot.h end
+	if box.velocity then box.velocity.x, box.velocity.y = 0, 0 end
+	H.sync_visual(box)
+	H.slot = slot
+end
+
+--- The normal UI pass paints before the cards. Skip it and draw once afterwards.
+function H.silence(box)
+	if not box or box._mp_heat_draw or not box.draw then return end
+	local orig = box.draw
+	box._mp_heat_draw = orig
+	function box.draw(self, ...)
+		if not H._painting then return end
+		return orig(self, ...)
+	end
+end
+
+function H.draw_front()
+	local box = H.badge
+	if not box or box.REMOVED or not box.draw then return end
+	if G and G.OVERLAY_MENU then return end
+	H.pin()
+	if box.FRAME then box.FRAME.DRAW = -1 end
+	H._painting = true
+	pcall(function()
+		love.graphics.push()
+		local drew, err = pcall(function()
+			if box.translate_container then box:translate_container() end
+			box:draw()
+		end)
+		love.graphics.pop()
+		if not drew then error(err) end
+	end)
+	H._painting = false
+end
+
 function H.sync_badge()
 	if not (G and UIBox and G.UIT and G.ROOM_ATTACH and G.STAGES) then return end
-	local show = H.active() and G.STAGE == G.STAGES.RUN
+	local show = H.active() and G.STAGE == G.STAGES.RUN and G.jokers and G.jokers.T
 	if not show then
 		if H.badge and H.badge.remove then pcall(function() H.badge:remove() end) end
-		H.badge = nil
+		H.badge, H.slot = nil, nil
 		return
 	end
 	local g = MP.GAME or {}
@@ -87,17 +193,19 @@ function H.sync_badge()
 	end
 	if g.heat_overdrive then text = text .. "  OVERDRIVE" end
 	if (tonumber(g.heat_best) or 0) > 0 then text = text .. string.format("  Best %d", g.heat_best) end
-	if H.badge and H.view.text == text then return end
-	if H.badge and H.badge.remove then pcall(function() H.badge:remove() end) end
 	H.view.text = text
-	H.badge = UIBox({
-		definition = { n = G.UIT.ROOT, config = { align = "cm", colour = G.C.CLEAR }, nodes = {
-			{ n = G.UIT.R, config = { align = "cm", padding = 0.06, r = 0.1, colour = G.C.BLACK, emboss = 0.05 }, nodes = {
-				{ n = G.UIT.T, config = { ref_table = H.view, ref_value = "text", scale = 0.35, colour = G.C.GOLD or G.C.WHITE, shadow = true } },
+	if not H.badge or H.badge.REMOVED then
+		H.badge = UIBox({
+			definition = { n = G.UIT.ROOT, config = { align = "cm", colour = G.C.CLEAR, minw = H.BADGE_W, minh = H.BADGE_H }, nodes = {
+				{ n = G.UIT.R, config = { align = "cm", padding = 0.06, r = 0.1, colour = G.C.BLACK, emboss = 0.05, minw = H.BADGE_W }, nodes = {
+					{ n = G.UIT.T, config = { ref_table = H.view, ref_value = "text", scale = 0.32, colour = G.C.GOLD or G.C.WHITE, shadow = true } },
+				} },
 			} },
-		} },
-		config = { align = "tm", offset = { x = 0, y = 1.05 }, major = G.ROOM_ATTACH, bond = "Weak" },
-	})
+			config = { align = "tm", offset = { x = 0, y = -(H.BADGE_H + H.BADGE_GAP + H.HOVER) }, major = G.jokers, bond = "Weak" },
+		})
+		H.silence(H.badge)
+	end
+	H.pin()
 end
 
 function H.on_state(p)
@@ -117,6 +225,16 @@ function H.on_state(p)
 		pcall(function() add_tag(Tag(p.tag)) end)
 	end
 	if H.sync_badge then H.sync_badge() end
+end
+
+if love and love.draw and not H._draw then
+	H._draw = true
+	local draw = love.draw
+	function love.draw(...)
+		local r = draw(...)
+		if H.draw_front then H.draw_front() end
+		return r
+	end
 end
 
 if Game and Game.update and not H._ui then
