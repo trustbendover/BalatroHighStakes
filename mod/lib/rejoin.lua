@@ -136,6 +136,91 @@ function RJ.clear()
 	pcall(function() if love.filesystem.getInfo(RJ.FILE) then love.filesystem.remove(RJ.FILE) end end)
 end
 
+--- A restarted game still has the previous match on disk. That is an offer, not a join.
+function RJ.note_saved(code, token)
+	if type(code) ~= "string" or code == "" or type(token) ~= "string" or token == "" then return end
+	RJ.offer = { code = code, token = token }
+	RJ.prompted = false
+	RJ.blocked = false
+	RJ.sent = nil
+	RJ.skip_one_resume = nil
+	RJ.skip_resume = nil
+end
+
+--- The player chose Rejoin. The caller sends rejoinLobby.
+function RJ.accept_saved()
+	local o = RJ.offer
+	if not o then return nil end
+	RJ.offer = nil
+	RJ.prompted = true
+	RJ.blocked = false
+	RJ.sent = true
+	return o
+end
+
+--- Create or Join a different lobby, or the player chose New lobby.
+--- A rejoin that was already sent is ignored, and one following resume is dropped.
+function RJ.drop_saved()
+	local sent = RJ.sent
+	RJ.offer = nil
+	RJ.pending = nil
+	RJ.prompted = false
+	RJ.sent = nil
+	RJ.blocked = true
+	RJ.skip_one_resume = sent and true or nil
+	if MP.THREEP and MP.THREEP.clear_reconnect_info then MP.THREEP.clear_reconnect_info() end
+	if sent and Client and Client.send then pcall(Client.send, { action = "leaveLobby" }) end
+end
+
+--- joinedLobby for a lobby the player just chose. Late join may resume; a stale rejoin may not.
+function RJ.allow_match()
+	RJ.offer = nil
+	RJ.blocked = false
+	if RJ.skip_one_resume then RJ.skip_resume = true end
+	RJ.skip_one_resume = nil
+end
+
+function RJ.resume_allowed()
+	if RJ.offer or RJ.blocked then return false end
+	if RJ.skip_resume then
+		RJ.skip_resume = nil
+		return false
+	end
+	return true
+end
+
+function RJ.show_prompt()
+	if not (G and G.FUNCS and G.FUNCS.overlay_menu and create_UIBox_generic_options and UIBox_button) then return end
+	if not (MP.UI and MP.UI.UTILS and MP.UI.UTILS.create_column) then return end
+	local U = MP.UI.UTILS
+	G.FUNCS.mp_rejoin_yes = function()
+		local o = RJ.accept_saved()
+		if G.FUNCS.exit_overlay_menu then pcall(G.FUNCS.exit_overlay_menu) end
+		if o and MP.THREEP and MP.THREEP.begin_rejoin then MP.THREEP.begin_rejoin(o.code, o.token) end
+	end
+	G.FUNCS.mp_rejoin_no = function()
+		RJ.drop_saved()
+		if G.FUNCS.exit_overlay_menu then pcall(G.FUNCS.exit_overlay_menu) end
+	end
+	G.SETTINGS.paused = true
+	G.FUNCS.overlay_menu({
+		definition = create_UIBox_generic_options({
+			no_back = true,
+			contents = {
+				U.create_column({ align = "cm", padding = 0.15 }, {
+					U.create_row({ align = "cm", padding = 0.05 }, {
+						U.create_text_node(L("k_rj_offer", "Your last match is still going."), { scale = 0.55, colour = G.C.UI.TEXT_LIGHT }),
+					}),
+					U.create_row({ align = "cm", padding = 0.12 }, {
+						UIBox_button({ button = "mp_rejoin_yes", label = { L("b_rj_rejoin", "Rejoin match") }, minw = 3.2, minh = 0.7, scale = 0.4, colour = G.C.GREEN }),
+						UIBox_button({ button = "mp_rejoin_no", label = { L("b_rj_new", "New lobby") }, minw = 3.2, minh = 0.7, scale = 0.4, colour = G.C.RED }),
+					}),
+				}),
+			},
+		}),
+	})
+end
+
 --- New match: forget the old checkpoint.
 function RJ.on_start(p)
 	RJ.clear()
@@ -242,7 +327,11 @@ function RJ.register()
 	local t = 0
 	function Game:update(dt)
 		local r = upd(self, dt)
-		if RJ.ready() then
+		if RJ.offer and not RJ.prompted and G and G.STAGES and G.STAGE == G.STAGES.MAIN_MENU and not G.OVERLAY_MENU then
+			RJ.prompted = true
+			pcall(RJ.show_prompt)
+		end
+		if RJ.ready() and RJ.resume_allowed() then
 			local p = RJ.pending.p
 			RJ.pending = nil
 			local ok, err = pcall(RJ.restore, p)

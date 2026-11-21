@@ -96,6 +96,13 @@ MP.THREEP.clear_reconnect_info = function()
 	lastLobbyCode = nil
 	clear_reconnect_info()
 end
+function MP.THREEP.begin_rejoin(code, token)
+	if not code or not token then return end
+	lastLobbyCode, reconnectToken = code, token
+	save_reconnect_info()
+	if MP.REJOIN then MP.REJOIN.blocked = false end
+	Client.send({ action = "rejoinLobby", code = code, reconnectToken = token })
+end
 
 local function action_connected()
 	MP.LOBBY.connected = true
@@ -106,16 +113,20 @@ local function action_connected()
 		modHash = MP.MOD_STRING,
 	})
 
-	-- If we have reconnect info, attempt to rejoin the lobby
+	-- A restarted game keeps the previous match on disk. Offer Rejoin on the main menu.
+	-- Do not send rejoinLobby here: Create Lobby would be pulled into that match, and its
+	-- money actions would run before a HUD exists.
 	if not (reconnectToken and lastLobbyCode) and not MP.LOBBY.code then
-		-- 3P: after a crash/restart, use the token saved on disk
 		local code, token = load_reconnect_info()
-		if code then
+		if code and MP.REJOIN and MP.REJOIN.note_saved then
+			MP.REJOIN.note_saved(code, token)
+			sendWarnMessage("A previous match (" .. code .. ") can be rejoined from the main menu.", "MULTIPLAYER")
+		elseif code then
 			lastLobbyCode, reconnectToken = code, token
 			sendWarnMessage("Found a running game (" .. code .. "), trying to rejoin...", "MULTIPLAYER")
 		end
 	end
-	if reconnectToken and lastLobbyCode then
+	if reconnectToken and lastLobbyCode and not (MP.REJOIN and MP.REJOIN.offer) then
 		Client.send({
 			action = "rejoinLobby",
 			code = lastLobbyCode,
@@ -129,6 +140,7 @@ local function action_joinedLobby(p)
 	MP.LOBBY.code = code
 	MP.LOBBY.type = type
 	MP.LOBBY.ready_to_start = false
+	if MP.REJOIN and MP.REJOIN.allow_match then MP.REJOIN.allow_match() end
 	-- Store reconnect info for potential future reconnection
 	-- 0.6.9: watching a match where we hold a seat must not replace that seat's token
 	local keep = p.spectator and reconnectToken and lastLobbyCode == code
@@ -141,6 +153,7 @@ local function action_joinedLobby(p)
 end
 
 local function action_rejoinedLobby(p)
+	if MP.REJOIN and MP.REJOIN.blocked then return end
 	local code, type, token = p.code, p.type, p.reconnectToken
 	MP.LOBBY.code = code
 	MP.LOBBY.type = type
@@ -837,6 +850,7 @@ MP.THREEP.restart_at_ante = restart_at_ante
 -- 0.6.8: our own checkpoint (lib/rejoin.lua) restores the run when it matches the lobby;
 -- otherwise restart_at_ante. Both wait until the lobby screen has settled after the rejoin.
 local function action_resume_game(p)
+	if MP.REJOIN and MP.REJOIN.resume_allowed and not MP.REJOIN.resume_allowed() then return end
 	-- Rejoin / late join: host match settings before the run continues or restarts.
 	if type(p.config) == "table" then adopt_match_settings(p.config) end
 	local run_alive = G.STAGE == G.STAGES.RUN and not p.lateJoin and MP.GAME and (MP.GAME.lives or 0) > 0
@@ -1537,6 +1551,7 @@ end
 
 -- #region Client to Server
 function MP.ACTIONS.create_lobby(gamemode)
+	if MP.REJOIN and MP.REJOIN.drop_saved then MP.REJOIN.drop_saved() end
 	Client.send({
 		action = "createLobby",
 		gameMode = gamemode,
@@ -1555,6 +1570,7 @@ function MP.ACTIONS.spectate_lobby(code)
 end
 
 function MP.ACTIONS.join_lobby(code)
+	if MP.REJOIN and MP.REJOIN.drop_saved then MP.REJOIN.drop_saved() end
 	Client.send({
 		action = "joinLobby",
 		code = code,
@@ -1964,6 +1980,20 @@ end
 
 local last_game_seed = nil
 
+-- These change the run or its HUD. On the main menu (no run yet, or a rejoin that has not started)
+-- they must not run: ease_dollars indexes G.HUD and crashes.
+local RUN_ACTIONS = {
+	startBlind = true, enemyInfo = true, endPvP = true, playerInfo = true,
+	gambelTable = true, gambelTwist = true, gambelBetResult = true, gambelHit = true,
+	enemyLocation = true, sendPhantom = true, removePhantom = true,
+	speedrun = true, asteroid = true, soldJoker = true,
+	letsGoGamblingNemesis = true, eatPizza = true, spentLastShop = true,
+	magnet = true, magnetResponse = true,
+	startAnteTimer = true, pauseAnteTimer = true,
+	jimboAppear = true, jimboTalk = true, jimboMove = true, jimboRemove = true,
+	dataSync = true,
+}
+
 local function noop() end
 
 local HANDLERS = {
@@ -2088,7 +2118,9 @@ function Game:update(dt)
     
                 local handler = HANDLERS[parsedAction.action]
                 if handler then
-                    if MP.SPECTATE and MP.SPECTATE.state.joined and G.STAGE ~= G.STAGES.RUN then
+                    if RUN_ACTIONS[parsedAction.action] and not (MP.UTILS and MP.UTILS.in_active_run and MP.UTILS.in_active_run()) then
+                        -- money, blinds and HUD updates wait until the run is on screen
+                    elseif MP.SPECTATE and MP.SPECTATE.state.joined and G.STAGE ~= G.STAGES.RUN then
                         -- 0.6.8: watching from the lobby (no run): match messages must never crash the menu
                         local hok, herr = pcall(handler, parsedAction)
                         if not hok then sendDebugMessage("Spectator ignored " .. tostring(parsedAction.action) .. ": " .. tostring(herr), "MULTIPLAYER") end

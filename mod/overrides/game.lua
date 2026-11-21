@@ -2,9 +2,26 @@ local ease_dollars_ref = ease_dollars
 -- Forward every argument. Steamodded 26.1002 still calls ease_dollars(mod, instant);
 -- a later build can add a context after that without this wrapper dropping it.
 function ease_dollars(mod, ...)
-	if MP and MP.MATCH_STATS and MP.MATCH_STATS.on_dollars then pcall(MP.MATCH_STATS.on_dollars, mod) end
+	-- Vanilla queues a closure that indexes G.HUD. That closure crashes on the main menu
+	-- when a rejoin or a leftover match action pays out before the run exists.
+	if not (MP and MP.UTILS and MP.UTILS.in_active_run and MP.UTILS.in_active_run()) then return end
+	if MP.MATCH_STATS and MP.MATCH_STATS.on_dollars then pcall(MP.MATCH_STATS.on_dollars, mod) end
 	sendTraceMessage(string.format("Client sent message: action:moneyMoved,amount:%s", tostring(mod)), "MULTIPLAYER")
-	return ease_dollars_ref(mod, ...)
+	local instant = ...
+	if instant or not (G and G.E_MANAGER and G.E_MANAGER.add_event and Event) then
+		return ease_dollars_ref(mod, ...)
+	end
+	local rest = { ... }
+	G.E_MANAGER:add_event(Event({
+		trigger = "immediate",
+		blockable = false,
+		blocking = false,
+		func = function()
+			if not (MP and MP.UTILS and MP.UTILS.in_active_run and MP.UTILS.in_active_run()) then return true end
+			ease_dollars_ref(mod, true, unpack(rest))
+			return true
+		end,
+	}))
 end
 if SMODS and SMODS.get_probability_vars and MP.UTILS and MP.UTILS.wrap_probability_vars then
 	SMODS.get_probability_vars = MP.UTILS.wrap_probability_vars(SMODS.get_probability_vars)

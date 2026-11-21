@@ -41,6 +41,11 @@ function MP.UTILS.wrap_probability_vars(get_vars)
 	end
 end
 
+-- A run action may touch the dollar HUD only while that HUD is on screen.
+function MP.UTILS.in_active_run()
+	return (G and G.STAGES and G.STAGE == G.STAGES.RUN and G.HUD and G.HUD.get_UIE_by_ID) and true or false
+end
+
 -- Pressing Play twice on the same hand must not send two scores.
 function MP.UTILS.duplicate_play(last, score, hands)
 	return type(last) == "table" and last.score == score and last.hands == hands
