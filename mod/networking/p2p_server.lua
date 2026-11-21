@@ -21,7 +21,7 @@ function Core.unready_count(players)
 end
 
 function Core.start_error(mode, n, options)
-	-- Gambel Time is the one mode a single player can start. Every other mode stays at 2.
+	-- Gambel Time and Heat Rush can start with one player. Every other mode stays at 2.
 	if mode == "gambel_time" or mode == "heat_rush" then
 		if n < 1 then return "Need at least 1 player to start." end
 		if n > Core.max_players(mode) then return "Too many players for this mode." end
