@@ -1756,6 +1756,7 @@ end
 function MP.ACTIONS.new_round()
 	MP.GAME.duplicate_end = false
 	MP.GAME.round_ended = false
+	if MP.HEAT and MP.HEAT.active and MP.HEAT.active() and MP.HEAT.report then MP.HEAT.report() end
 	Client.send({
 		action = "newRound",
 	})

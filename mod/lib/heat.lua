@@ -41,6 +41,24 @@ end
 
 H.register_music()
 
+function H.report()
+	if not (Client and Client.send and H.active()) then return end
+	local round = G and G.GAME and G.GAME.current_round or {}
+	local blind = G and G.GAME and G.GAME.blind
+	local kind = "small"
+	if blind and blind.boss then kind = "boss"
+	elseif blind and ((blind.get_type and blind:get_type() == "Big") or blind.name == "Big Blind") then kind = "big" end
+	local now = (love and love.timer and love.timer.getTime and love.timer.getTime()) or os.clock()
+	local seconds = H.started and (now - H.started) or (H.PAR_SECONDS[kind] or 90)
+	H.started = now
+	Client.send({
+		action = "heatReport",
+		blind = kind,
+		hands = tonumber(round.hands_played) or 1,
+		seconds = seconds,
+	})
+end
+
 function H.sync_badge()
 	if not (G and UIBox and G.UIT and G.ROOM_ATTACH and G.STAGES) then return end
 	local show = H.active() and G.STAGE == G.STAGES.RUN
@@ -50,7 +68,13 @@ function H.sync_badge()
 		return
 	end
 	local g = MP.GAME or {}
+	local now = (love and love.timer and love.timer.getTime and love.timer.getTime()) or os.clock()
+	if not H.started then H.started = now end
 	local text = string.format("HEAT %d/%d", tonumber(g.heat) or 0, H.MAX)
+	local blind = G and G.GAME and G.GAME.blind
+	if blind and blind.boss and H.started then
+		text = text .. string.format("  BOSS %ds", math.max(0, math.floor(H.PAR_SECONDS.boss - (now - H.started))))
+	end
 	if g.heat_overdrive then text = text .. "  OVERDRIVE" end
 	if (tonumber(g.heat_best) or 0) > 0 then text = text .. string.format("  Best %d", g.heat_best) end
 	if H.badge and H.view.text == text then return end
