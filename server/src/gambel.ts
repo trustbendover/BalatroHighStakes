@@ -34,7 +34,8 @@ export function gambelLives(n: unknown): number {
 	if (!Number.isFinite(v)) return 3;
 	const i = Math.floor(v);
 	if (i < 2) return 2;
-	if (i > 5) return 5;
+	// The lobby lives control goes to 16. A higher pick used to stop at 5.
+	if (i > 16) return 16;
 	return i;
 }
 

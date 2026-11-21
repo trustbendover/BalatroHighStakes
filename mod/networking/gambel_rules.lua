@@ -77,7 +77,8 @@ function G.lives(n)
 	if not n or n ~= n then return G.DEFAULT_LIVES end
 	n = math.floor(n)
 	if n < 2 then return 2 end
-	if n > 5 then return 5 end
+	-- The lobby lives control goes to 16. A higher pick used to stop at 5.
+	if n > 16 then return 16 end
 	return n
 end
 

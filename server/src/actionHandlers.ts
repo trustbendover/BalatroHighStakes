@@ -168,6 +168,9 @@ const startGameAction = (client: Client) => {
 	let lives = lobby.options.starting_lives
 		? Number.parseInt(lobby.options.starting_lives)
 		: GameModes[lobby.gameMode].startingLives;
+	if (!Number.isFinite(lives) || lives < 1) lives = GameModes[lobby.gameMode].startingLives;
+	lives = Math.floor(lives);
+	if (lives > 16) lives = 16;
 	if (lobby.gameMode === "gambel_time") lives = gambelLives(lives);
 
 	const seed = lobby.options.different_seeds ? undefined : generateSeed();

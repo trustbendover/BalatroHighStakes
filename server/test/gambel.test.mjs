@@ -6,7 +6,9 @@ import assert from 'node:assert/strict'
 import { gambelCut, gambelFlip, gambelLives, gambelMusic, gambelPayout, gambelResolve, gambelRoll, gambelStake } from '../dist/gambel.js'
 import { startError } from '../dist/Lobby.js'
 
-assert.equal(gambelLives(9), 5)
+assert.equal(gambelLives(9), 9)
+assert.equal(gambelLives(20), 16)
+assert.equal(gambelLives(1), 2)
 assert.equal(gambelStake(0), 0)
 assert.equal(gambelStake(1), 0)
 assert.ok(gambelFlip('s', 'p', 1, 0).money >= 0)

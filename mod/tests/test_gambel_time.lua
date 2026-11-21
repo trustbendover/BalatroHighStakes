@@ -21,7 +21,7 @@ for _, mode in ipairs({ "attrition", "showdown", "koth", "survival", "deathmatch
 	ok(M.start_problem(1, mode) ~= nil, mode .. " still needs more than 1")
 end
 
-ok(R.lives(nil) == 3 and R.lives(1) == 2 and R.lives(3) == 3 and R.lives(9) == 5, "lives stay inside 2-5")
+ok(R.lives(nil) == 3 and R.lives(1) == 2 and R.lives(3) == 3 and R.lives(9) == 9 and R.lives(20) == 16, "lives stay inside 2-16, the lobby control's max")
 ok(R.ante_target({}) == 6 and R.ante_target({ gambel_ante = 4 }) == 4 and R.ante_target({ gambel_ante = 99 }) == 12, "target ante defaults to 6")
 ok(R.blind_phase("Small") == "build" and R.blind_phase("Big") == "drop" and R.blind_phase("Boss") == "final", "small builds, big drops, the boss is the final drop")
 ok(R.phase_bonus("drop") == 3 and R.phase_bonus("build") == 0, "the drop pays a small cash bump")
@@ -211,12 +211,12 @@ local solo = player(S, "Ada")
 S:receive(solo.c, { action = "createLobby", gameMode = "gambel_time" })
 S:receive(solo.c, { action = "lobbyOptions", match_settings = 1, starting_lives = 9, gambel_ante = 8 })
 S:receive(solo.c, { action = "startGame" })
-ok(solo.last("startGame") and solo.c.lives == 5 and solo.c.lobby.isInGame and not solo.last("winGame"), "solo starts at the life cap and the match stays open")
+ok(solo.last("startGame") and solo.c.lives == 9 and solo.last("playerInfo").lives == 9 and solo.c.lobby.isInGame and not solo.last("winGame"), "solo starts with the host's 9 lives, not a cap of 5")
 S:receive(solo.c, { action = "gambelBoss", ante = 1 })
 solo.c.lobby.gambelTwist = "double"
 solo.c.lobby.gambelBossOpen = true
 S:receive(solo.c, { action = "failRound" })
-ok(solo.c.lives == 3, "a double-trouble boss costs 2 lives against The House")
+ok(solo.c.lives == 7, "a double-trouble boss costs 2 lives against The House")
 S:receive(solo.c, { action = "setAnte", ante = 9 })
 ok(solo.last("winGame") and solo.last("winGame").reason == "house" and not solo.c.lobby.isInGame, "clearing the target ante beats The House")
 local won = solo.last("matchStats")
