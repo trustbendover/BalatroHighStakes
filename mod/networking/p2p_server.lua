@@ -627,10 +627,19 @@ function Server:check_game_over_inner(L)
 	if survivors == 0 and #dying > 0 and #self:away_alive(L) > 0 then return false end
 	local house = self:gambel_solo(L)
 	if survivors == 0 and #dying > 0 and not self:teams_active(L) and not house then
+		if L.gameMode == "heat_rush" and Core.HEAT then
+			local rows = {}
+			for _, p in ipairs(dying) do
+				rows[#rows + 1] = { id = p.id, heat = p.heatTotal or 0, ante = p.ante or 1, score = 0, p = p }
+			end
+			Core.HEAT.rank(rows)
+			if rows[1] and rows[1].p then spared[rows[1].p] = true end
+		else
 		-- nobody left standing: the highest score among those dying now wins (ties: all of them)
 		local best = nil
 		for _, p in ipairs(dying) do if best == nil or s_gt(p.score, best) then best = p.score end end
 		for _, p in ipairs(dying) do if s_eq(p.score, best) then spared[p] = true end end
+		end
 	end
 	if survivors == 0 and #dying > 0 and self:teams_active(L) and #self:away_alive(L) == 0 then
 		-- Teams: every team out at once (e.g. failed rounds at the same ante): the best team value wins
@@ -712,13 +721,6 @@ function Server:check_game_over_inner(L)
 	end
 	if #alive + #self:away_alive(L) <= 1 then
 		local winner = alive[1]
-		if L.gameMode == "heat_rush" and Core.HEAT and #alive > 1 then
-			winner = nil
-			local rows = {}
-			for _, p in ipairs(alive) do rows[#rows + 1] = { id = p.id, heat = p.heatTotal or 0, ante = p.ante or 1, score = 0, p = p } end
-			Core.HEAT.rank(rows)
-			winner = rows[1] and rows[1].p
-		end
 		if winner then
 			sendA(winner, { action = "winGame", reason = L.gameMode == "heat_rush" and "heat" or nil,
 				heat = winner.heatTotal, best = winner.heatBest })
@@ -2320,7 +2322,7 @@ end
 function H.setAnte(S, c, a)
 	c.ante = tonumber(a.ante) or c.ante
 	local L = c.lobby
-	if L and L.gameMode == "heat_rush" and L.isInGame and (c.lives or 0) > 0 and #S:seated(L) <= 1
+	if L and L.gameMode == "heat_rush" and L.isInGame and (L.startPlayers or 1) <= 1 and (c.lives or 0) > 0
 		and (tonumber(c.ante) or 1) > (Core.HEAT and Core.HEAT.SOLO_ANTE or 8) then
 		sendA(c, { action = "winGame", reason = "heat", heat = c.heatTotal or 0, best = c.heatBest or 0 })
 		L.winnerId = c.id

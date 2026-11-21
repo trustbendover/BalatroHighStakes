@@ -41,16 +41,26 @@ end
 
 H.register_music()
 
-function H.report()
+function H.now()
+	return (love and love.timer and love.timer.getTime and love.timer.getTime()) or os.clock()
+end
+
+--- The clock starts when a blind is chosen. Selecting a blind does not earn Heat.
+function H.arm()
+	if H.active() then H.started = H.now() end
+end
+
+--- Called when the blind is actually beaten.
+function H.report(blind)
 	if not (Client and Client.send and H.active()) then return end
 	local round = G and G.GAME and G.GAME.current_round or {}
-	local blind = G and G.GAME and G.GAME.blind
 	local kind = "small"
 	if blind and blind.boss then kind = "boss"
 	elseif blind and ((blind.get_type and blind:get_type() == "Big") or blind.name == "Big Blind") then kind = "big" end
-	local now = (love and love.timer and love.timer.getTime and love.timer.getTime()) or os.clock()
-	local seconds = H.started and (now - H.started) or (H.PAR_SECONDS[kind] or 90)
-	H.started = now
+	local now = H.now()
+	local par = H.PAR_SECONDS[kind] or 90
+	local seconds = H.started and (now - H.started) or (par + 1)
+	H.started = nil
 	Client.send({
 		action = "heatReport",
 		blind = kind,

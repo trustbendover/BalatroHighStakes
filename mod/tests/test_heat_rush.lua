@@ -60,6 +60,23 @@ ok(ada.last("heatState").tag == nil and ada.last("heatState").reward == nil, "a 
 S:receive(ada, { action = "setAnte", ante = 9 })
 ok(ada.last("winGame") and ada.last("winGame").reason == "heat", "solo ends after ante 8")
 
+local S2 = Core.new({ now = function() return 1 end, log = function() end })
+local ann, bob = client(S2, "Ann~1"), client(S2, "Bob~2")
+S2:receive(ann, { action = "createLobby", gameMode = "heat_rush" })
+S2:receive(bob, { action = "joinLobby", code = ann.last("joinedLobby").code })
+S2:receive(bob, { action = "readyLobby" })
+S2:receive(ann, { action = "startGame" })
+S2:receive(ann, { action = "setAnte", ante = 9 })
+ok(not ann.last("winGame") and ann.lobby.isInGame, "a second player still in the match stops the solo ante win")
+ann.heatTotal, bob.heatTotal = 10, 40
+ann.lives, bob.lives = 0, 0
+ann.eliminated, bob.eliminated = false, false
+ok(S2:check_game_over(ann.lobby) and ann.lobby.winnerId == bob.id, "if everyone falls together, the higher total Heat wins")
+
+local handlers = io.open("networking/action_handlers.lua"):read("*a")
+ok(handlers:find("MP.HEAT.arm", 1, true) and not handlers:find("MP.HEAT.report", 1, true), "choosing a blind starts the clock and does not award Heat")
+local hud = io.open("ui/game/blind_hud.lua"):read("*a")
+ok(hud:find("MP.HEAT.report", 1, true), "beating the blind is what reports Heat")
 local music = io.open("lib/heat.lua"):read("*a")
 ok(music:find('key = "music_heat_rush"', 1, true) and music:find('path = "music_heat_rush.ogg"', 1, true), "the sound is registered for music_heat_rush.ogg")
 local credits = io.open("CREDITS.md"):read("*a")
