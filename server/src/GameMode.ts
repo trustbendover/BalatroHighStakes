@@ -73,6 +73,12 @@ const GameModes: {
 			return { boss: "bl_pvp" };
 		},
 	},
+	heat_rush: {
+		startingLives: 4,
+		getBlindFromAnte: () => {
+			return { boss: "bl_pvp" };
+		},
+	},
 };
 
 export default GameModes;

@@ -22,7 +22,7 @@ end
 
 function Core.start_error(mode, n, options)
 	-- Gambel Time is the one mode a single player can start. Every other mode stays at 2.
-	if mode == "gambel_time" then
+	if mode == "gambel_time" or mode == "heat_rush" then
 		if n < 1 then return "Need at least 1 player to start." end
 		if n > Core.max_players(mode) then return "Too many players for this mode." end
 		return nil
@@ -39,7 +39,7 @@ function Core.start_error(mode, n, options)
 	return nil
 end
 Core.SERVER_VERSION = "0.7.4"
-Core.STARTING_LIVES = { attrition = 4, showdown = 2, survival = 1, koth = 3, teams = 4, duel = 4, deathmatch = 4, gambel_time = 3 }
+Core.STARTING_LIVES = { attrition = 4, showdown = 2, survival = 1, koth = 3, teams = 4, duel = 4, deathmatch = 4, gambel_time = 3, heat_rush = 4 }
 -- Deathmatch: seconds a disconnected player may rejoin before counting as eliminated
 Core.DEATHMATCH_GRACE = 60
 function Core.deathmatch_grace(options)
@@ -561,6 +561,7 @@ function Server:reset_players(L)
 	L.gambelBossOpen, L.gambelSabotaged, L.gambelLives, L.gambelPayout = false, nil, nil, nil
 	for _, p in ipairs(L.players) do
 		p.gambelBetAnte, p.jokerGive, p.jokerRoom = nil, nil, nil
+		p.heat, p.heatTotal, p.heatBest, p.overdrive = 0, 0, 0, false
 	end
 end
 
@@ -710,9 +711,20 @@ function Server:check_game_over_inner(L)
 		return false
 	end
 	if #alive + #self:away_alive(L) <= 1 then
-		if alive[1] then sendA(alive[1], { action = "winGame" }) end
+		local winner = alive[1]
+		if L.gameMode == "heat_rush" and Core.HEAT and #alive > 1 then
+			winner = nil
+			local rows = {}
+			for _, p in ipairs(alive) do rows[#rows + 1] = { id = p.id, heat = p.heatTotal or 0, ante = p.ante or 1, score = 0, p = p } end
+			Core.HEAT.rank(rows)
+			winner = rows[1] and rows[1].p
+		end
+		if winner then
+			sendA(winner, { action = "winGame", reason = L.gameMode == "heat_rush" and "heat" or nil,
+				heat = winner.heatTotal, best = winner.heatBest })
+		end
 		L.isInGame, L.blindActive, L.slots = false, false, {}
-		L.winnerId = alive[1] and alive[1].id or nil
+		L.winnerId = winner and winner.id or nil
 		self:deathmatch_broadcast(L)
 		return true
 	end
@@ -2265,9 +2277,59 @@ function H.failTimer(S, c)
 	S:try_start_blind(L)
 	S:try_resolve_pvp(L)
 end
+function Server:heat_broadcast(L)
+	if not L or L.gameMode ~= "heat_rush" then return end
+	local rows = {}
+	for _, p in ipairs(L.players) do
+		if not p.spectator then
+			rows[#rows + 1] = { id = p.id, name = p.username, heat = p.heat or 0, total = p.heatTotal or 0,
+				best = p.heatBest or 0, ante = p.ante or 1, overdrive = p.overdrive and true or false }
+		end
+	end
+	if Core.HEAT then Core.HEAT.rank(rows) end
+	self:broadcast(L, { action = "heatBoard", rows = rows })
+end
+
+function H.heatReport(S, c, a)
+	local L = c.lobby
+	if not L or L.gameMode ~= "heat_rush" or not L.isInGame or c.eliminated or c.spectator or not Core.HEAT then return end
+	local blind = Core.HEAT.kind(a and a.blind)
+	local hands = tonumber(a and a.hands) or 0
+	local seconds = tonumber(a and a.seconds) or 0
+	local gain = Core.HEAT.gain(blind, hands, seconds)
+	local heat, armed = Core.HEAT.apply(c.heat or 0, gain)
+	c.heat = heat
+	c.heatTotal = (c.heatTotal or 0) + gain
+	if (c.heat or 0) > (c.heatBest or 0) then c.heatBest = c.heat end
+	if armed then c.overdrive = true end
+	local reward = Core.HEAT.reward(blind, seconds)
+	local tag = Core.HEAT.boss_tag(blind, seconds)
+	sendA(c, { action = "heatState", heat = c.heat, total = c.heatTotal, best = c.heatBest,
+		overdrive = c.overdrive and true or false, reward = reward, tag = tag })
+	S:heat_broadcast(L)
+end
+
+function H.heatSpend(S, c)
+	local L = c.lobby
+	if not L or L.gameMode ~= "heat_rush" or not c.overdrive or not Core.HEAT then return end
+	c.heat, c.overdrive = Core.HEAT.spend(true)
+	sendA(c, { action = "heatState", heat = 0, total = c.heatTotal or 0, best = c.heatBest or 0, overdrive = false })
+	S:heat_broadcast(L)
+end
+
 function H.setAnte(S, c, a)
 	c.ante = tonumber(a.ante) or c.ante
 	local L = c.lobby
+	if L and L.gameMode == "heat_rush" and L.isInGame and (c.lives or 0) > 0 and #S:seated(L) <= 1
+		and (tonumber(c.ante) or 1) > (Core.HEAT and Core.HEAT.SOLO_ANTE or 8) then
+		sendA(c, { action = "winGame", reason = "heat", heat = c.heatTotal or 0, best = c.heatBest or 0 })
+		L.winnerId = c.id
+		L.isInGame, L.blindActive = false, false
+		if S.stats_finish then S:stats_finish(L) end
+		S:chat_reset(L, "lobby")
+		S:pov_reset(L)
+		return
+	end
 	if not L or L.gameMode ~= "gambel_time" or not Core.GAMBEL then return end
 	-- The table follows the furthest living player, so an eliminated host does not stop the spins.
 	if L.isInGame then S:gambel_table(L, Core.match_ante(L.players)) end
@@ -2398,6 +2460,10 @@ do
 	if not Core.GAMBEL then
 		local m = take("gambel_rules.lua", function(m) return type(m) == "table" and m.resolve end)
 		if m then Core.GAMBEL = m end
+	end
+	if not Core.HEAT then
+		local m = take("heat_rules.lua", function(m) return type(m) == "table" and m.gain end)
+		if m then Core.HEAT = m end
 	end
 	if not Core.POV then
 		local m = take("spectator_pov.lua", function(m) return type(m) == "table" and m.recipients end)

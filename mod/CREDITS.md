@@ -26,4 +26,5 @@ Balatro High Stakes is a fork of **Balatro Multiplayer**, licensed under the GNU
 
 ## Music
 - **GAMBEL TIME** by **Bass Gas M**.
+- **Heat Rush track** by **Lille Lilienthal**.
 

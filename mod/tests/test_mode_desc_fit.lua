@@ -31,7 +31,7 @@ local function balanced(s)
 	end
 	return n == 0
 end
-local card_modes = { "duel", "teams", "teams2", "teams3", "teams4", "attrition", "showdown", "koth", "deathmatch", "survival", "gambel_time" }
+local card_modes = { "duel", "teams", "teams2", "teams3", "teams4", "attrition", "showdown", "koth", "deathmatch", "survival", "gambel_time", "heat_rush" }
 for _, lang in ipairs({ "en-us", "nl" }) do
 	local d = dict("localization/" .. lang .. ".lua")
 	for _, m in ipairs(card_modes) do

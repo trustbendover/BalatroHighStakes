@@ -1720,6 +1720,11 @@ function MP.ACTIONS.play_hand(score, hands_left)
 
 	local give, room = false, false
 	if MP.GAMBEL and MP.GAMBEL.joker_flags then give, room = MP.GAMBEL.joker_flags() end
+	if MP.GAME.heat_overdrive and MP.HEAT and MP.HEAT.boost then
+		fixed_score = MP.HEAT.boost(fixed_score, true)
+		MP.GAME.heat_overdrive = false
+		Client.send({ action = "heatSpend" })
+	end
 	Client.send({
 		action = "playHand",
 		score = fixed_score,
@@ -2059,6 +2064,8 @@ local HANDLERS = {
 	moddedAction = action_modded_action,
 	error = action_error,
 	keepAlive = action_keep_alive,
+	heatState = function(p) if MP.HEAT and MP.HEAT.on_state then MP.HEAT.on_state(p) end end,
+	heatBoard = function(p) if MP.HEAT and MP.HEAT.on_state then MP.HEAT.on_state(p) end end,
     dataSync = action_data_sync,
 }
 

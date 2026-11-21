@@ -30,7 +30,7 @@ export const maxPlayersFor = (mode: GameMode | string): number => (mode === "due
 /** null when a lobby of n players can start this mode, else the reason. */
 // biome-ignore lint/suspicious/noExplicitAny: lobby options are loosely typed
 export const startError = (mode: GameMode | string, n: number, options: { [k: string]: any } = {}): string | null => {
-	if (mode === "gambel_time") {
+	if (mode === "gambel_time" || mode === "heat_rush") {
 		if (n < 1) return "Need at least 1 player to start.";
 		if (n > maxPlayersFor(mode)) return "Too many players for this mode.";
 		return null;
