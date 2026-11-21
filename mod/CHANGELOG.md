@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.6 - Heat Rush is in the Gamemodes menu
+
+- **Heat Rush.** The mode is listed under Free-for-all, after Gambel Time. It can still start with one player or up to eight. Lives stay at 4 unless the host changes them. The lives HUD stays on, and the track still plays during the run.
+- **Menu.** Every registered gamemode has a button. A new mode that is missing from that list fails the tests.
+- **Pins.** Steamodded stays 1.0.0~BETA-1620a. Lovely stays 0.10.0.
+
 ## 0.7.5 - Heat Rush, a watched table, and a menu that stays on the menu
 
 - **Heat Rush.** A timed mode for one player, or two to eight. Clearing a blind fills Heat up to 100. The next hand is Overdrive at x1.5 and spends the meter. A fast clear can give a free reroll or $3. A boss inside the clock can give a Tag. Going slow takes nothing away. Solo ends after ante 8. Lives still eliminate you. If everyone loses their last life together, the higher total Heat wins, then ante, then score. Music: Heat Rush track by Lille Lilienthal

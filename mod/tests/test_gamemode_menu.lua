@@ -51,9 +51,9 @@ for _, key in ipairs(keys) do
 	ok(Browser.MODES[key], "the lobby list accepts " .. key)
 end
 local row = Browser.accept({
-	mp3p_discover = "1", mp3p_mod = "hs", mp3p_version = "0.7.5", mp3p_name = "Ada",
+	mp3p_discover = "1", mp3p_mod = "hs", mp3p_version = "0.7.6", mp3p_name = "Ada",
 	mp3p_mode = "heat_rush", mp3p_players = "1", mp3p_max = "8", mp3p_state = "wait", mp3p_watch = "1",
-}, { version = "0.7.5" })
+}, { version = "0.7.6" })
 ok(row and row.mode == "heat_rush" and row.mode_key == "k_heat_rush", "a Heat Rush lobby is labeled k_heat_rush")
 
 for _, lang in ipairs({ "en-us", "nl" }) do

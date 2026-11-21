@@ -23,6 +23,8 @@ ok(U.is_newer("v0.6.9", "0.6.8.2") and not U.is_newer("0.6.8.2", "v0.6.9") and n
 ok(U.is_newer("v0.6.9.1", "0.6.9") and U.is_newer("v0.6.9.1", "0.6.8.2"), "0.6.9.1 is newer than 0.6.9 and 0.6.8.2")
 ok(U.is_newer("v0.7.0", "0.6.9.1") and not U.is_newer("0.6.9.1", "v0.7.0") and not U.is_newer("v0.7.0", "0.7.0"), "0.7.0 is newer than 0.6.9.1 and not newer than itself")
 ok(U.is_newer("v0.7.5", "0.7.4") and not U.is_newer("0.7.4", "v0.7.5") and not U.is_newer("v0.7.5", "0.7.5"), "0.7.5 is newer than an installed 0.7.4")
+ok(U.is_newer("v0.7.6", "0.7.5") and not U.is_newer("0.7.5", "v0.7.6") and not U.is_newer("v0.7.6", "0.7.6"), "0.7.6 is newer than an installed 0.7.5")
+ok(U.parse_release('{"tag_name":"v0.7.6","draft":false,"prerelease":false,"assets":[{"name":"BalatroMultiplayer3P-v0.7.6-Installer.zip"},{"name":"SHA256SUMS-v0.7.6.txt"}]}') == "v0.7.6", "a 0.7.6 release with the Installer zip is offered")
 ok(U.parse_release('{"tag_name":"v0.7.5","draft":false,"prerelease":false,"assets":[{"name":"BalatroMultiplayer3P-v0.7.5-Installer.zip"},{"name":"SHA256SUMS-v0.7.5.txt"}]}') == "v0.7.5", "a 0.7.5 release with the Installer zip is offered")
 ok(U.parse_version_json('{ "version": "0.7.5", "tag": "v0.7.5" }') == "v0.7.5", "version.json tag is what a 0.7.4 install would follow")
 ok(U.parse_release('{"tag_name":"v0.6.7","draft":false,"prerelease":false,"assets":[{"name":"BalatroMultiplayer3P-v0.6.7-Installer.zip"}]}') == "v0.6.7", "parse release")
