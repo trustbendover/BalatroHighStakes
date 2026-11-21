@@ -16,6 +16,7 @@ M.LIMITS = {
 	deathmatch = { min = 2, max = 8, lives = 4 },
 	survival = { min = 2, max = 8 },
 	gambel_time = { min = 1, max = 8, lives = 3 },
+	heat_rush = { min = 1, max = 8, lives = 4 },
 }
 
 M.TEAMS_RULES = M.TEAMS_RULES or (MP.load_mp_file and MP.load_mp_file("networking/teams_rules.lua")) or nil

@@ -338,4 +338,4 @@ export type ActionHandlers = {
 export type ActionHandlerArgs<T extends HandledActions> = Omit<T, 'action'>
 
 // Other types
-export type GameMode = 'attrition' | 'showdown' | 'survival' | 'koth' | 'teams' | 'duel' | 'deathmatch' | 'gambel_time'
+export type GameMode = 'attrition' | 'showdown' | 'survival' | 'koth' | 'teams' | 'duel' | 'deathmatch' | 'gambel_time' | 'heat_rush'

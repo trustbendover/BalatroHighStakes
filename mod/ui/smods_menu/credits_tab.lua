@@ -14,6 +14,7 @@ CR.FALLBACK = {
 	b_hs_original = "Original mod",
 	k_hs_based_on = "Based on Balatro Multiplayer by the Balatro Multiplayer team (GPL-3.0)",
 	k_hs_gambel_music = "Music: GAMBEL TIME by Bass Gas M",
+	k_hs_heat_music = "Music: Heat Rush track by Lille Lilienthal",
 	k_hs_full_credits = "Full credits in CREDITS.md",
 }
 
@@ -51,6 +52,7 @@ function MP.UI.create_credits_tab()
 			}, 0.1),
 			-- the original mod, lightly: one small grey line (names are in CREDITS.md)
 			row({ T(CR.text("k_hs_gambel_music"), 0.34, G.C.GOLD) }, 0.04),
+			row({ T(CR.text("k_hs_heat_music"), 0.34, G.C.GOLD) }, 0.04),
 			row({ T(CR.text("k_hs_based_on"), 0.3, grey) }, 0.02),
 			row({
 				T(CR.text("k_hs_full_credits") .. "  ", 0.28, grey),

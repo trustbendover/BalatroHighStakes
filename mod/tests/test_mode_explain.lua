@@ -6,8 +6,8 @@ local function dict(file)
 	local t = dofile(file)
 	return t.misc and t.misc.dictionary or {}
 end
-local modes = { "duel", "teams", "teams2", "teams3", "teams4", "attrition", "showdown", "koth", "deathmatch", "survival", "gambel_time" }
-local rules = { "duel", "attrition", "showdown", "koth", "deathmatch", "teams", "survival", "gambel_time" }
+local modes = { "duel", "teams", "teams2", "teams3", "teams4", "attrition", "showdown", "koth", "deathmatch", "survival", "gambel_time", "heat_rush" }
+local rules = { "duel", "attrition", "showdown", "koth", "deathmatch", "teams", "survival", "gambel_time", "heat_rush" }
 for _, lang in ipairs({ "en-us", "nl" }) do
 	local d = dict("localization/" .. lang .. ".lua")
 	ok(d.k_custom == "Custom" or d.k_custom == nil, lang .. ": Custom heading not renamed here")

@@ -212,6 +212,7 @@ end
 local blind_defeat_ref = Blind.defeat
 function Blind:defeat(silent)
 	blind_defeat_ref(self, silent)
+	if MP.HEAT and MP.HEAT.report then pcall(MP.HEAT.report, self) end
 	if MP.is_mp_or_ghost() and MP.UI.reset_blind_HUD then MP.UI.reset_blind_HUD() end
 end
 
