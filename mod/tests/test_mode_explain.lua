@@ -24,6 +24,11 @@ for _, lang in ipairs({ "en-us", "nl" }) do
 	ok(not d.k_deathmatch_rules:find("out at once", 1, true) and not d.k_deathmatch_rules:find("meteen uit", 1, true), lang .. ": Deathmatch leave is not instant elimination")
 	ok(d.k_deathmatch_rules:find("60", 1, true), lang .. ": Deathmatch grace is stated")
 	ok(not d.k_survival_description:lower():find("farthest") and not d.k_survival_description:lower():find("verste blind"), lang .. ": Survival does not claim a furthest-blind win")
+	local heat = d.k_heat_rush_rules
+	ok(heat:find("+25", 1, true) and heat:find("+15", 1, true) and heat:find("x1.5", 1, true), lang .. ": Heat Rush states the clear, hand, and Overdrive numbers")
+	ok(heat:find("100", 1, true) and heat:find("ante 8", 1, true), lang .. ": Heat Rush states the cap and the solo ante")
+	ok(heat:lower():find("reroll") or heat:lower():find("tag"), lang .. ": Heat Rush states the fast-clear reward")
+	ok(d.k_heat_rush_description == heat, lang .. ": the menu description and the rules say the same thing")
 end
 local card = io.open("ui/main_menu/play_button/gamemode_selection.lua"):read("*a")
 ok(card:find('local win_key = "k_" .. entry .. "_win"', 1, true), "the mode card shows the win line before Create Lobby")

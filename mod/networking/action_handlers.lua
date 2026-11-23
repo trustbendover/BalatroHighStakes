@@ -506,6 +506,7 @@ local function action_start_game(p)
 	MP.GHOST.clear()
 
 	if MP.GAMBEL and MP.GAMBEL.reset then MP.GAMBEL.reset() end
+	if MP.HEAT and MP.HEAT.on_match_start then MP.HEAT.on_match_start() end
 	MP.reset_game_states()
 	if MP.REJOIN then MP.REJOIN.on_start(p) end
 	if MP.SPECTATE then MP.SPECTATE.on_match_start() end
