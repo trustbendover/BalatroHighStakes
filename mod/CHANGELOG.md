@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.8 - Heat fills, and the meter is a slim bar
+
+- **Heat.** A leaderboard update no longer clears the meter. Clearing a blind adds Heat in solo and in a group.
+- **Meter.** A slim pill on the right, under the chat and above the deck. Yellow to red, ticks at 25, 50 and 75, number and Best underneath. At 100 the flame runs both edges until Overdrive is spent.
+- **How to play.** The first match explains the awards, in English and Dutch. Got it dismisses it.
+- **Pins.** Steamodded stays 1.0.0~BETA-1620a. Lovely stays 0.10.0.
+
 ## 0.7.7 - The Heat strip sits above the jokers
 
 - **Heat.** The strip follows the joker row and is drawn after the cards, so the jokers no longer cover the text. A raised joker stays under the strip. The Chaos badge and the top-right chat stay clear.
