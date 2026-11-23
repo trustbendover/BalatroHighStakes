@@ -84,5 +84,25 @@ ok(#flames > 0, "Overdrive lights the flame")
 flames = H.flame_tick(flames, 2, false, 2)
 ok(#flames == 0, "spending Overdrive puts the flame out")
 ok(H.hit_meter(meter, meter.x + 0.1, meter.y + 0.2) and not H.hit_meter(meter, meter.x - 1, meter.y), "the meter is the hover target for How to play")
+local ticks = H.meter_ticks(meter)
+local y25, y75
+for _, t in ipairs(ticks) do
+	if t.mark == 25 then y25 = t.y elseif t.mark == 75 then y75 = t.y end
+end
+ok(#ticks == 3 and y25 and y75 and y25 > y75, "tick marks sit at 25, 50 and 75, rising with the fill")
+local eased = H.ease_heat(0, 100, 0.016)
+ok(eased > 0 and eased < 25, "the fill eases toward the new Heat")
+ok(H.meter_burst(80, 100, 100) > 0 and H.meter_burst(100, 100, 100) == 0, "reaching 100 flashes once")
+local both = H.flame_tick({}, 0.016, true, 1)
+local left, right, low, high = false, false, false, false
+for _, p in ipairs(both) do
+	if p.side == -1 then left = true elseif p.side == 1 then right = true end
+	if (p.y or 1) < 0.35 then low = true end
+	if (p.y or 0) > 0.6 then high = true end
+end
+ok(left and right and low and high, "flames run both edges from the bottom to the top")
+local pile = both
+for i = 1, 40 do pile = H.flame_tick(pile, 0.001, true, i) end
+ok(#pile <= 36, "the flame stays within a small particle cap")
 
 print("PASS: heat hud")

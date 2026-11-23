@@ -185,9 +185,37 @@ function H.meter_fill(box, heat, max)
 	return { x = box.x, y = box.y + box.h - h, w = box.w, h = h }
 end
 
-H.METER_W = 0.62
+H.METER_W = 0.38
 H.METER_H = 3.4
-H.METER_LABEL = 0.85
+H.METER_LABEL = 0.95
+
+--- Displayed fill eases toward the real Heat instead of jumping.
+function H.ease_heat(shown, target, dt)
+	shown = tonumber(shown) or 0
+	target = tonumber(target) or 0
+	local step = 1 - math.exp(-(tonumber(dt) or 0) * 7)
+	local nextv = shown + (target - shown) * step
+	if math.abs(target - nextv) < 0.04 then return target end
+	return nextv
+end
+
+--- Short marks at 25, 50 and 75, measured from the bottom of the pill.
+function H.meter_ticks(box)
+	local out = {}
+	if not box then return out end
+	for _, mark in ipairs({ 25, 50, 75 }) do
+		local t = mark / 100
+		out[#out + 1] = { mark = mark, x = box.x, y = box.y + box.h * (1 - t), w = box.w }
+	end
+	return out
+end
+
+--- Seconds of flash when Heat first reaches the cap. Zero otherwise.
+function H.meter_burst(prev, heat, max)
+	local cap = tonumber(max) or H.MAX or 100
+	if (tonumber(prev) or 0) < cap and (tonumber(heat) or 0) >= cap then return 0.42 end
+	return 0
+end
 
 --- Vertical meter on the right, below a top-right chat and above a bottom-right deck.
 function H.layout_meter(room, blockers)
@@ -232,25 +260,22 @@ function H.meter_overlaps(box, blockers, gap)
 	return false
 end
 
---- Particles live in 0..1 across the meter. y = 1 is the top of the flame.
+--- Flames travel the whole bar. side -1 is the left edge, 1 the right. y is 0 at the bottom.
 function H.flame_tick(parts, dt, on, now)
 	local out = {}
 	dt = tonumber(dt) or 0
 	now = tonumber(now) or 0
 	for _, p in ipairs(parts or {}) do
-		p.y = (p.y or 0) + (p.vy or 0.8) * dt
+		p.y = (p.y or 0) + (p.vy or 0.35) * dt
 		p.life = (p.life or 0) - dt
-		if p.life > 0 and p.y < 1.4 then out[#out + 1] = p end
+		if p.life > 0 and (p.y or 0) < 1.25 then out[#out + 1] = p end
 	end
-	if on then
-		local n = 1 + math.floor(now * 10) % 2
-		for i = 1, n do
-			out[#out + 1] = {
-				x = (math.sin(now * 9 + i * 2.1) * 0.5 + 0.5),
-				y = 0,
-				vy = 0.9 + (i * 0.15),
-				life = 0.55,
-			}
+	if on and #out < 36 then
+		local spots = { 0.08, 0.28, 0.48, 0.68, 0.88 }
+		for i, spot in ipairs(spots) do
+			if #out >= 36 then break end
+			local side = (i % 2 == 0) and 1 or -1
+			out[#out + 1] = { side = side, y = spot, vy = 0.22 + (i % 3) * 0.06, life = 0.62, kind = (i % 3 == 0) and "ember" or "lick" }
 		end
 	end
 	return out
