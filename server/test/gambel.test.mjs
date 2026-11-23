@@ -131,7 +131,7 @@ async function boot(names) {
 		await c.connect()
 		await c.waitAction('connected')
 		c.send({ action: 'username', username: c.name, modHash: 'test' })
-		c.send({ action: 'version', version: '0.7.8' })
+		c.send({ action: 'version', version: '0.7.9' })
 	}
 	return cs
 }

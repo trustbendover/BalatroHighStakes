@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.9 - The Heat caption fits, and spectate stays live
+
+- **Heat.** The number, HEAT, and Best each stay on one line under the pill. HEAT no longer wraps, and the number no longer sits on the word.
+- **Meter.** The pill sits further right and further down, so Balatro's consumable counter (0/2) stays clear of the 50 tick. Chat and the deck stay clear too.
+- **Spectate.** The watched hand, jokers, shop, and blind update as that player plays, discards, buys, and changes blind. The cards are view-only. An active opponent still does not receive the board.
+- **Pins.** Steamodded stays 1.0.0~BETA-1620a. Lovely stays 0.10.0.
+
 ## 0.7.8 - Heat fills, and the meter is a slim bar
 
 - **Heat.** A leaderboard update no longer clears the meter. Clearing a blind adds Heat in solo and in a group.
