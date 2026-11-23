@@ -67,13 +67,28 @@ ok(#cards == 5 and clears(five, area, cards), "five jokers, one of them raised, 
 local src = io.open("lib/heat.lua"):read("*a")
 ok(not src:find("y = 1.05", 1, true) and not src:find("major = G.jokers", 1, true), "the old top strip is gone")
 ok(src:find("function H.draw_front()", 1, true) and src:find("love.draw", 1, true), "the meter is drawn after the cards")
-ok(src:find("H.layout_meter", 1, true) and src:find("Best ", 1, true), "the vertical meter carries the number and Best")
+ok(src:find("H.layout_meter", 1, true) and src:find("H.meter_labels", 1, true), "the vertical meter carries the stacked labels")
+local rules = io.open("networking/heat_rules.lua"):read("*a")
+ok(rules:find('text = "Best "', 1, true) or rules:find('"Best "', 1, true), "Best is its own centered line")
 local room = { x = 0, y = 0, w = 19.5556, h = 11 }
 local chat = { x = 15.2, y = 0.3, w = 3.9, h = 1.3 }
 local deck = { x = 16.6, y = 8.3, w = 2.4, h = 2.2 }
 local meter = H.layout_meter(room, { chat, deck })
 ok(meter and meter.x > room.w * 0.7, "the meter sits on the right")
+ok(meter.x + meter.w > room.w - 0.08, "the pill sits close to the right edge")
+ok(meter.y >= chat.y + chat.h + 0.6, "the pill starts below the chat and the consumable row")
 ok(not H.meter_overlaps(meter, { chat, deck }, 0), "it clears the chat and the deck")
+local counter = { x = 17.6, y = 3.2, w = 0.9, h = 0.4 }
+ok(not H.overlap(meter, counter, 0.05), "the pill clears the vanilla consumable counter (0/2)")
+local labels = H.meter_labels(meter, 0, 12)
+ok(labels.number.text == "0" and labels.caption.text == "HEAT" and not labels.caption.text:find("\n", 1, true), "the number and HEAT are each one line")
+ok(labels.caption.y >= labels.number.y + labels.number.h - 1e-6, "HEAT sits under the number, not on it")
+ok(labels.best and labels.best.y >= labels.caption.y + labels.caption.h - 1e-6, "Best sits under HEAT")
+local cx = meter.x + meter.w / 2
+ok(math.abs(labels.number.x + labels.number.w / 2 - cx) < 1e-6, "the number is centered on the pill")
+ok(math.abs(labels.caption.x + labels.caption.w / 2 - cx) < 1e-6, "HEAT is centered on the pill")
+ok(math.abs(labels.best.x + labels.best.w / 2 - cx) < 1e-6, "Best is centered on the pill")
+ok(labels.caption.w >= 2.4, "HEAT has enough width that it does not wrap")
 local fill = H.meter_fill(meter, 50, 100)
 ok(fill and math.abs((fill.y + fill.h) - (meter.y + meter.h)) < 1e-9 and fill.h < meter.h, "the bar fills from the bottom")
 local _, gy, _ = H.meter_color(0, 100)

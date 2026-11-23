@@ -186,8 +186,10 @@ function H.meter_fill(box, heat, max)
 end
 
 H.METER_W = 0.38
-H.METER_H = 3.4
-H.METER_LABEL = 0.95
+H.METER_H = 3.2
+H.METER_LABEL = 1.25
+H.METER_INSET = 0.05
+H.METER_DROP = 0.7
 
 --- Displayed fill eases toward the real Heat instead of jumping.
 function H.ease_heat(shown, target, dt)
@@ -223,7 +225,7 @@ function H.layout_meter(room, blockers)
 	local gap = 0.16
 	local left = room.x or 0
 	local top = room.y or 0
-	local x = left + room.w - gap - H.METER_W
+	local x = left + room.w - (H.METER_INSET or 0.05) - H.METER_W
 	local top_limit = top + 0.25
 	local bot_limit = top + room.h - 0.25
 	for _, b in ipairs(blockers or {}) do
@@ -236,6 +238,9 @@ function H.layout_meter(room, blockers)
 			end
 		end
 	end
+	-- The vanilla consumable counter ("0/2") sits on the right, beside that row.
+	-- It is not a Heat label. Drop the pill below it.
+	top_limit = top_limit + (H.METER_DROP or 0)
 	bot_limit = bot_limit - H.METER_LABEL
 	local h = math.min(H.METER_H, bot_limit - top_limit)
 	if h < 1.4 then h = 1.4 end
@@ -243,6 +248,29 @@ function H.layout_meter(room, blockers)
 	if y + h > bot_limit then y = math.max(top, bot_limit - h) end
 	if x < left then x = left end
 	return { x = x, y = y, w = H.METER_W, h = h, label_h = H.METER_LABEL }
+end
+
+--- Number, then HEAT, then Best. Each line is one string, wider than the pill, centered on it.
+function H.meter_labels(box, heat, best)
+	if not box then return nil end
+	local cx = box.x + box.w / 2
+	local wide = 3.4
+	local y = box.y + box.h + 0.08
+	local number_h, heat_h, best_h = 0.48, 0.34, 0.32
+	local labels = {
+		number = { text = tostring(math.floor((tonumber(heat) or 0) + 0.5)), x = cx - wide / 2, y = y, w = wide, h = number_h },
+		caption = { text = "HEAT", x = cx - wide / 2, y = y + number_h + 0.04, w = wide, h = heat_h },
+	}
+	if (tonumber(best) or 0) > 0 then
+		labels.best = {
+			text = "Best " .. tostring(math.floor(best)),
+			x = cx - wide / 2,
+			y = labels.caption.y + heat_h + 0.04,
+			w = wide,
+			h = best_h,
+		}
+	end
+	return labels
 end
 
 function H.hit_meter(box, x, y)
