@@ -140,14 +140,20 @@ end
 --- What changed since the last board. The watcher still receives the whole table.
 function P.guess_event(prev, snap)
 	if type(snap) ~= "table" then return "snap" end
-	if type(prev) ~= "table" or prev.phase ~= snap.phase then return "snap" end
+	if type(prev) ~= "table" then return "snap" end
+	if tostring(prev.blind or "") ~= tostring(snap.blind or "") then return "blind" end
+	if prev.phase ~= snap.phase then return "snap" end
 	if tostring(prev.chips or "0") ~= tostring(snap.chips or "0") or tostring(prev.mult or "0") ~= tostring(snap.mult or "0") then
 		return "score"
 	end
 	if #(snap.played or {}) > #(prev.played or {}) then return "play" end
 	if #(snap.hand or {}) < #(prev.hand or {}) and #(snap.played or {}) == 0 then return "discard" end
 	if #(snap.hand or {}) > #(prev.hand or {}) then return "draw" end
-	if snap.phase == "shop" and join_cards(snap.shop, 6) ~= join_cards(prev.shop, 6) then return "shop" end
+	if snap.phase == "shop" then
+		local shop_diff = join_cards(snap.shop, 6) ~= join_cards(prev.shop, 6)
+		if shop_diff and #(snap.jokers or {}) > #(prev.jokers or {}) then return "joker" end
+		if shop_diff then return "shop" end
+	end
 	if P.raised(snap.hand) ~= P.raised(prev.hand) then return "select" end
 	if join_cards(snap.jokers, 10) ~= join_cards(prev.jokers, 10) then return "joker" end
 	return "snap"
@@ -214,12 +220,34 @@ end
 
 --- True when a snapshot is worth sending. Identical boards wait for the heartbeat.
 --- A gap shorter than MIN_GAP is never sent, so a modified client cannot flood the relay.
+--- A clock that does not move (one os.time sample, one reading per frame) must still
+--- let a changed board out once; otherwise the watcher stays on the first table.
 function P.due(prev_sig, sig, now, last)
 	now, last = tonumber(now) or 0, tonumber(last) or 0
-	if last > 0 and now - last < P.MIN_GAP then return false end
-	if sig ~= prev_sig then return true end
+	local changed = sig ~= prev_sig
+	if last > 0 and now < last then return true end
+	if last > 0 and now - last < P.MIN_GAP then
+		if changed and now == last then return true end
+		return false
+	end
+	if changed then return true end
 	if last == 0 or now - last >= P.HEARTBEAT then return true end
 	return false
+end
+
+--- One throttled snapshot, or nil when this board is not due yet.
+--- mem keeps the last signature, time and table across calls.
+function P.drive(mem, board, now)
+	mem = mem or {}
+	local snap = P.capture(board)
+	now = tonumber(now) or 0
+	if not P.due(mem.sig, snap.sig, now, mem.at) then return nil end
+	snap.ev = P.guess_event(mem.last, snap)
+	mem.sig, mem.at, mem.last = snap.sig, now, snap
+	mem.seq = (mem.seq or 0) + 1
+	snap.seq = mem.seq
+	snap.action = "spectateSnap"
+	return snap
 end
 
 function P.subscribers(watch, target)
@@ -255,12 +283,20 @@ local PHASE_LABEL = {
 	pack = "Pack", idle = "Between", gone = "Gone",
 }
 
+local EV_LABEL = {
+	play = "PLAY", discard = "DISCARD", draw = "DRAW", shop = "SHOP",
+	joker = "JOKER", blind = "BLIND", select = "SELECT", score = "SCORE",
+}
+
 function P.lines(snap)
 	snap = snap or {}
 	local phase = PHASE_LABEL[snap.phase] or "Waiting"
 	local blind = snap.blind and snap.blind ~= "" and snap.blind or ""
+	local head = string.format("%s   ante %s   %s", phase, tostring(snap.ante or "-"), blind)
+	local ev = EV_LABEL[snap.ev or ""]
+	if ev then head = ev .. "  " .. head end
 	return {
-		string.format("%s   ante %s   %s", phase, tostring(snap.ante or "-"), blind),
+		head,
 		string.format("$%s   hands %s   discards %s", tostring(snap.money or 0), tostring(snap.hands or 0), tostring(snap.discards or 0)),
 		string.format("Score %s    %s x %s", tostring(snap.score or "0"), tostring(snap.chips or "0"), tostring(snap.mult or "0")),
 		"Hand  " .. join_cards(snap.hand, 8),
