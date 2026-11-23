@@ -78,6 +78,73 @@ function H.rank(rows)
 	return rows
 end
 
+-- The strip sits just above the joker row. These are game units, the same at every resolution.
+H.BADGE_H = 0.5
+H.BADGE_W = 7.2
+H.BADGE_GAP = 0.1
+H.HOVER = 0.22
+
+function H.overlap(a, b, gap)
+	gap = gap or 0
+	if not (a and b) then return false end
+	return a.x < b.x + b.w + gap and b.x < a.x + a.w + gap
+		and a.y < b.y + b.h + gap and b.y < a.y + a.h + gap
+end
+
+--- How far above the joker area the cards can reach, including a raised hover.
+function H.joker_lift(area, cards)
+	local lift = H.HOVER
+	local top = area and area.T and area.T.y
+	if not top then return lift end
+	for _, c in ipairs(cards or {}) do
+		local t = c and c.T
+		if t then
+			local overflow = 0
+			if t.h and area.T.h then overflow = math.max(0, (t.h - area.T.h) / 2) end
+			local risen = 0
+			if t.y then risen = math.max(0, top - t.y) end
+			local extra = c.highlighted and H.HOVER or 0
+			lift = math.max(lift, overflow + H.HOVER, risen + extra)
+		end
+	end
+	return lift
+end
+
+--- {x,y,w,h} for the Heat strip. Above every joker, inside the room, clear of other HUD boxes.
+function H.layout_badge(area, cards, blockers, room)
+	if not (area and area.T and area.T.y and area.T.x and area.T.w) then return nil end
+	local lift = H.joker_lift(area, cards)
+	local y = area.T.y - lift - H.BADGE_GAP - H.BADGE_H
+	local w = H.BADGE_W
+	local x = area.T.x + (area.T.w - w) / 2
+	if room and room.w then
+		local left = room.x or 0
+		if x < left then x = left end
+		if x + w > left + room.w then x = left + room.w - w end
+	end
+	local box = { x = x, y = y, w = w, h = H.BADGE_H }
+	for _, b in ipairs(blockers or {}) do
+		if b and b.w and b.h and H.overlap(box, b, 0.08) then
+			local ceiling = area.T.y - lift - H.BADGE_GAP
+			if b.y + b.h <= ceiling and (b.x + b.w / 2) > area.T.x and (b.x + b.w / 2) < area.T.x + area.T.w then
+				local under = b.y + b.h + 0.08
+				if under + box.h <= ceiling then box.y = under end
+			elseif b.x >= x then
+				box.x = b.x - 0.08 - box.w
+			else
+				box.x = b.x + b.w + 0.08
+			end
+		end
+	end
+	if room and room.w then
+		local left = room.x or 0
+		if box.x < left then box.x = left end
+		if box.x + box.w > left + room.w then box.x = math.max(left, left + room.w - box.w) end
+	end
+	box.above = area.T.y - lift
+	return box
+end
+
 function H.music_priority(state)
 	state = state or {}
 	if state.in_lobby == false then return nil end
