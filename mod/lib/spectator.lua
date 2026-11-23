@@ -243,21 +243,50 @@ function SP.ui()
 	SP.refresh()
 	local rows = {}
 	for i = 1, SP.MAX_ROWS do rows[#rows + 1] = SP.row_node(i) end
+	-- No maxw on the text node. Balatro turns a text node that has maxw into a
+	-- DynaText copied from the string at open, and that copy never reads ref_table
+	-- again, so the board stayed on the first snapshot. The line is already
+	-- ellipsized to TEXT_W, and the row clamps the width.
 	local pov_rows = {}
 	for i = 1, 7 do
 		pov_rows[#pov_rows + 1] = { n = G.UIT.R, config = { align = "cl", padding = 0.01, minw = SP.TEXT_W, maxw = SP.TEXT_W }, nodes = {
-			{ n = G.UIT.T, config = { ref_table = SP.view, ref_value = "pov" .. i, scale = 0.32, colour = G.C.UI.TEXT_LIGHT, shadow = true,
-				maxw = SP.TEXT_W } },
+			{ n = G.UIT.T, config = { ref_table = SP.view, ref_value = "pov" .. i, scale = 0.32, colour = G.C.UI.TEXT_LIGHT, shadow = true } },
+		} }
+	end
+	SP.fresh_areas()
+	local board = SP.boards[SP.state.follow]
+	if board then SP.fill_areas(board) end
+	local function pile(key, title)
+		local area = SP.areas and SP.areas[key]
+		if not area then return nil end
+		return { n = G.UIT.R, config = { align = "cm", padding = 0.03 }, nodes = {
+			{ n = G.UIT.C, config = { align = "cm" }, nodes = {
+				{ n = G.UIT.R, config = { align = "cm" }, nodes = {
+					{ n = G.UIT.T, config = { text = title, scale = 0.28, colour = G.C.UI.TEXT_INACTIVE } },
+				} },
+				{ n = G.UIT.R, config = { align = "cm" }, nodes = {
+					{ n = G.UIT.O, config = { object = area } },
+				} },
+			} },
 		} }
 	end
 	local contents = {
 			text("title", 0.6, G.C.GOLD),
 			{ n = G.UIT.R, config = { align = "cm", padding = 0.04, r = 0.1, colour = { 0.1, 0.14, 0.2, 1 },
 				minw = SP.BOX_W, maxw = SP.BOX_W }, nodes = pov_rows },
-			line("follow", 0.5),
-			line("detail", 0.4),
-			line("where", 0.4, G.C.UI.TEXT_INACTIVE),
 	}
+	for _, key in ipairs({
+		{ "hand", L("k_sp_pile_hand", "Hand") },
+		{ "played", L("k_sp_pile_played", "Played") },
+		{ "jokers", L("k_sp_pile_jokers", "Jokers") },
+		{ "shop", L("k_sp_pile_shop", "Shop") },
+	}) do
+		local row = pile(key[1], key[2])
+		if row then contents[#contents + 1] = row end
+	end
+	contents[#contents + 1] = line("follow", 0.5)
+	contents[#contents + 1] = line("detail", 0.4)
+	contents[#contents + 1] = line("where", 0.4, G.C.UI.TEXT_INACTIVE)
 	if SP.state.stats ~= false then
 		contents[#contents + 1] = { n = G.UIT.R, config = { align = "cm", padding = 0.08, r = 0.1, colour = G.C.BLACK, minw = SP.BOX_W, maxw = SP.BOX_W }, nodes = rows }
 	end
@@ -287,6 +316,7 @@ end
 function SP.close()
 	SP.state.active = false
 	SP.drop_art()
+	SP.release_areas()
 	pcall(G.FUNCS.exit_overlay_menu)
 end
 
@@ -319,24 +349,109 @@ function SP.read_board()
 	}
 end
 
+function SP.clock(now)
+	return tonumber(now) or (love and love.timer and love.timer.getTime and love.timer.getTime()) or os.clock()
+end
+
 function SP.maybe_send(now)
 	if not SP.demand then return end
 	local POV = ensure_pov()
-	if not POV or not (Client and Client.send) then return end
+	if not POV or not POV.drive or not (Client and Client.send) then return end
 	local raw = SP.read_board()
 	if not raw then return end
 	raw.states = G and G.STATES or nil
 	if G and G.STATES and raw.state then raw.phase = nil end
-	local snap = POV.capture(raw)
-	now = tonumber(now) or (love and love.timer and love.timer.getTime and love.timer.getTime()) or os.clock()
-	if not POV.due(SP.sent_sig, snap.sig, now, SP.sent_at) then return end
-	SP.sent_sig, SP.sent_at = snap.sig, now
-	SP.snap_seq = (SP.snap_seq or 0) + 1
-	snap.ev = POV.guess_event and POV.guess_event(SP.last_snap, snap) or "snap"
-	SP.last_snap = snap
-	snap.action = "spectateSnap"
-	snap.seq = SP.snap_seq
+	SP._mem = SP._mem or {}
+	local snap = POV.drive(SP._mem, raw, SP.clock(now))
+	if not snap then return end
 	Client.send(snap)
+end
+
+local function empty_area(area)
+	if type(area) ~= "table" then return end
+	local cards = {}
+	for i, c in ipairs(area.cards or {}) do cards[i] = c end
+	for _, c in ipairs(cards) do
+		if area.remove_card then pcall(area.remove_card, area, c) end
+		if c and c.remove and not c.REMOVED then pcall(function() c:remove() end) end
+	end
+	if area.cards then
+		for i = #area.cards, 1, -1 do area.cards[i] = nil end
+	end
+end
+
+function SP.release_areas()
+	if not SP.areas then return end
+	for _, area in pairs(SP.areas) do
+		empty_area(area)
+		if area and area.remove and not area.REMOVED then pcall(function() area:remove() end) end
+	end
+	SP.areas = nil
+end
+
+--- Card rows the open panel draws. Absent until the panel is built (and CardArea exists).
+function SP.fresh_areas()
+	SP.release_areas()
+	if not (CardArea and G and G.CARD_W and G.CARD_H) then return nil end
+	local w, h = G.CARD_W * 4.2, G.CARD_H * 0.72
+	SP.areas = {}
+	for _, key in ipairs({ "hand", "played", "jokers", "shop" }) do
+		local ok, area = pcall(CardArea, 0, 0, w, h, {
+			card_limit = 12, type = "title", highlight_limit = 0, card_w = G.CARD_W * 0.5,
+		})
+		if ok and type(area) == "table" then SP.areas[key] = area end
+	end
+	if not SP.areas.hand then SP.areas = nil end
+	return SP.areas
+end
+
+--- Replace the view-only cards in the open panel with this snapshot.
+function SP.fill_areas(snap)
+	local areas = SP.areas
+	if not areas or type(snap) ~= "table" then return end
+	local POV = ensure_pov()
+	if not POV or not POV.make_live then return end
+	SP.drop_art()
+	for _, area in pairs(areas) do empty_area(area) end
+	local bag = { objects = {}, areas = {} }
+	local function pile(key, list)
+		local area = areas[key]
+		if not area then return end
+		for _, desc in ipairs(list or {}) do
+			if type(desc) == "table" then
+				local obj = POV.make_live(desc)
+				if type(obj) == "table" then
+					obj.highlighted = desc.up == 1
+					if obj.states and obj.states.collide then obj.states.collide.can = false end
+					if obj.states and obj.states.drag then obj.states.drag.can = false end
+					if obj.states and obj.states.click then obj.states.click.can = false end
+					local placed = false
+					if area.emplace then placed = pcall(function() area:emplace(obj) end) end
+					if not placed then
+						area.cards = area.cards or {}
+						area.cards[#area.cards + 1] = obj
+					end
+					bag.objects[#bag.objects + 1] = obj
+				end
+			end
+		end
+	end
+	pile("hand", snap.hand)
+	pile("played", snap.played)
+	pile("jokers", snap.jokers)
+	pile("shop", snap.shop)
+	SP.art = bag
+	SP.art_sig = snap.sig
+	SP.art_seq = snap.seq
+end
+
+function SP.on_snap(p)
+	if type(p) ~= "table" or not p.playerId then return end
+	SP.boards[p.playerId] = p
+	if p.playerId == SP.state.follow and p.sig ~= SP.art_sig then
+		SP.fill_areas(p)
+	end
+	if SP.state.active then pcall(SP.refresh) end
 end
 
 function SP.drop_art()
@@ -349,7 +464,11 @@ local function follow_step(dir)
 	local rows = SP.refresh()
 	local prev = SP.state.follow
 	SP.state.follow = SP.step(rows, SP.state.follow, dir)
-	if SP.state.follow ~= prev then SP.drop_art() end
+	if SP.state.follow ~= prev then
+		SP.drop_art()
+		local b = SP.boards[SP.state.follow]
+		if b then SP.fill_areas(b) end
+	end
 	SP.refresh()
 	SP.sync_watch()
 end
@@ -389,22 +508,12 @@ function SP.register()
 		SP.sync_watch()
 	end)
 	MP.register_action("spectateDemand", function(p)
-		SP.demand = p and p.on and true or false
-		if not SP.demand then SP.sent_sig, SP.sent_at = nil, nil end
+		local on = p and p.on and true or false
+		SP.demand = on and true or false
+		SP._mem, SP.sent_sig, SP.sent_at = nil, nil, nil
+		if on then pcall(SP.maybe_send, SP.clock()) end
 	end)
-	MP.register_action("spectateSnap", function(p)
-		if type(p) ~= "table" or not p.playerId then return end
-		SP.boards[p.playerId] = p
-		if p.playerId == SP.state.follow then
-			local POV = ensure_pov()
-			if POV and POV.realize and p.sig ~= SP.art_sig then
-				SP.drop_art()
-				SP.art = POV.realize(p, POV.make_live)
-				SP.art_sig = p.sig
-			end
-		end
-		if SP.state.active then pcall(SP.refresh) end
-	end)
+	MP.register_action("spectateSnap", function(p) SP.on_snap(p) end)
 	MP.register_action("spectatorJoined", function(p)
 		pcall(sendWarnMessage, L("k_sp_spectator_joined", "#1# is watching", { clean(p.username) }), "MULTIPLAYER")
 	end)
@@ -442,11 +551,24 @@ function SP.register()
 				pcall(SP.refresh)
 			end
 		end
-		if SP.demand then
-			local now = love and love.timer and love.timer.getTime and love.timer.getTime() or os.clock()
-			pcall(SP.maybe_send, now)
-		end
+		if SP.demand then pcall(SP.maybe_send, SP.clock()) end
 		return r
+	end
+
+	-- A play, a blind change or a shop purchase pushes a board even when this
+	-- frame's update already ran, or when a later mod wrapped Game.update and
+	-- the timer above is no longer the one that ticks.
+	if MP.ACTIONS then
+		local function nudge(fn)
+			return function(...)
+				local packed = { fn(...) }
+				if SP.demand then pcall(SP.maybe_send, SP.clock()) end
+				return unpack(packed)
+			end
+		end
+		for _, name in ipairs({ "play_hand", "set_location", "new_round", "spent_last_shop", "sold_joker", "skip" }) do
+			if type(MP.ACTIONS[name]) == "function" then MP.ACTIONS[name] = nudge(MP.ACTIONS[name]) end
+		end
 	end
 end
 
@@ -462,7 +584,8 @@ end
 --- Match state hooks (called from action_handlers)
 function SP.on_match_start()
 	SP.state.match, SP.state.joined, SP.state.follow = true, false, nil
-	SP.demand, SP.boards, SP.sent_sig, SP.sent_at = false, {}, nil, nil
+	SP.demand, SP.boards, SP.sent_sig, SP.sent_at, SP._mem = false, {}, nil, nil, nil
+	SP.drop_art()
 end
 --- 0.6.9: spectateStart: drop the enemies of an earlier run (fresh enemyInfo follows) and remember a held seat.
 function SP.on_spectate_start(p, t)
@@ -485,7 +608,8 @@ function SP.on_rejoined() SP.state.joined, SP.state.held = false, nil; if SP.sta
 function SP.on_match_end()
 	SP.state.held = nil
 	SP.state.match, SP.state.joined = false, false
-	SP.demand, SP.boards, SP.last_snap = false, {}, nil
+	SP.demand, SP.boards, SP.last_snap, SP._mem = false, {}, nil, nil
 	SP.drop_art()
+	SP.release_areas()
 	if SP.state.active then SP.close() end
 end

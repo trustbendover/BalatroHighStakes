@@ -27,6 +27,23 @@ ok(POV.capture({ phase = "play", hand = { ace } }).shop == nil, "shop cards are 
 local lines = POV.lines(snap)
 ok(lines[1]:find("Shop", 1, true) and lines[4]:find("AH foil eternal", 1, true) and lines[7]:find("gros michel", 1, true), "the board text shows phase, hand and shop")
 ok(not POV.due("a", "b", 10, 9.8) and POV.due("a", "b", 10, 9.5) and not POV.due("same", "same", 10, 9) and POV.due("same", "same", 12, 9), "snapshots wait out the gap, skip an unchanged board, and heartbeat")
+ok(POV.due("a", "b", 10, 10) and not POV.due("b", "b", 10, 10), "a changed board is still sent when the clock does not move")
+ok(POV.guess_event(
+	{ phase = "play", blind = "Small Blind", hand = { {}, {} }, played = {}, chips = "0", mult = "0" },
+	{ phase = "play", blind = "Small Blind", hand = { {} }, played = { {} }, chips = "0", mult = "0" }
+) == "play", "moving a card into the played row is a play")
+ok(POV.guess_event(
+	{ phase = "play", blind = "Small Blind", hand = { {}, {} }, played = {}, chips = "0", mult = "0" },
+	{ phase = "play", blind = "Small Blind", hand = { {} }, played = {}, chips = "0", mult = "0" }
+) == "discard", "a smaller hand with nothing played is a discard")
+ok(POV.guess_event(
+	{ phase = "shop", blind = "Small Blind", hand = {}, played = {}, jokers = {}, shop = { { k = "j_joker" } }, chips = "0", mult = "0" },
+	{ phase = "shop", blind = "Small Blind", hand = {}, played = {}, jokers = { { k = "j_joker" } }, shop = {}, chips = "0", mult = "0" }
+) == "joker", "buying a shop joker is a joker event")
+ok(POV.guess_event(
+	{ phase = "select", blind = "Small Blind", hand = {}, played = {}, chips = "0", mult = "0" },
+	{ phase = "select", blind = "Big Blind", hand = {}, played = {}, chips = "0", mult = "0" }
+) == "blind", "a new blind name is a blind event")
 
 local clock = { t = 5000 }
 local function server()
@@ -175,5 +192,132 @@ local kept = bag.objects[1]
 ok(#bag.objects == 2 and kept.highlighted and kept.states.collide.can == false and kept.states.drag.can == false, "watched cards are raised copies and cannot be clicked")
 POV.cleanup(bag)
 ok(kept.REMOVED and #bag.objects == 0 and #bag.areas == 0, "switch, leave and match end remove every watched card")
+
+-- Two peers. The host clock stays on one second (os.time does this) across several
+-- table changes. Each change has to show up on the watcher's cards and text.
+local clock2 = { t = 9000 }
+local S2 = Core.new({ now = function() return clock2.t end, log = function() end })
+local function peer(S, name)
+	local msgs = {}
+	local c = S:connect(function(t) msgs[#msgs + 1] = t end)
+	function c.last(a) for i = #msgs, 1, -1 do if msgs[i].action == a then return msgs[i] end end end
+	function c.count(a) local n = 0 for _, m in ipairs(msgs) do if m.action == a then n = n + 1 end end return n end
+	S:receive(c, { action = "version", version = Core.SERVER_VERSION })
+	S:receive(c, { action = "username", username = name })
+	return c
+end
+local live_host, live_other = peer(S2, "Ada~1"), peer(S2, "Bea~2")
+S2:receive(live_host, { action = "createLobby", gameMode = "attrition" })
+local live_code = live_host.last("joinedLobby").code
+S2:receive(live_other, { action = "joinLobby", code = live_code })
+S2:receive(live_other, { action = "readyLobby" })
+S2:receive(live_host, { action = "startGame" })
+local live_watch = peer(S2, "Cam~3")
+S2:receive(live_watch, { action = "joinLobby", code = live_code, spectate = true })
+S2:receive(live_watch, { action = "spectateWatch", playerId = live_host.id })
+ok(live_host.last("spectateDemand").on == true, "the watcher selecting a player reaches that player as a demand")
+local reminded = live_host.count("spectateDemand")
+S2:receive(live_watch, { action = "spectateWatch", playerId = live_host.id })
+ok(live_host.count("spectateDemand") == reminded + 1, "selecting the same player again reminds the target it is being watched")
+
+G.CARD_W, G.CARD_H, G.UIT.O = 1, 1.4, 4
+G.STATES = { SELECTING_HAND = 1, SHOP = 2, BLIND_SELECT = 3 }
+function CardArea()
+	local area = { cards = {}, REMOVED = false }
+	function area:emplace(c) self.cards[#self.cards + 1] = c end
+	function area:remove_card(c)
+		for i, x in ipairs(self.cards) do if x == c then table.remove(self.cards, i) return end end
+	end
+	function area:remove() self.REMOVED = true end
+	return area
+end
+G.GAME = {
+	dollars = 8, chips = 0,
+	round_resets = { ante = 2 },
+	current_round = { hands_left = 4, discards_left = 3, current_hand = { chips = 0, mult = 0 } },
+	blind = { name = "Small Blind" },
+}
+G.STATE = G.STATES.SELECTING_HAND
+G.hand = { cards = {} }
+G.jokers = { cards = {} }
+G.consumeables = { cards = {} }
+G.play = { cards = {} }
+G.shop_jokers = { cards = {} }
+MP.GAME.enemies[live_host.id] = { id = live_host.id, username = "Ada", lives = 4, raw_score = "0", hands = 4, ante = 2 }
+SP.state.follow = live_host.id
+SP.state.active = true
+SP.demand = true
+SP._mem = nil
+local sent_to_host = 0
+Client = { send = function(m)
+	if m.action == "spectateSnap" then sent_to_host = sent_to_host + 1 end
+	S2:receive(live_host, m)
+end }
+local panel = SP.ui()
+local function frozen(node, hit)
+	if type(node) ~= "table" then return end
+	if node.config and node.config.ref_value and tostring(node.config.ref_value):find("^pov") then
+		if node.config.maxw then hit.maxw = true end
+		if node.config.ref_table ~= SP.view then hit.noref = true end
+	end
+	if node.config and node.config.object == SP.areas.hand then hit.area = true end
+	for _, c in ipairs(node.nodes or {}) do frozen(c, hit) end
+end
+local shape = {}
+frozen(panel, shape)
+ok(not shape.maxw and not shape.noref and shape.area, "the board text stays bound to the live table, and the hand is a card row")
+
+local function show()
+	SP.maybe_send(clock2.t)
+	local got = live_watch.last("spectateSnap")
+	ok(got ~= nil, "the watcher received this snapshot")
+	SP.on_snap(got)
+	return got
+end
+local function ranks(area)
+	local bits = {}
+	for _, c in ipairs(area and area.cards or {}) do bits[#bits + 1] = c.desc and (c.desc.r or c.desc.k) or "?" end
+	return table.concat(bits, ",")
+end
+
+G.hand.cards = {
+	{ base = { value = "A", suit = "Hearts" } },
+	{ base = { value = "K", suit = "Spades" } },
+}
+show()
+ok(ranks(SP.areas.hand) == "A,K" and SP.view.pov4:find("AH", 1, true), "the opening hand is on the watcher")
+local watched_card = SP.areas.hand.cards[1]
+ok(watched_card.states.collide.can == false and watched_card.states.drag.can == false, "watched cards cannot be clicked")
+
+G.hand.cards = { { base = { value = "A", suit = "Hearts" } } }
+G.play.cards = { { base = { value = "K", suit = "Spades" } } }
+show()
+ok(ranks(SP.areas.hand) == "A" and ranks(SP.areas.played) == "K" and SP.view.pov1:find("PLAY", 1, true),
+	"playing a card updates the watcher hand, the played row and the event")
+ok(live_other.count("spectateSnap") == 0, "the active opponent still receives none of the live boards")
+
+G.hand.cards = {}
+G.play.cards = {}
+show()
+ok(ranks(SP.areas.hand) == "" and SP.view.pov1:find("DISCARD", 1, true), "a discard clears the watched hand and shows the event")
+
+clock2.t = clock2.t + 1
+G.STATE = G.STATES.SHOP
+G.shop_jokers.cards = { { config = { center = { key = "j_gros_michel" } }, cost = 5 } }
+show()
+ok(ranks(SP.areas.shop) == "j_gros_michel", "the shop row shows the joker that is for sale")
+
+G.shop_jokers.cards = {}
+G.jokers.cards = { { config = { center = { key = "j_gros_michel" } }, cost = 5 } }
+show()
+ok(ranks(SP.areas.jokers) == "j_gros_michel" and ranks(SP.areas.shop) == "" and SP.view.pov1:find("JOKER", 1, true),
+	"buying the joker moves it onto the watcher and off the shop row")
+
+G.STATE = G.STATES.BLIND_SELECT
+G.GAME.blind.name = "Big Blind"
+show()
+ok(SP.view.pov1:find("BLIND", 1, true) and SP.view.pov1:find("Big Blind", 1, true), "a blind change updates the watcher")
+ok(sent_to_host >= 6 and live_watch.count("spectateSnap") >= 6, "every successive change was relayed, not only the first")
+ok(live_other.count("spectateSnap") == 0, "after the whole series the opponent still has no board")
 
 print("PASS: spectator pov")

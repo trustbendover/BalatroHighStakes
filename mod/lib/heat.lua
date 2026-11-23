@@ -91,6 +91,7 @@ function H.blockers()
 	if chat and chat.box then add(chat.box) end
 	if G and G.deck then add(G.deck) end
 	if G and G.shop then add(G.shop) end
+	if G and G.consumeables then add(G.consumeables) end
 	return list
 end
 
@@ -186,16 +187,15 @@ function H.draw_front()
 			pill(x, y, w, h, { 1, 0.95, 0.75, burst * 0.4 })
 		end
 	end
-	local shown = math.floor((heat or 0) + 0.5)
-	gpx.setColor(1, 0.97, 0.92, 1)
-	gpx.printf(tostring(shown), x - ts * 0.35, y + h + ts * 0.04, w + ts * 0.7, "center", 0, 0.72, 0.72)
-	gpx.setColor(1, 0.78, 0.38, 0.9)
-	gpx.printf("HEAT", x - ts * 0.35, y + h + ts * 0.28, w + ts * 0.7, "center", 0, 0.38, 0.38)
-	local best = tonumber(g.heat_best) or 0
-	if best > 0 then
-		gpx.setColor(0.92, 0.84, 0.62, 0.9)
-		gpx.printf("Best " .. tostring(math.floor(best)), x - ts * 0.45, y + h + ts * 0.48, w + ts * 0.9, "center", 0, 0.36, 0.36)
+	local labels = H.meter_labels(box, heat, g.heat_best)
+	local function line(node, col, scale)
+		if not node or node.text:find("\n", 1, true) then return end
+		gpx.setColor(col[1], col[2], col[3], col[4] or 1)
+		gpx.printf(node.text, px(node.x), px(node.y), px(node.w), "center", 0, scale, scale)
 	end
+	line(labels.number, { 1, 0.97, 0.92, 1 }, 0.7)
+	line(labels.caption, { 1, 0.78, 0.38, 0.95 }, 0.34)
+	line(labels.best, { 0.92, 0.84, 0.62, 0.95 }, 0.32)
 	local mx, my = H.pointer()
 	if H.hit_meter(box, mx, my) then
 		gpx.setColor(1, 0.86, 0.45, 1)

@@ -1903,7 +1903,7 @@ end
 function Server:pov_reset(L)
 	if not L then return end
 	local prev = L.povDemand or {}
-	L.povWatch, L.povDemand, L.povCache, L.povLast = {}, {}, {}, {}
+	L.povWatch, L.povDemand, L.povCache, L.povLast, L.povSig, L.povBurst = {}, {}, {}, {}, {}, {}
 	for id, on in pairs(prev) do
 		if on then
 			local p = find(L.players, function(x) return x.id == id end)
@@ -1912,7 +1912,7 @@ function Server:pov_reset(L)
 	end
 end
 
-function Server:pov_demand(L, id)
+function Server:pov_demand(L, id, force)
 	if not L or not id or id == "" then return end
 	local POV = Core.POV
 	local want = POV and POV.wanted(L.povWatch, id) or false
@@ -1922,7 +1922,10 @@ function Server:pov_demand(L, id)
 	end
 	L.povDemand = L.povDemand or {}
 	local was = L.povDemand[id] and true or false
-	if was == want then return end
+	-- A repeat watch still reminds the target. Their local flag is cleared by a
+	-- match start, a rejoin, or a missed message, and the host would otherwise
+	-- keep believing they are already sending.
+	if was == want and not (force and want) then return end
 	L.povDemand[id] = want or nil
 	local p = find(L.players, function(x) return x.id == id end)
 	if p then sendA(p, { action = "spectateDemand", on = want }) end
@@ -1957,10 +1960,8 @@ function Server:pov_watch(c, id)
 	L.povWatch = L.povWatch or {}
 	local prev = L.povWatch[c.id]
 	L.povWatch[c.id] = id
-	if prev ~= id then
-		self:pov_demand(L, prev)
-		self:pov_demand(L, id)
-	end
+	if prev ~= id then self:pov_demand(L, prev) end
+	if id then self:pov_demand(L, id, true) end
 	if id and L.povCache and L.povCache[id] then sendA(c, L.povCache[id]) end
 end
 
@@ -1969,11 +1970,25 @@ function Server:pov_relay(c, a)
 	if not L or not L.isInGame or not c.id then return end
 	if not (L.povDemand and L.povDemand[c.id]) then return end
 	local now = self.now()
-	L.povLast = L.povLast or {}
+	L.povLast, L.povSig, L.povBurst = L.povLast or {}, L.povSig or {}, L.povBurst or {}
 	local last = L.povLast[c.id]
-	if last and now - last < 0.35 and now ~= last then return end
-	if last and now == last then return end
+	local sig = type(a and a.sig) == "string" and a.sig:sub(1, 400) or ""
+	local changed = sig ~= (L.povSig[c.id] or "")
+	-- os.time (and one clock reading per frame) stays put while the table changes.
+	-- Drop identical repeats, but a changed board still has to reach the watcher.
+	-- A moved clock inside the gap keeps the flood throttle.
+	if last and now == last then
+		if not changed then return end
+		local burst = L.povBurst[c.id] or 0
+		if burst >= 4 then return end
+		L.povBurst[c.id] = burst + 1
+	elseif last and now - last < 0.35 then
+		return
+	else
+		L.povBurst[c.id] = 0
+	end
 	L.povLast[c.id] = now
+	L.povSig[c.id] = sig
 	local phase = POV_PHASE[a and a.phase] and a.phase or "idle"
 	local msg = {
 		action = "spectateSnap", playerId = c.id, seq = math.floor(tonumber(a and a.seq) or 0),
@@ -1985,7 +2000,7 @@ function Server:pov_relay(c, a)
 		score = type(a and a.score) == "string" and a.score:sub(1, 24) or tostring(a and a.score or "0"):sub(1, 24),
 		chips = type(a and a.chips) == "string" and a.chips:sub(1, 24) or "0",
 		mult = type(a and a.mult) == "string" and a.mult:sub(1, 24) or "0",
-		sig = type(a and a.sig) == "string" and a.sig:sub(1, 400) or "",
+		sig = sig,
 		ev = type(a and a.ev) == "string" and a.ev:sub(1, 12) or nil,
 		hand = pov_cards(a and a.hand, 12), jokers = pov_cards(a and a.jokers, 10),
 		cons = pov_cards(a and a.cons, 5), played = pov_cards(a and a.played, 8),
