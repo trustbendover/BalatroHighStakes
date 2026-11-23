@@ -145,6 +145,117 @@ function H.layout_badge(area, cards, blockers, room)
 	return box
 end
 
+--- Apply one network message to the local meter. A leaderboard (rows only) must not
+--- clear the player's own Heat: that message has no heat field.
+function H.absorb(g, msg)
+	g = g or {}
+	if type(msg) ~= "table" then return g end
+	if msg.rows then g.heat_board = msg.rows end
+	if msg.heat == nil then return g end
+	g.heat = tonumber(msg.heat) or 0
+	g.heat_total = tonumber(msg.total) or g.heat_total or 0
+	g.heat_best = tonumber(msg.best) or g.heat_best or 0
+	g.heat_overdrive = msg.overdrive and true or false
+	g.reward = msg.reward
+	g.tag = msg.tag
+	return g
+end
+
+--- 0 yellow, mid orange, full red.
+function H.meter_color(heat, max)
+	local cap = tonumber(max) or H.MAX or 100
+	local t = 0
+	if cap > 0 then t = math.max(0, math.min(1, (tonumber(heat) or 0) / cap)) end
+	local function lerp(a, b, u) return a + (b - a) * u end
+	if t < 0.5 then
+		local u = t / 0.5
+		return lerp(1, 1, u), lerp(0.86, 0.45, u), lerp(0.2, 0.08, u)
+	end
+	local u = (t - 0.5) / 0.5
+	return lerp(1, 0.82, u), lerp(0.45, 0.08, u), lerp(0.08, 0.05, u)
+end
+
+--- Fill grows from the bottom of the meter.
+function H.meter_fill(box, heat, max)
+	if not box then return nil end
+	local cap = tonumber(max) or H.MAX or 100
+	local t = 0
+	if cap > 0 then t = math.max(0, math.min(1, (tonumber(heat) or 0) / cap)) end
+	local h = box.h * t
+	return { x = box.x, y = box.y + box.h - h, w = box.w, h = h }
+end
+
+H.METER_W = 0.62
+H.METER_H = 3.4
+H.METER_LABEL = 0.85
+
+--- Vertical meter on the right, below a top-right chat and above a bottom-right deck.
+function H.layout_meter(room, blockers)
+	if not (room and room.w and room.h) then return nil end
+	local gap = 0.16
+	local left = room.x or 0
+	local top = room.y or 0
+	local x = left + room.w - gap - H.METER_W
+	local top_limit = top + 0.25
+	local bot_limit = top + room.h - 0.25
+	for _, b in ipairs(blockers or {}) do
+		if b and b.w and b.h and (b.x or 0) + b.w > x - 0.3 then
+			local mid = (b.y or 0) + b.h / 2
+			if mid < top + room.h / 2 then
+				top_limit = math.max(top_limit, (b.y or 0) + b.h + gap)
+			else
+				bot_limit = math.min(bot_limit, (b.y or 0) - gap)
+			end
+		end
+	end
+	bot_limit = bot_limit - H.METER_LABEL
+	local h = math.min(H.METER_H, bot_limit - top_limit)
+	if h < 1.4 then h = 1.4 end
+	local y = top_limit
+	if y + h > bot_limit then y = math.max(top, bot_limit - h) end
+	if x < left then x = left end
+	return { x = x, y = y, w = H.METER_W, h = h, label_h = H.METER_LABEL }
+end
+
+function H.hit_meter(box, x, y)
+	if not (box and x and y) then return false end
+	local h = (box.h or 0) + (box.label_h or 0)
+	return x >= box.x and x <= box.x + (box.w or 0) and y >= box.y and y <= box.y + h
+end
+
+function H.meter_overlaps(box, blockers, gap)
+	if not box then return false end
+	local label = { x = box.x, y = box.y + box.h, w = box.w, h = box.label_h or 0 }
+	for _, b in ipairs(blockers or {}) do
+		if H.overlap(box, b, gap or 0) or (label.h > 0 and H.overlap(label, b, gap or 0)) then return true end
+	end
+	return false
+end
+
+--- Particles live in 0..1 across the meter. y = 1 is the top of the flame.
+function H.flame_tick(parts, dt, on, now)
+	local out = {}
+	dt = tonumber(dt) or 0
+	now = tonumber(now) or 0
+	for _, p in ipairs(parts or {}) do
+		p.y = (p.y or 0) + (p.vy or 0.8) * dt
+		p.life = (p.life or 0) - dt
+		if p.life > 0 and p.y < 1.4 then out[#out + 1] = p end
+	end
+	if on then
+		local n = 1 + math.floor(now * 10) % 2
+		for i = 1, n do
+			out[#out + 1] = {
+				x = (math.sin(now * 9 + i * 2.1) * 0.5 + 0.5),
+				y = 0,
+				vy = 0.9 + (i * 0.15),
+				life = 0.55,
+			}
+		end
+	end
+	return out
+end
+
 function H.music_priority(state)
 	state = state or {}
 	if state.in_lobby == false then return nil end

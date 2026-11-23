@@ -65,9 +65,24 @@ local five = H.layout_badge(area, cards, {}, { x = 0, y = 0, w = 19.5, h = 11 })
 ok(#cards == 5 and clears(five, area, cards), "five jokers, one of them raised, still leave the strip clear")
 
 local src = io.open("lib/heat.lua"):read("*a")
-ok(not src:find("y = 1.05", 1, true), "the strip is no longer pinned down into the joker row")
-ok(src:find("major = G.jokers", 1, true), "it is attached to the joker area")
-ok(src:find("function H.draw_front()", 1, true) and src:find("love.draw", 1, true), "it is drawn after the cards")
-ok(src:find("function H.silence(", 1, true), "the early UI pass does not paint it under the cards")
+ok(not src:find("y = 1.05", 1, true) and not src:find("major = G.jokers", 1, true), "the old top strip is gone")
+ok(src:find("function H.draw_front()", 1, true) and src:find("love.draw", 1, true), "the meter is drawn after the cards")
+ok(src:find("H.layout_meter", 1, true) and src:find("Best ", 1, true), "the vertical meter carries the number and Best")
+local room = { x = 0, y = 0, w = 19.5556, h = 11 }
+local chat = { x = 15.2, y = 0.3, w = 3.9, h = 1.3 }
+local deck = { x = 16.6, y = 8.3, w = 2.4, h = 2.2 }
+local meter = H.layout_meter(room, { chat, deck })
+ok(meter and meter.x > room.w * 0.7, "the meter sits on the right")
+ok(not H.meter_overlaps(meter, { chat, deck }, 0), "it clears the chat and the deck")
+local fill = H.meter_fill(meter, 50, 100)
+ok(fill and math.abs((fill.y + fill.h) - (meter.y + meter.h)) < 1e-9 and fill.h < meter.h, "the bar fills from the bottom")
+local _, gy, _ = H.meter_color(0, 100)
+local _, gr, _ = H.meter_color(100, 100)
+ok(gy > gr, "empty is yellow and full is red")
+local flames = H.flame_tick({}, 0.05, true, 1)
+ok(#flames > 0, "Overdrive lights the flame")
+flames = H.flame_tick(flames, 2, false, 2)
+ok(#flames == 0, "spending Overdrive puts the flame out")
+ok(H.hit_meter(meter, meter.x + 0.1, meter.y + 0.2) and not H.hit_meter(meter, meter.x - 1, meter.y), "the meter is the hover target for How to play")
 
 print("PASS: heat hud")
