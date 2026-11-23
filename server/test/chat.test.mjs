@@ -52,7 +52,7 @@ async function person(name) {
   await c.connect()
   await c.waitAction('connected')
   c.send({ action: 'username', username: name, modHash: 'test' })
-  c.send({ action: 'version', version: '0.7.6' })
+  c.send({ action: 'version', version: '0.7.7' })
   return c
 }
 

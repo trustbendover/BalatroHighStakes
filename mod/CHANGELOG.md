@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.7 - The Heat strip sits above the jokers
+
+- **Heat.** The strip follows the joker row and is drawn after the cards, so the jokers no longer cover the text. A raised joker stays under the strip. The Chaos badge and the top-right chat stay clear.
+- **Pins.** Steamodded stays 1.0.0~BETA-1620a. Lovely stays 0.10.0.
+
 ## 0.7.6 - Heat Rush is in the Gamemodes menu
 
 - **Heat Rush.** The mode is listed under Free-for-all, after Gambel Time. It can still start with one player or up to eight. Lives stay at 4 unless the host changes them. The lives HUD stays on, and the track still plays during the run.
