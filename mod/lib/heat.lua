@@ -47,11 +47,14 @@ end
 
 --- The clock starts when a blind is chosen. Selecting a blind does not earn Heat.
 function H.arm()
+	H.reported = false
 	if H.active() then H.started = H.now() end
 end
 
---- Called when the blind is actually beaten.
+--- Called when the blind is actually beaten. Once per blind, so end_round and
+--- Blind:defeat can both call it.
 function H.report(blind)
+	if H.reported then return end
 	if not (Client and Client.send and H.active()) then return end
 	local round = G and G.GAME and G.GAME.current_round or {}
 	local kind = "small"
@@ -61,6 +64,7 @@ function H.report(blind)
 	local par = H.PAR_SECONDS[kind] or 90
 	local seconds = H.started and (now - H.started) or (par + 1)
 	H.started = nil
+	H.reported = true
 	Client.send({
 		action = "heatReport",
 		blind = kind,
@@ -83,139 +87,222 @@ function H.blockers()
 			list[#list + 1] = { x = t.x or 0, y = t.y or 0, w = t.w, h = t.h }
 		end
 	end
-	local gambel = MP.GAMBEL
-	if gambel and gambel.badge then add(gambel.badge) end
 	local chat = MP.CHAT
 	if chat and chat.box then add(chat.box) end
-	if G and G.MP3P_KOTH_UI then add(G.MP3P_KOTH_UI) end
+	if G and G.deck then add(G.deck) end
+	if G and G.shop then add(G.shop) end
 	return list
 end
 
---- Stop the bond from pulling the strip back down onto the cards.
-function H.hold(box)
-	if not box then return end
-	if G and G.ROOM then box.container = G.ROOM end
-	if box.alignment then
-		box.alignment.type = "a"
-		box.alignment.prev_type = "a"
-		if box.alignment.type_list then box.alignment.type_list.a = true end
-	end
-end
-
-function H.sync_visual(box)
-	if not box or not box.T then return end
-	if box.hard_set_VT then
-		pcall(function() box:hard_set_VT() end)
-	elseif box.VT then
-		box.VT.x, box.VT.y, box.VT.w, box.VT.h = box.T.x, box.T.y, box.T.w, box.T.h
-	end
-	local seen = {}
-	local function snap(node)
-		if type(node) ~= "table" or seen[node] then return end
-		seen[node] = true
-		if node ~= box and node.move_with_major and node.role and node.role.major then
-			pcall(function() node:move_with_major(0) end)
-		end
-		if node.hard_set_VT then
-			pcall(function() node:hard_set_VT() end)
-		elseif node ~= box and node.VT and node.T then
-			node.VT.x, node.VT.y, node.VT.w, node.VT.h = node.T.x, node.T.y, node.T.w, node.T.h
-		end
-		local obj = node.config and node.config.object
-		if type(obj) == "table" then snap(obj) end
-		if node.children then
-			for _, child in ipairs(node.children) do snap(child) end
-		end
-	end
-	snap(box)
-	if box.UIRoot then snap(box.UIRoot) end
-end
-
-function H.pin()
-	local box = H.badge
-	local area = G and G.jokers
-	if not box or box.REMOVED or not area then return end
-	local slot = H.layout_badge(area, area.cards, H.blockers(), H.room_rect())
-	if not slot then return end
-	H.hold(box)
-	box.T.x, box.T.y, box.T.w, box.T.h = slot.x, slot.y, slot.w, slot.h
-	if box.VT then box.VT.x, box.VT.y, box.VT.w, box.VT.h = slot.x, slot.y, slot.w, slot.h end
-	if box.velocity then box.velocity.x, box.velocity.y = 0, 0 end
-	H.sync_visual(box)
-	H.slot = slot
-end
-
---- The normal UI pass paints before the cards. Skip it and draw once afterwards.
-function H.silence(box)
-	if not box or box._mp_heat_draw or not box.draw then return end
-	local orig = box.draw
-	box._mp_heat_draw = orig
-	function box.draw(self, ...)
-		if not H._painting then return end
-		return orig(self, ...)
-	end
+function H.place_meter()
+	H.meter = H.layout_meter(H.room_rect(), H.blockers())
+	return H.meter
 end
 
 function H.draw_front()
-	local box = H.badge
-	if not box or box.REMOVED or not box.draw then return end
-	if G and G.OVERLAY_MENU then return end
-	H.pin()
-	if box.FRAME then box.FRAME.DRAW = -1 end
-	H._painting = true
-	pcall(function()
-		love.graphics.push()
-		local drew, err = pcall(function()
-			if box.translate_container then box:translate_container() end
-			box:draw()
+	if not (love and love.graphics and H.active and H.active()) then return end
+	if G and (G.OVERLAY_MENU or not G.STAGES or G.STAGE ~= G.STAGES.RUN) then return end
+	local box = H.place_meter()
+	if not box then return end
+	local g = MP.GAME or {}
+	local heat = H.shown
+	if heat == nil then heat = tonumber(g.heat) or 0 end
+	local fire = g.heat_overdrive and true or false
+	local gpx = love.graphics
+	local ts = (G and G.TILESIZE) or 20
+	local sc = (G and G.TILESCALE) or 1
+	local now = H.now()
+	local function px(n) return n * ts end
+	local function pill(x, y, w, h, col, mode)
+		gpx.setColor(col[1], col[2], col[3], col[4] or 1)
+		local rad = math.min(w, h) * 0.5
+		gpx.rectangle(mode or "fill", x, y, math.max(1, w), math.max(1, h), rad, rad)
+	end
+	gpx.push()
+	gpx.scale(sc, sc)
+	local x, y, w, h = px(box.x), px(box.y), px(box.w), px(box.h)
+	local pad = math.max(2, ts * 0.06)
+	if fire then
+		local pulse = 0.22 + 0.14 * math.sin(now * 7)
+		local burst = math.max(0, H.burst or 0) / 0.42
+		pill(x - 3, y - 3, w + 6, h + 6, { 1, 0.45, 0.08, pulse + burst * 0.45 })
+	end
+	pill(x, y, w, h, { 0.04, 0.035, 0.04, 0.72 })
+	local fill = H.meter_fill(box, heat, H.MAX)
+	if fill and fill.h > 0.01 then
+		local slices = 18
+		local fh, fy = px(fill.h), px(fill.y)
+		local sh = fh / slices
+		local clipped = gpx.stencil and gpx.setStencilTest and pcall(function()
+			gpx.stencil(function()
+				local rad = math.min(w - pad * 2, fh) * 0.5
+				gpx.rectangle("fill", x + pad, fy, math.max(1, w - pad * 2), math.max(1, fh), rad, rad)
+			end, "replace", 1)
+			gpx.setStencilTest("greater", 0)
 		end)
-		love.graphics.pop()
-		if not drew then error(err) end
-	end)
-	H._painting = false
+		for i = 0, slices - 1 do
+			local u = (i + 0.5) / slices
+			local cr, cg, cb = H.meter_color(u * heat, H.MAX)
+			gpx.setColor(cr, cg, cb, 0.95)
+			gpx.rectangle("fill", x + pad, fy + fh - (i + 1) * sh, math.max(1, w - pad * 2), sh + 0.5)
+		end
+		local shine = (math.sin(now * 1.6) * 0.5 + 0.5) * fh
+		gpx.setColor(1, 0.95, 0.8, 0.22)
+		gpx.rectangle("fill", x + pad, fy + fh - shine - sh, math.max(1, (w - pad * 2) * 0.42), sh * 2)
+		if clipped then pcall(function() gpx.setStencilTest() end) end
+	end
+	for _, tick in ipairs(H.meter_ticks(box)) do
+		local ty = px(tick.y)
+		gpx.setColor(1, 1, 1, 0.28)
+		gpx.rectangle("fill", x + w * 0.22, ty, w * 0.56, math.max(1, ts * 0.035))
+	end
+	gpx.setColor(1, 0.96, 0.9, 0.55)
+	gpx.setLineWidth(1)
+	pill(x + 0.5, y + 0.5, w - 1, h - 1, { 1, 0.96, 0.9, 0.45 }, "line")
+	if fire then
+		local edge = math.max(1.5, ts * 0.045)
+		local pulse = 0.45 + 0.35 * math.sin(now * 11)
+		local burst = math.max(0, H.burst or 0) / 0.42
+		gpx.setColor(1, 0.72, 0.25, math.min(1, pulse + burst))
+		gpx.rectangle("fill", x - edge, y, edge, h)
+		gpx.rectangle("fill", x + w, y, edge, h)
+		for _, p in ipairs(H.flames or {}) do
+			local a = math.max(0, math.min(1, (p.life or 0) / 0.62))
+			local along = math.max(0, math.min(1, p.y or 0))
+			local py = y + h - along * h
+			local side = (p.side == 1) and 1 or -1
+			local outward = (0.02 + (1 - a) * 0.07) * ts
+			local fx = (side < 0) and (x - outward) or (x + w + outward)
+			if p.kind == "ember" then
+				gpx.setColor(1, 0.82, 0.35, a * 0.85)
+				gpx.circle("fill", fx, py, (0.045 + 0.03 * a) * ts)
+			else
+				gpx.setColor(1, 0.42 + 0.25 * a, 0.06, a * 0.9)
+				gpx.rectangle("fill", fx - ts * 0.03, py - ts * 0.1, ts * 0.07, ts * 0.16)
+			end
+		end
+		if burst > 0 then
+			gpx.setColor(1, 0.95, 0.75, burst * 0.4)
+			pill(x, y, w, h, { 1, 0.95, 0.75, burst * 0.4 })
+		end
+	end
+	local shown = math.floor((heat or 0) + 0.5)
+	gpx.setColor(1, 0.97, 0.92, 1)
+	gpx.printf(tostring(shown), x - ts * 0.35, y + h + ts * 0.04, w + ts * 0.7, "center", 0, 0.72, 0.72)
+	gpx.setColor(1, 0.78, 0.38, 0.9)
+	gpx.printf("HEAT", x - ts * 0.35, y + h + ts * 0.28, w + ts * 0.7, "center", 0, 0.38, 0.38)
+	local best = tonumber(g.heat_best) or 0
+	if best > 0 then
+		gpx.setColor(0.92, 0.84, 0.62, 0.9)
+		gpx.printf("Best " .. tostring(math.floor(best)), x - ts * 0.45, y + h + ts * 0.48, w + ts * 0.9, "center", 0, 0.36, 0.36)
+	end
+	local mx, my = H.pointer()
+	if H.hit_meter(box, mx, my) then
+		gpx.setColor(1, 0.86, 0.45, 1)
+		local hint = "How to play"
+		if localize then
+			local okh, s = pcall(localize, "k_heat_how")
+			if okh and type(s) == "string" and s ~= "k_heat_how" and s ~= "ERROR" then hint = s end
+		end
+		gpx.printf(hint, x - ts * 0.8, y - ts * 0.32, w + ts * 1.6, "center", 0, 0.4, 0.4)
+	end
+	gpx.setColor(1, 1, 1, 1)
+	gpx.pop()
 end
 
-function H.sync_badge()
-	if not (G and UIBox and G.UIT and G.ROOM_ATTACH and G.STAGES) then return end
-	local show = H.active() and G.STAGE == G.STAGES.RUN and G.jokers and G.jokers.T
-	if not show then
-		if H.badge and H.badge.remove then pcall(function() H.badge:remove() end) end
-		H.badge, H.slot = nil, nil
-		return
+function H.how_text()
+	local key = "k_heat_rush_rules"
+	if localize then
+		local ok, s = pcall(localize, key)
+		if ok and type(s) == "string" and s ~= "" and s ~= "ERROR" and s ~= key then return s end
 	end
-	local g = MP.GAME or {}
-	local now = (love and love.timer and love.timer.getTime and love.timer.getTime()) or os.clock()
-	if not H.started then H.started = now end
-	local text = string.format("HEAT %d/%d", tonumber(g.heat) or 0, H.MAX)
-	local blind = G and G.GAME and G.GAME.blind
-	if blind and blind.boss and H.started then
-		text = text .. string.format("  BOSS %ds", math.max(0, math.floor(H.PAR_SECONDS.boss - (now - H.started))))
+	return "Each clear pays +25 Heat. At 100 the next hand is Overdrive, x1.5."
+end
+
+function H.how_seen()
+	if H.how_dismissed then return true end
+	local cfg = SMODS and SMODS.Mods and SMODS.Mods["Multiplayer"] and SMODS.Mods["Multiplayer"].config
+	return cfg and cfg.heat_how_seen and true or false
+end
+
+function H.mark_how()
+	H.how_dismissed = true
+	local mod = SMODS and SMODS.Mods and SMODS.Mods["Multiplayer"]
+	local cfg = mod and mod.config
+	if cfg then
+		cfg.heat_how_seen = true
+		if SMODS.save_mod_config then pcall(SMODS.save_mod_config, mod) end
 	end
-	if g.heat_overdrive then text = text .. "  OVERDRIVE" end
-	if (tonumber(g.heat_best) or 0) > 0 then text = text .. string.format("  Best %d", g.heat_best) end
-	H.view.text = text
-	if not H.badge or H.badge.REMOVED then
-		H.badge = UIBox({
-			definition = { n = G.UIT.ROOT, config = { align = "cm", colour = G.C.CLEAR, minw = H.BADGE_W, minh = H.BADGE_H }, nodes = {
-				{ n = G.UIT.R, config = { align = "cm", padding = 0.06, r = 0.1, colour = G.C.BLACK, emboss = 0.05, minw = H.BADGE_W }, nodes = {
-					{ n = G.UIT.T, config = { ref_table = H.view, ref_value = "text", scale = 0.32, colour = G.C.GOLD or G.C.WHITE, shadow = true } },
-				} },
-			} },
-			config = { align = "tm", offset = { x = 0, y = -(H.BADGE_H + H.BADGE_GAP + H.HOVER) }, major = G.jokers, bond = "Weak" },
+end
+
+function H.show_how()
+	if not (G and G.FUNCS and G.FUNCS.overlay_menu and create_UIBox_generic_options and UIBox_button) then return end
+	if not (MP.UI and MP.UI.UTILS and G.UIT) then return end
+	local U = MP.UI.UTILS
+	local lines = { H.how_text() }
+	if MP.UTILS and MP.UTILS.fit_lines then lines = MP.UTILS.fit_lines(H.how_text(), 0.36, 10, 12) end
+	local rows = {}
+	for _, line in ipairs(lines) do
+		rows[#rows + 1] = U.create_row({ align = "cm", padding = 0.02 }, {
+			U.create_text_node(line, { scale = 0.36, colour = G.C.UI.TEXT_LIGHT }),
 		})
-		H.silence(H.badge)
 	end
-	H.pin()
+	G.FUNCS.mp_heat_how_ok = function()
+		H.mark_how()
+		if G.FUNCS.exit_overlay_menu then pcall(G.FUNCS.exit_overlay_menu) end
+	end
+	local title = "How to play"
+	if localize then
+		local ok, s = pcall(localize, "k_heat_how")
+		if ok and type(s) == "string" and s ~= "k_heat_how" and s ~= "ERROR" then title = s end
+	end
+	local ok_label = "Got it"
+	if localize then
+		local ok, s = pcall(localize, "b_heat_how_ok")
+		if ok and type(s) == "string" and s ~= "b_heat_how_ok" and s ~= "ERROR" then ok_label = s end
+	end
+	G.SETTINGS.paused = true
+	G.FUNCS.overlay_menu({
+		definition = create_UIBox_generic_options({
+			no_back = true,
+			contents = {
+				U.create_column({ align = "cm", padding = 0.08 }, {
+					U.create_row({ align = "cm" }, {
+						U.create_text_node(title, { scale = 0.55, colour = G.C.GOLD or G.C.WHITE }),
+					}),
+					U.create_column({ align = "cm", padding = 0.02 }, rows),
+					U.create_row({ align = "cm", padding = 0.12 }, {
+						UIBox_button({ button = "mp_heat_how_ok", label = { ok_label }, minw = 3.2, minh = 0.7, scale = 0.4, colour = G.C.ORANGE or G.C.RED }),
+					}),
+				}),
+			},
+		}),
+	})
+	H.how_shown = true
+end
+
+function H.on_match_start()
+	if not (H.active and H.active()) then return end
+	if H.how_seen() then return end
+	H.show_how()
+end
+
+function H.pointer()
+	if not (love and love.mouse and love.mouse.getPosition) then return nil end
+	local ok, x, y = pcall(love.mouse.getPosition)
+	if not ok or not x then return nil end
+	local ts = (G and G.TILESIZE) or 20
+	local sc = (G and G.TILESCALE) or 1
+	if ts * sc == 0 then return nil end
+	return x / (ts * sc), y / (ts * sc)
 end
 
 function H.on_state(p)
 	if type(p) ~= "table" then return end
 	MP.GAME = MP.GAME or {}
-	MP.GAME.heat = tonumber(p.heat) or 0
-	MP.GAME.heat_total = tonumber(p.total) or MP.GAME.heat_total or 0
-	MP.GAME.heat_best = tonumber(p.best) or MP.GAME.heat_best or 0
-	MP.GAME.heat_overdrive = p.overdrive and true or false
-	MP.GAME.heat_board = p.rows
+	local personal = p.heat ~= nil
+	H.absorb(MP.GAME, p)
+	if not personal then return end
 	if p.reward == "cash" and ease_dollars and G and G.STAGE == G.STAGES.RUN then
 		pcall(ease_dollars, H.CASH)
 	elseif p.reward == "reroll" and G and G.GAME and G.GAME.current_round then
@@ -224,7 +311,15 @@ function H.on_state(p)
 	if p.tag and add_tag and Tag and G and G.STAGE == G.STAGES.RUN then
 		pcall(function() add_tag(Tag(p.tag)) end)
 	end
-	if H.sync_badge then H.sync_badge() end
+end
+
+if end_round and not H._round then
+	H._round = true
+	local end_ref = end_round
+	function end_round(...)
+		if H.report and G and G.GAME and G.GAME.blind then pcall(H.report, G.GAME.blind) end
+		return end_ref(...)
+	end
 end
 
 if love and love.draw and not H._draw then
@@ -242,7 +337,27 @@ if Game and Game.update and not H._ui then
 	local upd = Game.update
 	function Game:update(dt)
 		local r = upd(self, dt)
-		if H.active and H.active() and H.sync_badge then H.sync_badge() end
+		if H.active and H.active() then
+			local target = tonumber(MP.GAME and MP.GAME.heat) or 0
+			local prev = H.prev_heat or target
+			local burst = H.meter_burst(prev, target, H.MAX)
+			if burst > 0 then H.burst = burst end
+			H.prev_heat = target
+			if H.burst and H.burst > 0 then H.burst = H.burst - dt end
+			H.shown = H.ease_heat(H.shown == nil and target or H.shown, target, dt)
+			H.flames = H.flame_tick(H.flames, dt, MP.GAME and MP.GAME.heat_overdrive, H.now())
+			H.place_meter()
+			local down = love and love.mouse and love.mouse.isDown and love.mouse.isDown(1)
+			local px, py = H.pointer()
+			if down and not H.mouse_was_down and H.hit_meter(H.meter, px, py) then H.show_how() end
+			H.mouse_was_down = down and true or false
+			if H.drop_old then H.drop_old() end
+		end
 		return r
 	end
+end
+
+function H.drop_old()
+	if H.badge and H.badge.remove then pcall(function() H.badge:remove() end) end
+	H.badge = nil
 end
