@@ -70,16 +70,54 @@ ok(src:find("function H.draw_front()", 1, true) and src:find("love.draw", 1, tru
 ok(src:find("H.layout_meter", 1, true) and src:find("H.meter_labels", 1, true), "the vertical meter carries the stacked labels")
 local rules = io.open("networking/heat_rules.lua"):read("*a")
 ok(rules:find('text = "Best "', 1, true) or rules:find('"Best "', 1, true), "Best is its own centered line")
-local room = { x = 0, y = 0, w = 19.5556, h = 11 }
-local chat = { x = 15.2, y = 0.3, w = 3.9, h = 1.3 }
-local deck = { x = 16.6, y = 8.3, w = 2.4, h = 2.2 }
-local meter = H.layout_meter(room, { chat, deck })
-ok(meter and meter.x > room.w * 0.7, "the meter sits on the right")
-ok(meter.x + meter.w > room.w - 0.08, "the pill sits close to the right edge")
-ok(meter.y >= chat.y + chat.h + 0.6, "the pill starts below the chat and the consumable row")
-ok(not H.meter_overlaps(meter, { chat, deck }, 0), "it clears the chat and the deck")
-local counter = { x = 17.6, y = 3.2, w = 0.9, h = 0.4 }
-ok(not H.overlap(meter, counter, 0.05), "the pill clears the vanilla consumable counter (0/2)")
+-- The screen is wider than the playfield. Consumables, the 0/2 counter and the deck
+-- sit on the playfield's right edge. The pill is pinned to the screen edge instead.
+local function screen_of(px_w, px_h)
+	local orig = 16 / 9
+	local base_scale, tile, base_h = 3.6, 20, 1080
+	local tilescale = (px_w / px_h < orig) and (base_scale * px_w / 1920) or (base_scale * px_h / base_h)
+	return { x = 0, y = 0, w = px_w / (tile * tilescale), h = px_h / (tile * tilescale) }
+end
+local function field(screen)
+	local room_right = screen.w - 2.4
+	return {
+		jokers = { x = screen.w * 0.28, y = 0.55, w = 8.2, h = 1.45 },
+		cons = { x = room_right - 2.7, y = 2.5, w = 2.55, h = 3.3 },
+		counter = { x = room_right - 1.15, y = 2.15, w = 1.0, h = 0.42 },
+		deck = { x = room_right - 2.3, y = screen.h - 3.1, w = 2.15, h = 2.5 },
+	}
+end
+local screens_px = {
+	{ "1080p", 1920, 1080 },
+	{ "1440p", 2560, 1440 },
+	{ "ultrawide", 3440, 1440 },
+	{ "window", 1600, 900 },
+}
+local anchor = nil
+for _, s in ipairs(screens_px) do
+	local screen = screen_of(s[2], s[3])
+	local f = field(screen)
+	local blockers = { f.jokers, f.cons, f.counter, f.deck }
+	local meter = H.layout_meter(screen, blockers)
+	ok(meter and meter.anchor == "screen", s[1] .. ": the meter is anchored to the screen, not the consumable row")
+	ok(math.abs((meter.x + meter.w) - (screen.w - H.METER_INSET)) < 1e-6, s[1] .. ": the pill is pinned to the screen's right edge")
+	ok(meter.x > f.cons.x + f.cons.w and meter.x > f.deck.x + f.deck.w, s[1] .. ": it sits to the right of the consumables and the deck")
+	ok(not H.meter_overlaps(meter, blockers, 0.02), s[1] .. ": the pill and its caption clear consumables, deck and jokers")
+	local mid = screen.y + screen.h / 2
+	ok(math.abs((meter.y + meter.h / 2) - mid) < screen.h * 0.28, s[1] .. ": it stays around the middle of the screen")
+	if s[1] == "1080p" then anchor = meter.x end
+	if s[1] == "1440p" then
+		ok(math.abs(meter.x - anchor) < 1e-6, "1440p keeps the same tile position as 1080p")
+	end
+	if s[1] == "ultrawide" then
+		ok(meter.x > anchor + 1, "ultrawide follows the wider screen, not the playfield")
+	end
+end
+local covered = H.layout_meter({ x = 0, y = 0, w = 20, h = 12 }, {
+	{ x = 16, y = 0, w = 4, h = 12 },
+})
+ok(covered and math.abs((covered.x + covered.w) - (20 - H.METER_INSET)) < 1e-6, "a blocker covering the right column does not pull the pill left")
+local meter = H.layout_meter(screen_of(1920, 1080), {})
 local labels = H.meter_labels(meter, 0, 12)
 ok(labels.number.text == "0" and labels.caption.text == "HEAT" and not labels.caption.text:find("\n", 1, true), "the number and HEAT are each one line")
 ok(labels.caption.y >= labels.number.y + labels.number.h - 1e-6, "HEAT sits under the number, not on it")
@@ -88,7 +126,24 @@ local cx = meter.x + meter.w / 2
 ok(math.abs(labels.number.x + labels.number.w / 2 - cx) < 1e-6, "the number is centered on the pill")
 ok(math.abs(labels.caption.x + labels.caption.w / 2 - cx) < 1e-6, "HEAT is centered on the pill")
 ok(math.abs(labels.best.x + labels.best.w / 2 - cx) < 1e-6, "Best is centered on the pill")
-ok(labels.caption.w >= 2.4, "HEAT has enough width that it does not wrap")
+ok(labels.number.w == labels.caption.w and labels.caption.w == labels.best.w, "the three lines share one centered column")
+ok(labels.caption.y >= labels.number.y + labels.number.h, "HEAT starts only after the number's line")
+ok(labels.best.y >= labels.caption.y + labels.caption.h, "Best starts only after HEAT")
+ok(src:find("real_window_w", 1, true) and src:find("getWidth", 1, true), "the meter measures the screen, not the consumable area")
+ok(not src:find("major = G.consumeables", 1, true), "the meter is not parented to the consumables")
+ok(src:find("gpx.translate", 1, true) and not src:find('printf(node.text', 1, true), "caption scale is about the line centre, so the number cannot sit beside HEAT")
+ok(H.flame_target(0, 100) == 0 and H.flame_target(50, 100) == 0, "the flame stays out until Heat nears 100")
+ok(H.flame_target(90, 100) > 0 and H.flame_target(100, 100) > H.flame_target(90, 100), "the flame grows as Heat nears 100")
+ok(math.abs(H.flame_target(100, 100) - H.FLAME_FULL) < 1e-9, "Heat 100 is a full vanilla flame")
+local stepped = H.flame_step({ real_intensity = 0, intensity_vel = 0, timer = 0, change = 0 }, H.FLAME_FULL, 0.05)
+ok(stepped.real_intensity > 0 and stepped.real_intensity < H.FLAME_FULL, "the flame eases up the way the chips flame does")
+local chips = { real_intensity = 3, change = 1 }
+local kept = chips.real_intensity
+H.flame_step(stepped, H.FLAME_FULL, 0.05)
+ok(chips.real_intensity == kept, "the Heat flame does not write the chips flame")
+ok(H.flame_volume("ambientFire2", H.FLAME_FULL, 0) > 0.5 and H.flame_volume("ambientFire2", 0, 0) == 0, "full Heat uses the vanilla fire bed, and zero Heat is silent")
+ok(src:find("heat_flames", 1, true) and src:find('shader = "flame"', 1, true) and src:find("ambientFire1", 1, true), "the meter hooks the vanilla flame shader and its fire sounds")
+ok(src:find("function H.drop_flame()", 1, true), "leaving the match removes the Heat flame")
 local fill = H.meter_fill(meter, 50, 100)
 ok(fill and math.abs((fill.y + fill.h) - (meter.y + meter.h)) < 1e-9 and fill.h < meter.h, "the bar fills from the bottom")
 local _, gy, _ = H.meter_color(0, 100)
