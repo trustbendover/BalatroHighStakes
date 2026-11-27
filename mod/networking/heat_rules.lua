@@ -188,8 +188,10 @@ end
 H.METER_W = 0.38
 H.METER_H = 3.2
 H.METER_LABEL = 1.5
-H.METER_INSET = 0.16
+-- Gap from the outermost pixel (caption or flame) to the screen edge.
+H.METER_INSET = 0.4
 H.METER_TEXT_W = 1.7
+H.FLAME_PAD = 0.45
 -- Vanilla flame amount at Heat 100. The shader clamps amount at 10.
 H.FLAME_FULL = 5
 H.FLAME_START = 0.75
@@ -222,16 +224,42 @@ function H.meter_burst(prev, heat, max)
 	return 0
 end
 
+--- Pixels of the window divided by TILESCALE * TILESIZE. real_window_w is pixels, not tiles.
+function H.screen_tiles(px_w, px_h, tilescale, tilesize)
+	local scale = (tonumber(tilescale) or 1) * (tonumber(tilesize) or 20)
+	px_w, px_h = tonumber(px_w), tonumber(px_h)
+	if not (scale > 0 and px_w and px_w > 0) then return nil end
+	return { x = 0, y = 0, w = px_w / scale, h = (px_h and px_h > 0) and (px_h / scale) or (px_w / scale) }
+end
+
+--- How far the assembly sticks out to the right of the pill's left edge.
+--- The caption is wider than the pill and is centered on it, so it sets the reach.
+function H.meter_reach()
+	local half = (H.METER_W or 0) / 2
+	local text = (H.METER_TEXT_W or H.METER_W) / 2 + half
+	local flame = (H.METER_W or 0) + (H.FLAME_PAD or 0)
+	return math.max(H.METER_W or 0, text, flame)
+end
+
+--- Right edge of the pill, the centered caption, and the flame glow.
+function H.meter_right(box)
+	if not box then return nil end
+	local cx = box.x + box.w / 2
+	local caption = cx + (H.METER_TEXT_W or box.w) / 2
+	local flame = box.x + box.w + (H.FLAME_PAD or 0)
+	return math.max(box.x + box.w, caption, flame)
+end
+
 --- Vertical meter on the screen's right edge, around the middle.
 --- The playfield's right edge is the consumable column, so x is the screen, never that row.
---- A blocker may only slide the pill up or down.
+--- A blocker may only slide the pill up or down. The caption and flame stay inside the margin.
 function H.layout_meter(screen, blockers)
 	if not (screen and screen.w and screen.h) then return nil end
-	local margin = H.METER_INSET or 0.16
+	local margin = H.METER_INSET or 0.4
 	local left = screen.x or 0
 	local top = (screen.y or 0) + 0.2
 	local bottom = (screen.y or 0) + screen.h - 0.2
-	local x = left + screen.w - margin - H.METER_W
+	local x = left + screen.w - margin - H.meter_reach()
 	if x < left then x = left end
 	local h = math.min(H.METER_H, bottom - top - H.METER_LABEL)
 	if h < 1.4 then h = 1.4 end

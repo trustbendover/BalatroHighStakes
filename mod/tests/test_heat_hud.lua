@@ -100,7 +100,9 @@ for _, s in ipairs(screens_px) do
 	local blockers = { f.jokers, f.cons, f.counter, f.deck }
 	local meter = H.layout_meter(screen, blockers)
 	ok(meter and meter.anchor == "screen", s[1] .. ": the meter is anchored to the screen, not the consumable row")
-	ok(math.abs((meter.x + meter.w) - (screen.w - H.METER_INSET)) < 1e-6, s[1] .. ": the pill is pinned to the screen's right edge")
+	local right = H.meter_right(meter)
+	ok(right <= screen.w - H.METER_INSET + 1e-6, s[1] .. ": pill, flame and caption stay inside the margin")
+	ok(screen.w - right >= 0.3 and screen.w - right <= 0.5, s[1] .. ": the right margin is 0.3 to 0.5")
 	ok(meter.x > f.cons.x + f.cons.w and meter.x > f.deck.x + f.deck.w, s[1] .. ": it sits to the right of the consumables and the deck")
 	ok(not H.meter_overlaps(meter, blockers, 0.02), s[1] .. ": the pill and its caption clear consumables, deck and jokers")
 	local mid = screen.y + screen.h / 2
@@ -116,7 +118,9 @@ end
 local covered = H.layout_meter({ x = 0, y = 0, w = 20, h = 12 }, {
 	{ x = 16, y = 0, w = 4, h = 12 },
 })
-ok(covered and math.abs((covered.x + covered.w) - (20 - H.METER_INSET)) < 1e-6, "a blocker covering the right column does not pull the pill left")
+ok(covered and math.abs(H.meter_right(covered) - (20 - H.METER_INSET)) < 1e-6, "a blocker covering the right column does not pull the assembly off the margin")
+local px = H.screen_tiles(1920, 1080, 3.6, 20)
+ok(px and math.abs(px.w - (1920 / (3.6 * 20))) < 1e-6 and px.w < 100, "real_window_w is pixels and is divided by TILESCALE * TILESIZE")
 local meter = H.layout_meter(screen_of(1920, 1080), {})
 local labels = H.meter_labels(meter, 0, 12)
 ok(labels.number.text == "0" and labels.caption.text == "HEAT" and not labels.caption.text:find("\n", 1, true), "the number and HEAT are each one line")

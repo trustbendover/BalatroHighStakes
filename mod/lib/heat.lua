@@ -78,15 +78,16 @@ function H.screen_rect()
 	local scale = (G and G.TILESCALE and G.TILESIZE and (G.TILESCALE * G.TILESIZE)) or 0
 	local wt = G and G.WINDOWTRANS
 	local w, h
+	-- real_window_w and getWidth are pixels. Divide by TILESCALE * TILESIZE to get tiles.
 	if wt and scale > 0 and tonumber(wt.real_window_w) and wt.real_window_w > 0 then
-		w = wt.real_window_w / scale
-		if tonumber(wt.real_window_h) and wt.real_window_h > 0 then h = wt.real_window_h / scale end
+		local rect = H.screen_tiles(wt.real_window_w, wt.real_window_h, G.TILESCALE, G.TILESIZE)
+		w, h = rect.w, rect.h
 	end
 	if (not w or w <= 0) and scale > 0 and love and love.graphics and love.graphics.getWidth then
 		local ok, pw, ph = pcall(function() return love.graphics.getWidth(), love.graphics.getHeight() end)
 		if ok and type(pw) == "number" and pw > 0 then
-			w = pw / scale
-			if type(ph) == "number" and ph > 0 then h = ph / scale end
+			local rect = H.screen_tiles(pw, ph, G.TILESCALE, G.TILESIZE)
+			w, h = rect.w, rect.h
 		end
 	end
 	if (not w or w <= 0) and G and G.ROOM and G.ROOM.T then
@@ -265,7 +266,7 @@ function H.draw_flame(box)
 	if not box or not tab or (tab.real_intensity or 0) < 0.1 then return end
 	local sprite = H.ensure_flame_sprite()
 	if not sprite or not sprite.draw then return end
-	local pad = 0.45
+	local pad = H.FLAME_PAD or 0.45
 	local T = sprite.VT or sprite.T
 	if not T then return end
 	T.x, T.y = box.x - pad, box.y - pad * 0.15
