@@ -187,9 +187,14 @@ end
 
 H.METER_W = 0.38
 H.METER_H = 3.2
-H.METER_LABEL = 1.25
-H.METER_INSET = 0.05
-H.METER_DROP = 0.7
+H.METER_LABEL = 1.5
+-- Gap from the outermost pixel (caption or flame) to the screen edge.
+H.METER_INSET = 0.4
+H.METER_TEXT_W = 1.7
+H.FLAME_PAD = 0.45
+-- Vanilla flame amount at Heat 100. The shader clamps amount at 10.
+H.FLAME_FULL = 5
+H.FLAME_START = 0.75
 
 --- Displayed fill eases toward the real Heat instead of jumping.
 function H.ease_heat(shown, target, dt)
@@ -219,53 +224,83 @@ function H.meter_burst(prev, heat, max)
 	return 0
 end
 
---- Vertical meter on the right, below a top-right chat and above a bottom-right deck.
-function H.layout_meter(room, blockers)
-	if not (room and room.w and room.h) then return nil end
-	local gap = 0.16
-	local left = room.x or 0
-	local top = room.y or 0
-	local x = left + room.w - (H.METER_INSET or 0.05) - H.METER_W
-	local top_limit = top + 0.25
-	local bot_limit = top + room.h - 0.25
-	for _, b in ipairs(blockers or {}) do
-		if b and b.w and b.h and (b.x or 0) + b.w > x - 0.3 then
-			local mid = (b.y or 0) + b.h / 2
-			if mid < top + room.h / 2 then
-				top_limit = math.max(top_limit, (b.y or 0) + b.h + gap)
-			else
-				bot_limit = math.min(bot_limit, (b.y or 0) - gap)
-			end
-		end
-	end
-	-- The vanilla consumable counter ("0/2") sits on the right, beside that row.
-	-- It is not a Heat label. Drop the pill below it.
-	top_limit = top_limit + (H.METER_DROP or 0)
-	bot_limit = bot_limit - H.METER_LABEL
-	local h = math.min(H.METER_H, bot_limit - top_limit)
-	if h < 1.4 then h = 1.4 end
-	local y = top_limit
-	if y + h > bot_limit then y = math.max(top, bot_limit - h) end
-	if x < left then x = left end
-	return { x = x, y = y, w = H.METER_W, h = h, label_h = H.METER_LABEL }
+--- Pixels of the window divided by TILESCALE * TILESIZE. real_window_w is pixels, not tiles.
+function H.screen_tiles(px_w, px_h, tilescale, tilesize)
+	local scale = (tonumber(tilescale) or 1) * (tonumber(tilesize) or 20)
+	px_w, px_h = tonumber(px_w), tonumber(px_h)
+	if not (scale > 0 and px_w and px_w > 0) then return nil end
+	return { x = 0, y = 0, w = px_w / scale, h = (px_h and px_h > 0) and (px_h / scale) or (px_w / scale) }
 end
 
---- Number, then HEAT, then Best. Each line is one string, wider than the pill, centered on it.
+--- How far the assembly sticks out to the right of the pill's left edge.
+--- The caption is wider than the pill and is centered on it, so it sets the reach.
+function H.meter_reach()
+	local half = (H.METER_W or 0) / 2
+	local text = (H.METER_TEXT_W or H.METER_W) / 2 + half
+	local flame = (H.METER_W or 0) + (H.FLAME_PAD or 0)
+	return math.max(H.METER_W or 0, text, flame)
+end
+
+--- Right edge of the pill, the centered caption, and the flame glow.
+function H.meter_right(box)
+	if not box then return nil end
+	local cx = box.x + box.w / 2
+	local caption = cx + (H.METER_TEXT_W or box.w) / 2
+	local flame = box.x + box.w + (H.FLAME_PAD or 0)
+	return math.max(box.x + box.w, caption, flame)
+end
+
+--- Vertical meter on the screen's right edge, around the middle.
+--- The playfield's right edge is the consumable column, so x is the screen, never that row.
+--- A blocker may only slide the pill up or down. The caption and flame stay inside the margin.
+function H.layout_meter(screen, blockers)
+	if not (screen and screen.w and screen.h) then return nil end
+	local margin = H.METER_INSET or 0.4
+	local left = screen.x or 0
+	local top = (screen.y or 0) + 0.2
+	local bottom = (screen.y or 0) + screen.h - 0.2
+	local x = left + screen.w - margin - H.meter_reach()
+	if x < left then x = left end
+	local h = math.min(H.METER_H, bottom - top - H.METER_LABEL)
+	if h < 1.4 then h = 1.4 end
+	local stack = h + H.METER_LABEL
+	local mid = (screen.y or 0) + screen.h / 2
+	local y = top + math.max(0, (bottom - top - stack) / 2)
+	local function hits(yy)
+		return H.meter_overlaps({ x = x, y = yy, w = H.METER_W, h = h, label_h = H.METER_LABEL }, blockers, 0.08)
+	end
+	if hits(y) then
+		local best, best_d = y, 1e9
+		local yy = top
+		while yy + stack <= bottom + 1e-6 do
+			if not hits(yy) then
+				local d = math.abs((yy + h / 2) - mid)
+				if d < best_d then best, best_d = yy, d end
+			end
+			yy = yy + 0.15
+		end
+		y = best
+	end
+	return { x = x, y = y, w = H.METER_W, h = h, label_h = H.METER_LABEL, anchor = "screen" }
+end
+
+--- Number, then HEAT, then Best. One line each, centered on the pill, with a gap between them.
 function H.meter_labels(box, heat, best)
 	if not box then return nil end
 	local cx = box.x + box.w / 2
-	local wide = 3.4
+	local wide = H.METER_TEXT_W or 1.7
+	local gap = 0.06
+	local number_h, heat_h, best_h = 0.5, 0.38, 0.36
 	local y = box.y + box.h + 0.08
-	local number_h, heat_h, best_h = 0.48, 0.34, 0.32
 	local labels = {
 		number = { text = tostring(math.floor((tonumber(heat) or 0) + 0.5)), x = cx - wide / 2, y = y, w = wide, h = number_h },
-		caption = { text = "HEAT", x = cx - wide / 2, y = y + number_h + 0.04, w = wide, h = heat_h },
+		caption = { text = "HEAT", x = cx - wide / 2, y = y + number_h + gap, w = wide, h = heat_h },
 	}
 	if (tonumber(best) or 0) > 0 then
 		labels.best = {
 			text = "Best " .. tostring(math.floor(best)),
 			x = cx - wide / 2,
-			y = labels.caption.y + heat_h + 0.04,
+			y = labels.caption.y + heat_h + gap,
 			w = wide,
 			h = best_h,
 		}
@@ -281,11 +316,52 @@ end
 
 function H.meter_overlaps(box, blockers, gap)
 	if not box then return false end
-	local label = { x = box.x, y = box.y + box.h, w = box.w, h = box.label_h or 0 }
+	local wide = math.max(box.w or 0, H.METER_TEXT_W or 0)
+	local cx = box.x + (box.w or 0) / 2
+	local label = { x = cx - wide / 2, y = box.y + box.h, w = wide, h = box.label_h or 0 }
 	for _, b in ipairs(blockers or {}) do
 		if H.overlap(box, b, gap or 0) or (label.h > 0 and H.overlap(label, b, gap or 0)) then return true end
 	end
 	return false
+end
+
+--- Vanilla flame amount. Quiet until Heat nears the cap, full burn at the cap.
+function H.flame_target(heat, max)
+	local cap = tonumber(max) or H.MAX or 100
+	if cap <= 0 then return 0 end
+	local t = math.max(0, math.min(1, (tonumber(heat) or 0) / cap))
+	local start = H.FLAME_START or 0.75
+	if t < start then return 0 end
+	local u = (t - start) / (1 - start)
+	return u * u * (H.FLAME_FULL or 5)
+end
+
+--- Same easing as G.FUNCS.flame_handler, stored on our own table so chip_flames stays untouched.
+function H.flame_step(state, target, dt)
+	state = state or {}
+	dt = tonumber(dt) or 0
+	state.intensity = tonumber(target) or 0
+	state.real_intensity = tonumber(state.real_intensity) or 0
+	state.intensity_vel = tonumber(state.intensity_vel) or 0
+	state.timer = tonumber(state.timer) or 0
+	state.change = tonumber(state.change) or 0
+	local exptime = math.exp(-0.4 * dt)
+	if state.intensity_vel < 0 then state.intensity_vel = state.intensity_vel * (1 - 10 * dt) end
+	state.intensity_vel = (1 - exptime) * (state.intensity - state.real_intensity) * dt * 25 + exptime * state.intensity_vel
+	state.real_intensity = math.max(0, state.real_intensity + state.intensity_vel)
+	state.timer = state.timer + dt * (1 + state.intensity * 0.2)
+	local rising = (state.real_intensity < state.intensity) and 1 or 0
+	state.change = state.change * (1 - 4 * dt) + (4 * dt) * rising * state.real_intensity
+	return state
+end
+
+--- Vanilla ambientFire level for this flame. Zero when the flame is out.
+function H.flame_volume(name, real_intensity, change)
+	local flames = math.min(1, math.max(0, (tonumber(real_intensity) or 0) / 10))
+	if name == "ambientFire2" then return 0.9 * ((flames > 0.3) and 1 or flames / 0.3) end
+	if name == "ambientFire1" then return 0.8 * ((flames > 0.3) and ((flames - 0.3) / 0.7) or 0) end
+	if name == "ambientFire3" then return 0.4 * math.max(0, tonumber(change) or 0) end
+	return 0
 end
 
 --- Flames travel the whole bar. side -1 is the left edge, 1 the right. y is 0 at the bottom.

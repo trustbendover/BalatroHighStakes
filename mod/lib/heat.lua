@@ -73,31 +73,60 @@ function H.report(blind)
 	})
 end
 
-function H.room_rect()
-	local t = G and G.ROOM and G.ROOM.T
-	if not t then return nil end
-	return { x = t.x or 0, y = t.y or 0, w = t.w or 0, h = t.h or 0 }
+--- Window size in tiles. The playfield (G.ROOM) is inset inside this; consumables sit on the playfield.
+function H.screen_rect()
+	local scale = (G and G.TILESCALE and G.TILESIZE and (G.TILESCALE * G.TILESIZE)) or 0
+	local wt = G and G.WINDOWTRANS
+	local w, h
+	-- real_window_w and getWidth are pixels. Divide by TILESCALE * TILESIZE to get tiles.
+	if wt and scale > 0 and tonumber(wt.real_window_w) and wt.real_window_w > 0 then
+		local rect = H.screen_tiles(wt.real_window_w, wt.real_window_h, G.TILESCALE, G.TILESIZE)
+		w, h = rect.w, rect.h
+	end
+	if (not w or w <= 0) and scale > 0 and love and love.graphics and love.graphics.getWidth then
+		local ok, pw, ph = pcall(function() return love.graphics.getWidth(), love.graphics.getHeight() end)
+		if ok and type(pw) == "number" and pw > 0 then
+			local rect = H.screen_tiles(pw, ph, G.TILESCALE, G.TILESIZE)
+			w, h = rect.w, rect.h
+		end
+	end
+	if (not w or w <= 0) and G and G.ROOM and G.ROOM.T then
+		local room = G.ROOM.T
+		w = (room.x or 0) + (room.w or 0) + ((G and G.ROOM_PADDING_W) or 1)
+		h = (room.y or 0) + (room.h or 0) + ((G and G.ROOM_PADDING_H) or 0.7)
+	end
+	if not w or w <= 0 then return nil end
+	return { x = 0, y = 0, w = w, h = h or w }
 end
 
 function H.blockers()
 	local list = {}
+	local room = G and G.ROOM and G.ROOM.T
+	local rx = (room and room.x) or 0
+	local ry = (room and room.y) or 0
+	-- Card areas and the chat box are room-local. The room offset is applied when they draw.
 	local function add(box)
 		local t = box and not box.REMOVED and box.T
 		if t and t.w and t.w > 0 and t.h and t.h > 0 then
-			list[#list + 1] = { x = t.x or 0, y = t.y or 0, w = t.w, h = t.h }
+			list[#list + 1] = { x = (t.x or 0) + rx, y = (t.y or 0) + ry, w = t.w, h = t.h }
 		end
 	end
 	local chat = MP.CHAT
 	if chat and chat.box then add(chat.box) end
+	if G and G.jokers then add(G.jokers) end
+	if G and G.consumeables then add(G.consumeables) end
 	if G and G.deck then add(G.deck) end
 	if G and G.shop then add(G.shop) end
-	if G and G.consumeables then add(G.consumeables) end
 	return list
 end
 
 function H.place_meter()
-	H.meter = H.layout_meter(H.room_rect(), H.blockers())
+	H.meter = H.layout_meter(H.screen_rect(), H.blockers())
 	return H.meter
+end
+
+function H.in_run()
+	return G and G.STAGES and G.STAGE == G.STAGES.RUN and true or false
 end
 
 function H.draw_front()
@@ -108,7 +137,6 @@ function H.draw_front()
 	local g = MP.GAME or {}
 	local heat = H.shown
 	if heat == nil then heat = tonumber(g.heat) or 0 end
-	local fire = g.heat_overdrive and true or false
 	local gpx = love.graphics
 	local ts = (G and G.TILESIZE) or 20
 	local sc = (G and G.TILESCALE) or 1
@@ -123,11 +151,7 @@ function H.draw_front()
 	gpx.scale(sc, sc)
 	local x, y, w, h = px(box.x), px(box.y), px(box.w), px(box.h)
 	local pad = math.max(2, ts * 0.06)
-	if fire then
-		local pulse = 0.22 + 0.14 * math.sin(now * 7)
-		local burst = math.max(0, H.burst or 0) / 0.42
-		pill(x - 3, y - 3, w + 6, h + 6, { 1, 0.45, 0.08, pulse + burst * 0.45 })
-	end
+	H.draw_flame(box)
 	pill(x, y, w, h, { 0.04, 0.035, 0.04, 0.72 })
 	local fill = H.meter_fill(box, heat, H.MAX)
 	if fill and fill.h > 0.01 then
@@ -160,38 +184,23 @@ function H.draw_front()
 	gpx.setColor(1, 0.96, 0.9, 0.55)
 	gpx.setLineWidth(1)
 	pill(x + 0.5, y + 0.5, w - 1, h - 1, { 1, 0.96, 0.9, 0.45 }, "line")
-	if fire then
-		local edge = math.max(1.5, ts * 0.045)
-		local pulse = 0.45 + 0.35 * math.sin(now * 11)
-		local burst = math.max(0, H.burst or 0) / 0.42
-		gpx.setColor(1, 0.72, 0.25, math.min(1, pulse + burst))
-		gpx.rectangle("fill", x - edge, y, edge, h)
-		gpx.rectangle("fill", x + w, y, edge, h)
-		for _, p in ipairs(H.flames or {}) do
-			local a = math.max(0, math.min(1, (p.life or 0) / 0.62))
-			local along = math.max(0, math.min(1, p.y or 0))
-			local py = y + h - along * h
-			local side = (p.side == 1) and 1 or -1
-			local outward = (0.02 + (1 - a) * 0.07) * ts
-			local fx = (side < 0) and (x - outward) or (x + w + outward)
-			if p.kind == "ember" then
-				gpx.setColor(1, 0.82, 0.35, a * 0.85)
-				gpx.circle("fill", fx, py, (0.045 + 0.03 * a) * ts)
-			else
-				gpx.setColor(1, 0.42 + 0.25 * a, 0.06, a * 0.9)
-				gpx.rectangle("fill", fx - ts * 0.03, py - ts * 0.1, ts * 0.07, ts * 0.16)
-			end
-		end
-		if burst > 0 then
-			gpx.setColor(1, 0.95, 0.75, burst * 0.4)
-			pill(x, y, w, h, { 1, 0.95, 0.75, burst * 0.4 })
-		end
-	end
 	local labels = H.meter_labels(box, heat, g.heat_best)
+	-- Scale about the centre of each line. printf grows from the left of the
+	-- box, which drew "0" to the right of "HEAT" on one row.
 	local function line(node, col, scale)
-		if not node or node.text:find("\n", 1, true) then return end
+		if not node or node.text == "" or node.text:find("\n", 1, true) then return end
+		local font = gpx.getFont and gpx.getFont()
+		local fh = (font and font.getHeight and font:getHeight()) or (ts * 0.8)
+		local slot = px(node.h)
+		local s = math.min(scale, (slot > 0) and (slot * 0.9 / math.max(1, fh)) or scale)
 		gpx.setColor(col[1], col[2], col[3], col[4] or 1)
-		gpx.printf(node.text, px(node.x), px(node.y), px(node.w), "center", 0, scale, scale)
+		gpx.push()
+		gpx.translate(px(node.x + node.w / 2), px(node.y + node.h / 2))
+		gpx.scale(s, s)
+		local tw = (font and font.getWidth and font:getWidth(node.text)) or 0
+		local th = (font and font.getHeight and font:getHeight()) or 0
+		if gpx.print then gpx.print(node.text, -tw / 2, -th / 2) end
+		gpx.pop()
 	end
 	line(labels.number, { 1, 0.97, 0.92, 1 }, 0.7)
 	line(labels.caption, { 1, 0.78, 0.38, 0.95 }, 0.34)
@@ -208,6 +217,104 @@ function H.draw_front()
 	end
 	gpx.setColor(1, 1, 1, 1)
 	gpx.pop()
+end
+
+function H.sync_flame(heat, dt)
+	G.ARGS = G.ARGS or {}
+	local tab = H.flame_step(G.ARGS.heat_flames, H.flame_target(heat, H.MAX), dt)
+	local chips = (G.C and G.C.UI_CHIPS) or { 1, 0.45, 0.15, 1 }
+	local yellow = (G.C and G.C.YELLOW) or { 1, 0.9, 0.4, 1 }
+	local lick = { 1, 1, 1, 1 }
+	for i = 1, 3 do
+		local a = chips[i] or 1
+		local b = yellow[i] or 1
+		lick[i] = math.min(math.max(((a * 0.5 + b * 0.5) + 0.1) ^ 2, 0.1), 1)
+	end
+	tab.colour_1 = { chips[1] or 1, chips[2] or 1, chips[3] or 1, chips[4] or 1 }
+	tab.colour_2 = lick
+	G.ARGS.heat_flames = tab
+	return tab
+end
+
+function H.ensure_flame_sprite()
+	if H.flame_sprite and not H.flame_sprite.REMOVED then return H.flame_sprite end
+	if not (Sprite and G and G.ASSET_ATLAS and G.ASSET_ATLAS.ui_1 and G.SHADERS and G.SHADERS.flame) then return nil end
+	local ok, sprite = pcall(Sprite, 0, 0, H.METER_W, H.METER_H, G.ASSET_ATLAS.ui_1, { x = 2, y = 0 })
+	if not ok or type(sprite) ~= "table" or not sprite.define_draw_steps then return nil end
+	sprite.container = sprite
+	local tab = G.ARGS and G.ARGS.heat_flames
+	if not tab then return nil end
+	sprite:define_draw_steps({ {
+		shader = "flame",
+		send = {
+			{ name = "time", ref_table = tab, ref_value = "timer" },
+			{ name = "amount", ref_table = tab, ref_value = "real_intensity" },
+			{ name = "image_details", ref_table = sprite, ref_value = "image_dims" },
+			{ name = "texture_details", ref_table = sprite.RETS or sprite, ref_value = "get_pos_pixel" },
+			{ name = "colour_1", ref_table = tab, ref_value = "colour_1" },
+			{ name = "colour_2", ref_table = tab, ref_value = "colour_2" },
+			{ name = "id", val = sprite.ID or 1 },
+		},
+	} })
+	if sprite.get_pos_pixel then pcall(function() sprite:get_pos_pixel() end) end
+	H.flame_sprite = sprite
+	return sprite
+end
+
+function H.draw_flame(box)
+	local tab = G and G.ARGS and G.ARGS.heat_flames
+	if not box or not tab or (tab.real_intensity or 0) < 0.1 then return end
+	local sprite = H.ensure_flame_sprite()
+	if not sprite or not sprite.draw then return end
+	local pad = H.FLAME_PAD or 0.45
+	local T = sprite.VT or sprite.T
+	if not T then return end
+	T.x, T.y = box.x - pad, box.y - pad * 0.15
+	T.w, T.h = box.w + pad * 2, box.h + pad
+	if sprite.T and sprite.VT and sprite.T ~= sprite.VT then
+		sprite.T.x, sprite.T.y, sprite.T.w, sprite.T.h = T.x, T.y, T.w, T.h
+	end
+	sprite.container = sprite
+	local g = love.graphics
+	g.push()
+	g.origin()
+	pcall(function() sprite:draw() end)
+	g.pop()
+end
+
+--- Raise the vanilla fire bed when Heat is burning, without lowering the chips/mult flame.
+function H.bind_fire_sound()
+	local sounds = G and G.ARGS and G.ARGS.ambient_sounds
+	if not sounds or H._fire_bound then return end
+	H._fire_orig = {}
+	for _, name in ipairs({ "ambientFire1", "ambientFire2", "ambientFire3" }) do
+		local spec = sounds[name]
+		if type(spec) == "table" and spec.volfunc then
+			local orig = spec.volfunc
+			H._fire_orig[name] = orig
+			spec.volfunc = function(prev)
+				local base = orig(prev)
+				local f = G and G.ARGS and G.ARGS.heat_flames
+				local extra = f and H.flame_volume(name, f.real_intensity, f.change) or 0
+				if extra > (tonumber(base) or 0) then return extra end
+				return base
+			end
+		end
+	end
+	H._fire_bound = true
+end
+
+function H.drop_flame()
+	if H.flame_sprite and H.flame_sprite.remove then pcall(function() H.flame_sprite:remove() end) end
+	H.flame_sprite = nil
+	local sounds = G and G.ARGS and G.ARGS.ambient_sounds
+	if sounds and H._fire_orig then
+		for name, orig in pairs(H._fire_orig) do
+			if sounds[name] then sounds[name].volfunc = orig end
+		end
+	end
+	H._fire_orig, H._fire_bound = nil, nil
+	if G and G.ARGS then G.ARGS.heat_flames = nil end
 end
 
 function H.how_text()
@@ -337,7 +444,7 @@ if Game and Game.update and not H._ui then
 	local upd = Game.update
 	function Game:update(dt)
 		local r = upd(self, dt)
-		if H.active and H.active() then
+		if H.active and H.active() and H.in_run() then
 			local target = tonumber(MP.GAME and MP.GAME.heat) or 0
 			local prev = H.prev_heat or target
 			local burst = H.meter_burst(prev, target, H.MAX)
@@ -345,13 +452,16 @@ if Game and Game.update and not H._ui then
 			H.prev_heat = target
 			if H.burst and H.burst > 0 then H.burst = H.burst - dt end
 			H.shown = H.ease_heat(H.shown == nil and target or H.shown, target, dt)
-			H.flames = H.flame_tick(H.flames, dt, MP.GAME and MP.GAME.heat_overdrive, H.now())
+			H.sync_flame(target, dt)
+			H.bind_fire_sound()
 			H.place_meter()
 			local down = love and love.mouse and love.mouse.isDown and love.mouse.isDown(1)
 			local px, py = H.pointer()
 			if down and not H.mouse_was_down and H.hit_meter(H.meter, px, py) then H.show_how() end
 			H.mouse_was_down = down and true or false
 			if H.drop_old then H.drop_old() end
+		else
+			H.drop_flame()
 		end
 		return r
 	end
