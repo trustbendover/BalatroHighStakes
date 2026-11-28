@@ -27,6 +27,9 @@ ok(U.is_newer("v0.7.6", "0.7.5") and not U.is_newer("0.7.5", "v0.7.6") and not U
 ok(U.is_newer("v0.7.7", "0.7.6") and not U.is_newer("0.7.6", "v0.7.7") and not U.is_newer("v0.7.7", "0.7.7"), "0.7.7 is newer than an installed 0.7.6")
 ok(U.is_newer("v0.7.8", "0.7.7") and not U.is_newer("0.7.7", "v0.7.8") and not U.is_newer("v0.7.8", "0.7.8"), "0.7.8 is newer than an installed 0.7.7")
 ok(U.is_newer("v0.7.9", "0.7.8") and not U.is_newer("0.7.8", "v0.7.9") and not U.is_newer("v0.7.9", "0.7.9"), "0.7.9 is newer than an installed 0.7.8")
+ok(U.is_newer("0.7.10", "0.7.9") and not ("0.7.10" > "0.7.9"), "patch 10 beats patch 9 numerically, which a string compare gets backwards")
+ok(U.is_newer("v0.8.0", "0.7.9") and not U.is_newer("0.7.9", "v0.8.0") and not U.is_newer("v0.8.0", "0.8.0"), "0.8.0 is newer than an installed 0.7.9")
+ok(U.parse_release('{"tag_name":"v0.8.0","draft":false,"prerelease":false,"assets":[{"name":"BalatroMultiplayer3P-v0.8.0-Installer.zip"},{"name":"SHA256SUMS-v0.8.0.txt"}]}') == "v0.8.0", "a 0.8.0 release with the Installer zip is offered")
 ok(U.parse_release('{"tag_name":"v0.7.9","draft":false,"prerelease":false,"assets":[{"name":"BalatroMultiplayer3P-v0.7.9-Installer.zip"},{"name":"SHA256SUMS-v0.7.9.txt"}]}') == "v0.7.9", "a 0.7.9 release with the Installer zip is offered")
 ok(U.parse_release('{"tag_name":"v0.7.8","draft":false,"prerelease":false,"assets":[{"name":"BalatroMultiplayer3P-v0.7.8-Installer.zip"},{"name":"SHA256SUMS-v0.7.8.txt"}]}') == "v0.7.8", "a 0.7.8 release with the Installer zip is offered")
 ok(U.parse_release('{"tag_name":"v0.7.7","draft":false,"prerelease":false,"assets":[{"name":"BalatroMultiplayer3P-v0.7.7-Installer.zip"},{"name":"SHA256SUMS-v0.7.7.txt"}]}') == "v0.7.7", "a 0.7.7 release with the Installer zip is offered")
@@ -78,6 +81,15 @@ for _ = 1, 2 do local ev = events; events = {}; for _, e in ipairs(ev) do e.func
 ok(pending[3] and pending[3].url == U.RAW_URL, "timeout falls through to version.json")
 now = 100; pending[1].cb(200, '{"tag_name":"v9.9.9","assets":[{"name":"x-Installer.zip"}]}')
 ok(U.state ~= "available", "late answer after timeout ignored")
+
+-- an installed 0.7.9 sees v0.8.0 and offers the button
+SMODS.Mods.Multiplayer.version = "0.7.9"
+U.state = "idle"; pending = {}
+U.check()
+pending[1].cb(200, '{"tag_name":"v0.8.0","draft":false,"prerelease":false,"assets":[{"name":"BalatroMultiplayer3P-v0.8.0-Installer.zip"}]}')
+ok(U.state == "available" and U.latest == "0.8.0" and U.button_label() == "Update available: v0.8.0", "an installed 0.7.9 shows Update available: v0.8.0")
+SMODS.Mods.Multiplayer.version = "0.6.6~3P"
+U.state = "idle"
 
 -- an installed 0.7.8 sees the v0.7.9 release and offers the button
 SMODS.Mods.Multiplayer.version = "0.7.8"

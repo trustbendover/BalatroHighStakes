@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.0 - The Heat meter sits on the screen edge
+
+- **Meter.** The pill is pinned to the right edge of the screen, clear of the consumables, the deck, and the jokers. The number, HEAT, and Best each stay on their own line under the pill.
+- **Flame.** At 100 the meter uses Balatro's own flame, the same one behind a huge chips x mult score. It leaves the chips and mult flames alone.
+- **Pins.** Steamodded stays 1.0.0~BETA-1620a. Lovely stays 0.10.0.
+
 ## 0.7.9 - The Heat caption fits, and spectate stays live
 
 - **Heat.** The number, HEAT, and Best each stay on one line under the pill. HEAT no longer wraps, and the number no longer sits on the word.
